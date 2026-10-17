@@ -1,0 +1,114 @@
+@prefix cc: <https://credit-card-ops.ai/onto/topology#> .
+@prefix ccm: <https://credit-card-ops.ai/onto/metric#> .
+@prefix inst: <https://credit-card-ops.ai/onto/inst/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+inst:ok-CreditCardApp a cc:CreditCardApp ;
+    cc:appCode "v"^^xsd:string ;
+    cc:ccfId "ok-CreditCardApp"^^xsd:string ;
+    cc:ccfLayer "App" ;
+    cc:ccfSnapshotId "fixture-shacl"^^xsd:string ;
+    cc:ccfType "CreditCardApp"^^xsd:string ;
+    cc:exposes inst:ok-AppEndpoint ;
+    cc:hasAppInstance inst:ok-AppInstance .
+
+inst:ok-AppEndpoint a cc:AppEndpoint ;
+    cc:ccfId "ok-AppEndpoint"^^xsd:string ;
+    cc:ccfLayer "App" ;
+    cc:ccfSnapshotId "fixture-shacl"^^xsd:string ;
+    cc:ccfType "AppEndpoint"^^xsd:string ;
+    cc:path "v"^^xsd:string ;
+    cc:protocol "v"^^xsd:string .
+
+inst:ok-AppInstance a cc:AppInstance ;
+    cc:ccfId "ok-AppInstance"^^xsd:string ;
+    cc:ccfLayer "App" ;
+    cc:ccfSnapshotId "fixture-shacl"^^xsd:string ;
+    cc:ccfType "AppInstance"^^xsd:string ;
+    cc:instanceId "v"^^xsd:string ;
+    cc:runsIn inst:ok-Container ;
+    cc:usesDataSource inst:ok-JdbcDataSource .
+
+inst:ok-Container a cc:Container ;
+    ccm:status "Running" ;
+    cc:ccfId "ok-Container"^^xsd:string ;
+    cc:ccfLayer "App",
+        "Runtime" ;
+    cc:ccfSnapshotId "fixture-shacl"^^xsd:string ;
+    cc:ccfType "Container"^^xsd:string ;
+    cc:containerId "v"^^xsd:string ;
+    cc:deployedOn inst:ok-Host .
+
+inst:ok-DatabaseSessionPool a cc:DatabaseSessionPool ;
+    cc:ccfId "ok-DatabaseSessionPool"^^xsd:string ;
+    cc:ccfLayer "App",
+        "Data" ;
+    cc:ccfSnapshotId "fixture-shacl"^^xsd:string ;
+    cc:ccfType "DatabaseSessionPool"^^xsd:string ;
+    cc:hasSession inst:ok-Session ;
+    cc:poolId "v"^^xsd:string .
+
+inst:ok-GaussDBCluster a cc:GaussDBCluster ;
+    cc:ccfId "ok-GaussDBCluster"^^xsd:string ;
+    cc:ccfLayer "App",
+        "Data" ;
+    cc:ccfSnapshotId "fixture-shacl"^^xsd:string ;
+    cc:ccfType "GaussDBCluster"^^xsd:string ;
+    cc:clusterName "v"^^xsd:string ;
+    cc:hasDbInstance inst:ok-GaussDBInstance .
+
+inst:ok-Host a cc:Host ;
+    cc:ccfId "ok-Host"^^xsd:string ;
+    cc:ccfLayer "App",
+        "Runtime" ;
+    cc:ccfSnapshotId "fixture-shacl"^^xsd:string ;
+    cc:ccfType "Host"^^xsd:string ;
+    cc:hostname "v"^^xsd:string ;
+    cc:hosts inst:ok-GaussDBInstance .
+
+inst:ok-JdbcDataSource a cc:JdbcDataSource ;
+    cc:ccfId "ok-JdbcDataSource"^^xsd:string ;
+    cc:ccfLayer "App" ;
+    cc:ccfSnapshotId "fixture-shacl"^^xsd:string ;
+    cc:ccfType "JdbcDataSource"^^xsd:string ;
+    cc:connectsTo inst:ok-GaussDBCluster ;
+    cc:dsCode "v"^^xsd:string ;
+    cc:resolvesTo inst:ok-GaussDBInstance .
+
+inst:ok-Query a cc:Query ;
+    cc:accesses inst:ok-Table ;
+    cc:ccfId "ok-Query"^^xsd:string ;
+    cc:ccfLayer "App",
+        "Data" ;
+    cc:ccfSnapshotId "fixture-shacl"^^xsd:string ;
+    cc:ccfType "Query"^^xsd:string ;
+    cc:queryId "v"^^xsd:string .
+
+inst:ok-Session a cc:Session ;
+    ccm:state "active" ;
+    cc:ccfId "ok-Session"^^xsd:string ;
+    cc:ccfLayer "App",
+        "Data" ;
+    cc:ccfSnapshotId "fixture-shacl"^^xsd:string ;
+    cc:ccfType "Session"^^xsd:string ;
+    cc:runsQuery inst:ok-Query ;
+    cc:sessionId "v"^^xsd:string .
+
+inst:ok-Table a cc:Table ;
+    cc:ccfId "ok-Table"^^xsd:string ;
+    cc:ccfLayer "App",
+        "Data" ;
+    cc:ccfSnapshotId "fixture-shacl"^^xsd:string ;
+    cc:ccfType "Table"^^xsd:string ;
+    cc:schemaName "v"^^xsd:string ;
+    cc:tableName "v"^^xsd:string .
+
+inst:ok-GaussDBInstance a cc:GaussDBInstance ;
+    cc:ccfId "ok-GaussDBInstance"^^xsd:string ;
+    cc:ccfLayer "App",
+        "Data" ;
+    cc:ccfSnapshotId "fixture-shacl"^^xsd:string ;
+    cc:ccfType "GaussDBInstance"^^xsd:string ;
+    cc:hasSessionPool inst:ok-DatabaseSessionPool ;
+    cc:instanceId "v"^^xsd:string .
+

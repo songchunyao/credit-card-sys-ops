@@ -1,0 +1,194 @@
+# ============================================================================
+# targets.yaml · 本项目在真机上的**载体与目标清单**（含隔离手段与硬限制）
+# ----------------------------------------------------------------------------
+# 出处：M1.5 真机侦察（实测留痕）+ `docs/00` 裁决 13 + `docs/03` §1
+# 规则：**不写口令**，只写环境变量名；口令一律在运行时从环境或生产机 `.env` 取。
+# ============================================================================
+
+meta:
+  version: "1.1.1"   # 1.1.1（M2.21）：仅更正声明值 coexisting_data.indexes 26→24（`SHOW CONSTRAINTS` 实测；详见 :42）
+  date: "2026-10-06"
+  measured_on: "2026-10-05"
+  m1_6_measured_on: "2026-10-06"
+  host: "127.0.0.1"   # ★ R-58：不硬编码部署主机（原值为 192.0.2.10，R-56 事故根因）；用 env/CLI 覆盖，未设则落本机。
+  source: "M1.5 真机侦察（docker ps -a / SHOW DATABASES / /rest/locations / free / df）+ M1.6 真机部署与全链冻结（kubectl / curl / gather / freeze / p1+p2+parity）"
+
+# ---------------------------------------------------------------------------
+# KG 侧载体（方案1 · 知识图谱 + LLM）
+# ---------------------------------------------------------------------------
+neo4j:
+  role: "KG 侧载体（`KG-Q` / `KG-R` / `KG-T` / `KG-T-free` 共用同一张图）"
+  container: neo4j-gaussdb
+  image: neo4j:5-community
+  kernel: "5.26.30"
+  edition: community
+  ports:
+    http: {host: 7475, container: 7474}
+    bolt: {host: 7688, container: 7687}
+  bolt_uri: "bolt://127.0.0.1:7688"   # ★ R-58：不硬编码部署主机（原值为 192.0.2.10，R-56 事故根因）；用 env/CLI 覆盖，未设则落本机。
+  http_uri: "http://127.0.0.1:7475"   # ★ R-58：不硬编码部署主机（原值为 192.0.2.10，R-56 事故根因）；用 env/CLI 覆盖，未设则落本机。
+  auth:
+    scheme: basic
+    user: neo4j
+    password_env: CC_NEO4J_PASSWORD
+    source: "生产机 /opt/upstream-agent/.env 的 NEO4J_AUTH（本仓库 .env 只有占位 `#NEO4J_AUTH=neo4j/CHANGE_ME`）"
+  isolation:
+    mechanism: "标签与关系类型统一加 `CC_` 前缀（裁决 13）——前缀写在 shared/mapping/*.yaml，不写进投影器代码"
+    constraint_prefix: cc_uq_
+    coexisting_data:
+      nodes: 423
+      labels: 34
+      relationship_types: 37
+      indexes: 24  # 2026-09-29 00:36–00:38（+08:00，本机时钟）；本项目契约口径日期 2026-10-06（targets.yaml meta.date）：按 `SHOW CONSTRAINTS` 名字前缀 `gdo_uq_` 实测为 24（原写 26）；该键无代码消费者，属声明值陈旧。
+      index_prefix: gdo_uq_
+      note: "既有 v2 本体图，**必须原样保留**"
+    colliding_labels: [Host, Table, Session]
+    colliding_relationship_types: [ACCESSES, DEPLOYED_ON]
+    must_not:
+      - "清空或改动既有 423 节点 v2 图"
+      - "新建第二个 Neo4j 容器"
+      - "修改既有 gdo_uq_* 索引"
+  limits:
+    databases: [neo4j, system]
+    single_database: true
+    note: "community 版单库 ⇒ 无法用多库隔离，故走标签前缀"
+
+# ---------------------------------------------------------------------------
+# ONTO 侧载体（方案2 · 本体 + LLM）
+# ---------------------------------------------------------------------------
+graphdb:
+  role: "ONTO 侧载体（`ONTO-Q` / `ONTO-R` 共用）"
+  container: gdo-graphdb
+  image: "ontotext/graphdb:10.8.0"
+  url: "http://127.0.0.1:7200"   # ★ R-58：不硬编码部署主机（原值为 192.0.2.10，R-56 事故根因）；用 env/CLI 覆盖，未设则落本机。
+  isolation:
+    mechanism: "专属仓库 + 每快照一个命名图"
+    repository: cc-ops
+    ruleset: owl2-rl
+    named_graph_template: "https://credit-card-ops.ai/onto/graph/{snapshotId}"
+    note: "命名图模板与 ONTO 侧 IRIS 同源；`KG-T-free` 与 `KG-T` 共用同一张 Neo4j 图，命名图只在 GraphDB 侧存在"
+  coexisting_repositories: [gdo, gdo-bad, gdo-cq, gdo-test, starwars]
+  must_not:
+    - "写入既有 gdo* / starwars 仓库"
+    - "改动 /rest/security 设置"
+  measured:
+    security_enabled: false
+    auth_type: none
+    locations: {authType: none, local: true, system: true, defaultRepository: null}
+
+# ---------------------------------------------------------------------------
+# Agent 编排（两侧共用）
+# ---------------------------------------------------------------------------
+dify:
+  role: "Agent 编排（两侧共用，裁决 4）"
+  version: "1.17.0"
+  url: "http://127.0.0.1"   # ★ R-58：不硬编码部署主机（原值为 192.0.2.10，R-56 事故根因）；用 env/CLI 覆盖，未设则落本机。
+  console_api_prefix: console/api
+  service_api_prefix: v1
+  auth:
+    email_env: CC_DIFY_EMAIL
+    password_env: CC_DIFY_PASSWORD
+  pitfall: "`POST /console/api/apps/{id}/model-config` 是**整体替换**语义（docs\\05 探查 A）"
+
+# ---------------------------------------------------------------------------
+# 采集面（复用既有采集层，约束 C1 单一输入）
+# ---------------------------------------------------------------------------
+collection:
+  upstream_repo: "<upstream-repo>"
+  entrypoint: "POST /tools/gather"
+  local_url: "http://127.0.0.1:8187"
+  layers_available: [gaussdb, os, storage, tpops, alarm]
+  layers_used: [gaussdb, os, container, app]
+  layer_modes_measured:
+    gaussdb: {mode: normal, fact_count: 599}
+    os: {mode: normal, fact_count: 1274}
+    container: {mode: probe_prom, fact_count: 6}
+    app: {mode: probe_http, fact_count: 17}
+  note: "★ M1.6 前，既有采集层没有 app / container 层，`/tools/gather` 也**不返回任何层 raw**（只提升 gaussdb 的 slow_sql_detail）⇒ L1/L2 事实恒为空。M1.6 两处纯新增修复：①上游 `service/collect_api.py` 在 `out_g` 字面量后提升 `container_topology` / `app_topology` 两个顶层键；②本项目 `shared/collect/freeze.py` 以 `_app_section(gather)` 合并两段。修复后真机 gather 顶层键已含二者（实测 305913 B / 4.4 s）。"
+  upstream_patch:
+    file: "service/collect_api.py"
+    sha256_before: "bca7ce2fa3001674683e5044c434431fe2c121d0d92a37f79fc21ca532d1522a"
+    sha256_after: "cf212f20301614d1"
+    size_before: 66785
+    size_after: 67816
+    nature: "纯新增两行（不改既有键与既有取值）"
+    probes_added:
+      - "service/probes/container_probe.py（只读 Prometheus NodePort 30090）"
+      - "service/probes/app_probe.py（只读 GET /health）"
+
+gaussdb:
+  role: "被观测的数据库系统（L3）"
+  nodes: ["192.0.2.12", "192.0.2.14", "192.0.2.15"]
+  ssh: {user: root, port: 22, password_env: GAUSSDB_SSH_PASSWORD}
+  note: "既有 `os` 探针走 ssh 子进程（requirements.txt 无 paramiko）；连接模式 A 单命令均值 3.97 s、模式 B ControlMaster 复用均值 0.16 s（≈25×）"
+
+# ---------------------------------------------------------------------------
+# L1/L2 被测应用与载体（M1.6 新建；跨层族 C2 的实物基础）
+# ---------------------------------------------------------------------------
+cc_app:
+  role: "L1 被测信用卡应用（方案1/方案2 两侧共用的同一份输入的一部分）"
+  name: "CreditCardPaymentApp"
+  app_code: "CC-PAY"
+  app_id: "cc-pay"
+  source: "env\\cc-app\\CreditCardApp.java（纯 JDK17 + HikariCP，手写 JSON）"
+  tech_stack: "Java17.0.20.1+HikariCP+PostgreSQL JDBC Driver"
+  why_java: "AppInstance 的三个指标 heap_used_ratio / gc_pause_ms / thread_count 是 JVM 形态；换非 JVM 语言会让它们永远 notCollected，把 C4（否定性证据）族做成假的"
+  endpoints: ["/health", "/pay", "/slow"]
+  jdbc:
+    url_masked: "jdbc:postgresql://192.0.2.12:8000/postgres"
+    driver_name: "PostgreSQL JDBC Driver"
+    driver_env: "DB_DRIVER（默认空 ⇒ 不调 setDriverClassName，交 DriverManager 按 URL 解析）"
+    url_prefix_env: "DB_URL_PREFIX（默认 jdbc:postgresql://）"
+    known_imperfection: "driverVersion 取到上游制品里未替换的 Maven 过滤占位符 /*$mvn.project.property.parsedversion.osgiversion$*/（诚实保留，不造假）"
+
+k8s_worker:
+  role: "L2 载体：运行 cc_app 容器的 k8s 工作节点（= 权威拓扑里的 Host node-01）"
+  cluster: {version: "v1.28.15", runtime: "containerd 1.7.20", os: "openEuler 24.03 (LTS-SP2)", arch: aarch64}
+  master: {ip: "192.0.2.20", kubeconfig: "/etc/kubernetes/admin.conf"}
+  node: {hostname: node-01, ip: "192.0.2.13", cpu_cores: 64, mem_total_gb: 187.6,
+         kernel: "6.6.0-98.0.0.103.oe2403sp2.aarch64"}
+  namespace: cc-app
+  deployment: credit-card-pay
+  pod_selector: "pod=~\"credit-card-pay-.*\""
+  service:
+    type: NodePort
+    node_port: 30085
+    health_url: "http://192.0.2.13:30085/health"
+    nodeport_30080_conflict: "30080 已被 phase8-agent/agent-supervisor-nodeport 占用（返回的是别的服务的 {\"status\":\"ok\"}，会把采集指错对象）⇒ 换 30085"
+  image: "docker.io/library/eclipse-temurin:17-jdk"
+  mounts:
+    - "hostPath /opt/ccapp → /app:ro（4 个 jar 在 /opt/ccapp/lib：opengauss-jdbc-5.0.0 / HikariCP-5.1.0 / slf4j-api-2.0.13 / slf4j-nop-2.0.13）"
+  run_mode: "java -cp /app/lib/* /app/CreditCardApp.java（JDK 单文件源码模式，worker 上无 java/javac/mvn，故免编译）"
+  limits: {cpu: "500m", memory: "1024Mi"}
+  measured_container:
+    container_id: "d81ed68a85c810e2f651a68d5d922582290a02d202450bdb4055848a20ee8cbc"
+    image_digest: "docker.io/library/eclipse-temurin@sha256:b64592d40959b4d13b218f6b06b9ab219ff8aa3dad61efd3b5f519ba4d72ef92"
+    cgroup_path: "/kubepods.slice/kubepods-burstable.slice/kubepods-burstable-pod<UID>.slice/cri-containerd-<cid>.scope"
+    note: "容器 id 由容器内 /proc/self/cgroup 自证；探针侧从 Prometheus `kube_pod_container_info` 取（`containerd://` 前缀需归一）"
+  monitoring:
+    prometheus: "http://192.0.2.13:30090（NodePort；**不是** 30900，且 127.0.0.1 / NodePort 本机不可用）"
+    namespace: ai-knowledge-lake
+    note: "kube_pod_container_status_terminated_reason 返回空结果 ⇒ 终止原因只能取 crictl inspect .status.reason"
+  must_not:
+    - "改动既有 423 节点 v2 图或既有 gdo_uq_* 索引"
+    - "改写既有 gdo* / starwars 仓库"
+    - "在 30080 上再建 Service"
+
+# ---------------------------------------------------------------------------
+# 宿主机硬限制（影响部署决策）
+# ---------------------------------------------------------------------------
+host:
+  address: "127.0.0.1"   # ★ R-58：不硬编码部署主机（原值为 192.0.2.10，R-56 事故根因）；用 env/CLI 覆盖，未设则落本机。
+  ssh: {user: root, port: 22, key: "~/.ssh/id_rsa", password_env: CC_SSH_PASSWORD}
+  resources:
+    mem_total_mb: 15360
+    mem_available_mb: 5120
+    swap_total_mb: 7168
+    swap_used_mb: 3072
+    root_total_gb: 95
+    root_used_pct: 59
+    opt_total_gb: 295
+    opt_used_pct: 31
+  constraints:
+    - "内存仅余约 5 GB、swap 已用约 3 GB ⇒ 不得新增常驻容器（裁决 13 否定项）"
+    - "不得重启既有容器"

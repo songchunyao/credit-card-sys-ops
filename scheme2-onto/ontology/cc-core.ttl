@@ -1,0 +1,183 @@
+# ============================================================================
+# scheme2-onto/ontology/cc-core.ttl  ·  方案2 顶层本体（cco:）
+# ----------------------------------------------------------------------------
+# 职责（docs/04 §3 模块表）：顶层 PhysicalEntity / InformationEntity / DependentEntity
+#   + OntoClean 元属性标注。本模块**不含任何业务类**（业务类在 cc-topology.ttl）。
+# 命名空间（逐字取自 type-map.yaml#namespaces.onto）：cco = .../onto/core#
+#
+# ★ 决策 D1（docs/04 §4）：**不引入 BFO / DOLCE**，自建顶层类。
+#   代价（要记账）：6 个业务顶层实体类缺少外部对齐，无法用 owl:sameAs 与外部本体互操作。
+#   docs/04 §4 D1 原文写「6 个自建顶层类」——本实现把账目摊开为：
+#     业务顶层实体类 6 个（ApplicationEntity / ConfigurationEntity / RuntimeEntity /
+#       DataEntity / PhysicalEntity / InformationEntity）
+#     + 划分与元类 4 个（Entity / Continuant / Occurrent / DependentEntity）
+#     = 10 个类（其中 DependentEntity 是**元类**，见下）。
+#
+# ★ OntoClean（docs/04 §0「加固 1」，§10 U5）在本项目的落地口径
+#   （判定口径写清楚，T12 要按它跑）：
+#     元属性用**注解属性**表达（+R/-R 等），不建模成类：
+#       cco:rigidity   "+R" | "-R"       刚性 / 反刚性
+#       cco:identity   "+I" | "-I"       提供同一性判据 / 不提供
+#       cco:unity      "+U" | "-U"       提供统一性判据
+#       cco:dependence "+D" | "-D"       外部依赖 / 不依赖
+#     相容规则（T12 判据）：
+#       R1 子类的 rigidity 不得强于父类（父 -R ⇒ 子必须 -R）
+#       R2 子类的 identity 不得强于父类（父 -I ⇒ 子必须 -I）
+#       R3 父类 +D 时子类必须 +D（依赖不可消去）
+#       R4 identity 强于父类 ⇒ 必须同时给出 cco:identityCriterion（否则是空声明）
+#     依赖实体的「防空图」义务（docs/04 §0 原文：孤立 Container 不得被视为合法实例）：
+#       +D 的类必须给出 cco:dependenceCriterion，其值必须是一条**拓扑对象属性**，
+#       该义务由 SHACL（ccs:）以 minCount 1 落地 —— OWL 的 owl:cardinality 原生
+#       只支持 max 侧（RL），min 侧属 SHACL 补足，两处账目分开记。
+# ============================================================================
+@prefix cco:     <https://credit-card-ops.ai/onto/core#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix dcat:    <http://www.w3.org/ns/dcat#> .
+@prefix vann:    <http://purl.org/vocab/vann/> .
+
+cco: a owl:Ontology ;
+    dcterms:title "信用卡跨层运维本体 · 顶层模块（cc-core）"@zh ;
+    dcterms:description "自建顶层类层次 + OntoClean 元属性词汇 + 元类标注。不含业务类。"@zh ;
+    dcterms:issued "2026-10-06"^^xsd:date ;
+    owl:versionIRI <https://credit-card-ops.ai/onto/core/1.0.0> ;
+    owl:versionInfo "1.0.0" ;
+    vann:preferredNamespacePrefix "cco" ;
+    vann:preferredNamespaceUri "https://credit-card-ops.ai/onto/core#" ;
+    dcat:landingPage <https://credit-card-ops.ai/onto/core> ;
+    rdfs:comment "★ 与 BFO/DOLCE 的关系（docs\\04 §4 D1）：本模块**不**对齐外部顶层本体；若要互操作需另立 alignment 模块（本任务范围外）。"@zh .
+
+# ===========================================================================
+# 1) 顶层类层次
+# ===========================================================================
+cco:Entity a owl:Class ;
+    rdfs:label "实体"@zh ;
+    cco:isMetaClass true ;
+    cco:rigidity "+R" ; cco:identity "-I" ; cco:unity "-U" ; cco:dependence "-D" ;
+    cco:decisionStatus "docs/04 §4 D1：自建顶层（不引 BFO/DOLCE）" ;
+    rdfs:comment "最顶层。本身不声称同一性判据（-I），由子类提供。"@zh .
+
+cco:Continuant a owl:Class ;
+    rdfs:subClassOf cco:Entity ;
+    rdfs:label "持续体"@zh ;
+    cco:isMetaClass true ;
+    cco:rigidity "+R" ; cco:identity "-I" ; cco:unity "+U" ; cco:dependence "-D" ;
+    rdfs:comment "随对象标识跨时间持续存在（应用/容器/主机/表/证据…）。"@zh .
+
+cco:Occurrent a owl:Class ;
+    rdfs:subClassOf cco:Entity ;
+    rdfs:label "发生体"@zh ;
+    cco:isMetaClass true ;
+    cco:rigidity "+R" ; cco:identity "-I" ; cco:unity "-U" ; cco:dependence "-D" ;
+    rdfs:comment "★ 刚性（+R）：一次采集活动 / 一条观测记录一旦发生即固定，其本质不随时间改变。**修正记录**：本类初版标为 -R（反刚性），T12 的 R1 自检（子类刚性不得强于父类：父 -R ⇒ 子必须 -R）随即报出 `cc:Evidence(+R) ⊑ cco:Occurrent(-R)` 违例 —— 子类标记与父类标记冲突。按 OntoClean 判据（反刚性只适用于角色/相位，如「被挂起」「是根因」），正确的修法是**把父类改为 +R**，反刚性标记只保留在真正角色化的类上（ccf:FaultMode / ccf:RootCause / ccp:RuleExecution）。ccm:MetricObservation 与 ccp:RuleExecution 仍挂在此。SOSA/SSN 与 PROV-O 的时间性对齐不受影响。"@zh .
+
+cco:DependentEntity a owl:Class ;
+    rdfs:subClassOf cco:Entity ;
+    rdfs:label "依赖实体（元类）"@zh ;
+    cco:isMetaClass true ;
+    cco:rigidity "+R" ; cco:identity "-I" ; cco:unity "+U" ; cco:dependence "+D" ;
+    rdfs:comment "★ 元类：任何「必须挂在别的实体上才有意义」的类都双重归属（例如 cc:Container ⊑ cco:RuntimeEntity, cco:DependentEntity）。这与 cco:dependence 注解是**两套机制**：类归属用于推理与校验（SHACL 以它为目标），注解用于 OntoClean 静态自检（T12）。"@zh .
+
+# ---- 6 个业务顶层实体类（docs/04 §3.1 逐字使用）-----------------------------
+cco:ApplicationEntity a owl:Class ;
+    rdfs:subClassOf cco:Continuant ;
+    rdfs:label "应用实体"@zh ;
+    cco:isAbstract true ;
+    cco:rigidity "+R" ; cco:identity "-I" ; cco:unity "+U" ; cco:dependence "-D" ;
+    cco:contractSource "docs/04-方案2设计（本体+LLM）.md §3.1" .
+cco:ConfigurationEntity a owl:Class ;
+    rdfs:subClassOf cco:Continuant ;
+    rdfs:label "配置实体"@zh ;
+    cco:isAbstract true ;
+    cco:rigidity "+R" ; cco:identity "-I" ; cco:unity "+U" ; cco:dependence "-D" ;
+    cco:contractSource "docs/04-方案2设计（本体+LLM）.md §3.1" .
+cco:RuntimeEntity a owl:Class ;
+    rdfs:subClassOf cco:Continuant ;
+    rdfs:label "承载实体"@zh ;
+    cco:isAbstract true ;
+    cco:rigidity "+R" ; cco:identity "-I" ; cco:unity "+U" ; cco:dependence "-D" ;
+    cco:contractSource "docs/04-方案2设计（本体+LLM）.md §3.1" .
+cco:DataEntity a owl:Class ;
+    rdfs:subClassOf cco:Continuant ;
+    rdfs:label "数据实体"@zh ;
+    cco:isAbstract true ;
+    cco:rigidity "+R" ; cco:identity "-I" ; cco:unity "+U" ; cco:dependence "-D" ;
+    cco:contractSource "docs/04-方案2设计（本体+LLM）.md §3.1" .
+cco:PhysicalEntity a owl:Class ;
+    rdfs:subClassOf cco:Continuant ;
+    rdfs:label "物理实体"@zh ;
+    cco:isAbstract true ;
+    cco:rigidity "+R" ; cco:identity "-I" ; cco:unity "+U" ; cco:dependence "-D" ;
+    cco:contractSource "docs/04-方案2设计（本体+LLM）.md §3.1" .
+cco:InformationEntity a owl:Class ;
+    rdfs:subClassOf cco:Continuant ;
+    rdfs:label "信息实体"@zh ;
+    cco:isAbstract true ;
+    cco:rigidity "+R" ; cco:identity "-I" ; cco:unity "+U" ; cco:dependence "-D" ;
+    cco:contractSource "docs/04-方案2设计（本体+LLM）.md §3.1" .
+
+# ---- 互斥声明（只声明可安全断言的对）-------------------------------------
+cco:PhysicalEntity owl:disjointWith cco:InformationEntity ;
+    rdfs:comment "★ 只断言这一对：本 TBox 里没有任何类同时归入两者（Host 只属 Physical；AppEndpoint / Evidence 只属 Information）。**不**断言 ApplicationEntity ⊣ DataEntity 等对：契约允许 JdbcDataSource 同时是「应用层类型」与「连接池」（cc:JdbcDataSource ⊑ cco:ConfigurationEntity, cc:ConnectionPool），粗粒度互斥会与契约冲突。"@zh .
+
+# ===========================================================================
+# 2) 元属性与注解词汇（OntoClean + 契约可追溯性 + 模块治理）
+#    全部声明为 owl:AnnotationProperty：它们**不参与**推理闭包，
+#    只用于静态自检（T12）与逐条可追溯（checker / equivalence）。
+# ===========================================================================
+cco:rigidity a owl:AnnotationProperty ; rdfs:label "刚性"@zh ;
+    rdfs:comment "取值 \"+R\"（刚性）/ \"-R\"（反刚性）。"@zh .
+cco:identity a owl:AnnotationProperty ; rdfs:label "同一性"@zh ;
+    rdfs:comment "取值 \"+I\"/\"-I\"。+I 必须伴随 cco:identityCriterion。"@zh .
+cco:unity a owl:AnnotationProperty ; rdfs:label "统一性"@zh .
+cco:dependence a owl:AnnotationProperty ; rdfs:label "依赖性"@zh ;
+    rdfs:comment "取值 \"+D\"/\"-D\"。+D 必须伴随 cco:dependenceCriterion。"@zh .
+cco:isAbstract a owl:AnnotationProperty ; rdfs:label "抽象类标记"@zh ;
+    rdfs:comment "★ OWL 无「抽象类」原语（docs\\04 未给规格，本属性为自建）：标记「不直接实例化」。落地靠 SHACL sh:or 排除直指该类的个体。"@zh .
+cco:isMetaClass a owl:AnnotationProperty ; rdfs:label "元类标记"@zh ;
+    rdfs:comment "顶层划分类：T1（每个类有实例）对它们不施加「必须直接实例化」的要求（它们靠子类实例满足）。"@zh .
+cco:identityCriterion a owl:AnnotationProperty ; rdfs:label "同一性判据"@zh ;
+    rdfs:comment "★ 本属性的值是**一条数据属性 IRI**（如 cc:appCode），与 owl:hasKey 的键同值 —— T12 会校验两者一致。docs\\04 未给规格，本属性为自建（OntoClean 加固所需）。"@zh .
+cco:dependenceCriterion a owl:AnnotationProperty ; rdfs:label "依赖判据"@zh ;
+    rdfs:comment "★ 值是**一条拓扑对象属性 IRI**；SHACL 形状据此生成 minCount 1（防空图门禁在 OWL 侧的对应物）。"@zh .
+cco:enforcement a owl:AnnotationProperty ; rdfs:label "公理落地方式"@zh ;
+    rdfs:comment "★ 诚实边界标注（docs\\04 §4 D6 强制）：取值以 owl2-rl-native / shacl-only 注明该约束**由谁**真正执行。"@zh .
+cco:contractSource a owl:AnnotationProperty ; rdfs:label "契约出处"@zh ;
+    rdfs:comment "★ 逐条可追溯：形如 shared/model/topology.yaml#/types[code=Host]。"@zh .
+cco:metricCode a owl:AnnotationProperty ; rdfs:label "中性指标码"@zh ;
+    rdfs:comment "★ 逐条可追溯：把载体属性 IRI 绑回 metrics.yaml 的中性指标码（如 ccm:meanExecMs → \"db.query.mean_exec_ms\"）。"@zh .
+cco:neutralCode a owl:AnnotationProperty ; rdfs:label "中性 code"@zh ;
+    rdfs:comment "把载体名绑回契约 code（类型/关系/故障模式/因果边）。"@zh .
+cco:moduleDependsOn a owl:AnnotationProperty ; rdfs:label "模块依赖"@zh .
+cco:decisionStatus a owl:AnnotationProperty ; rdfs:label "决策状态"@zh ;
+    rdfs:comment "★ 用于标注 docs\\04 §10 的**待确认项**（U2/U3/U4/U5）：实现先行但状态未决的构件必须可被机械筛出。"@zh .
+cco:riskLevel a owl:AnnotationProperty ; rdfs:label "风险等级"@zh ;
+    rdfs:comment "在 cca: 模块里被具体化（建议动作的风险等级）。"@zh .
+
+# ===========================================================================
+# 3) 层枚举（SKOS 词表：docs/04 §1 要求 SKOS 承载「层枚举」）
+# ===========================================================================
+cco:LayerScheme a skos:ConceptScheme ;
+    skos:prefLabel "层枚举"@zh ;
+    dcterms:source "shared/model/topology.yaml#meta.layer_enum" .
+cco:Layer-App     a skos:Concept ; skos:inScheme cco:LayerScheme ; skos:notation "App" ; skos:prefLabel "应用层"@zh .
+cco:Layer-Runtime a skos:Concept ; skos:inScheme cco:LayerScheme ; skos:notation "Runtime" ; skos:prefLabel "承载层"@zh .
+cco:Layer-Data    a skos:Concept ; skos:inScheme cco:LayerScheme ; skos:notation "Data" ; skos:prefLabel "数据层"@zh .
+cco:Layer-none    a skos:Concept ; skos:inScheme cco:LayerScheme ; skos:notation "none" ;
+    skos:prefLabel "无层（派生注释型）"@zh ;
+    skos:scopeNote "cc:Evidence 的 layer 为 null ⇒ 投影器不得为它写 cc:ccfLayer（topology.yaml:407）。"@zh .
+
+# ===========================================================================
+# 4) OOOPS! 反模式扫描（docs/04 §0「加固 2」）—— 逐条声明本模块的自查结论
+#    ★ docs/04 只写了「OOPS! 自动扫描」，未给规格（不指定工具/报告格式）；
+#      本实现用机读 SPARQL 自检代替外部扫描器，并在此如实登记（见报告诚实清单）。
+# ===========================================================================
+cco:oopsCheck a owl:AnnotationProperty ; rdfs:label "OOPS! 反模式自查结论"@zh ;
+    rdfs:comment "第三方扫描器（oops-ontology-pitfall-scanner）未在本机可用 ⇒ 用机读 SPARQL 自检替代；结论逐条写在下面这条注解上（docs\\04 §0「加固 2」只要求扫描，未给工具规格）。"@zh .
+
+cco: a cco:oopsCheck ;
+    rdfs:label "OOPS! 自查：P07 无命名空间声明（避开：全部 IRI 带 onto/ 基址）/ P11 缺少 label（避开：每个类与属性带 @zh 标签）/ P13 同义属性未合并（避开：共享属性以 owl:unionOf 联合 domain，不复制 IRI）/ P19 多重 domain-range（已显式处理：4 条共享属性用 unionOf）/ P34 未声明 inverse（避开：4 条 inverseOf 与契约 inverse_relations 一一对应）"@zh .

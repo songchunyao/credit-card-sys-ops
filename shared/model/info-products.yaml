@@ -1,0 +1,221 @@
+# =============================================================================
+# 信息可及性契约（Information Products Contract）
+# =============================================================================
+# 目的：支撑 docs/00 §3.1 硬约束 C3（v1.4 重述）与门禁 G8。
+#
+# 背景：方案3（组 KG-T）的 LLM **直读拓扑结构**，它没有 cc_query（不写 Cypher），
+#       因此各组的工具面**必然不同**。若继续要求「工具名逐字相同」，第三个实验组无法存在。
+#       故 C3 由「工具名逐字相同」改为「**信息可及性对齐**」：
+#         各组必须能拿到**同一集合的信息产品**，差异只在封装与调用方式。
+#       「逐字相同」仍严格适用于**同一对照对内部**（如 KG-Q vs ONTO-Q）。
+#
+# 本文件是 C3/G8 的**机械依据**：verify 脚本读它，逐组逐产品检查可达性。
+# 它**不是**生成器（见 docs/00 裁决 3：ABox 统一 / TBox 各自原生）。
+# =============================================================================
+meta:
+  contract: info-products
+  version: 1.1.0
+  date: 2026-10-04
+  owner_doc: docs/00-总体设计与裁决记录.md
+  related:
+    - "§3.1 C1（单一输入）"
+    - "§3.1 C3（信息可及性对齐，v1.4 重述）"
+    - "§7.2 工具面"
+    - "裁决 9（方案3 / KG-T）"
+    - "docs/06-评测设计（A-B对照）.md 门禁 G8"
+    - "docs/00 裁决 12（KG-T-free：Neo4j 插件直连）"
+    - "shared/model/kgt-tools.yaml 五、实验组结构（线 2）"
+
+# -----------------------------------------------------------------------------
+# 一、信息产品定义：诊断所需的信息**全集**
+#     每一条都是「一个可回答的问题」，与载体无关、与工具名无关。
+# -----------------------------------------------------------------------------
+info_products:
+  - code: IP-OBJ-TOPO
+    name: 对象关系拓扑
+    question: "某个对象（或某层）在四层拓扑中与哪些对象相连？连接路径是什么？"
+    fields: [source_object, relation, target_object, layer, cross_layer]
+    covers: [App, Runtime, Data]
+
+  - code: IP-FAULT-CAUSAL
+    name: 故障因果拓扑
+    question: "故障 A 可能导致哪些故障？为真需要什么条件？证据是什么？"
+    fields: [from_fault, relation, to_fault, condition, evidence, provenance]
+    note: "relation ∈ causes / conditional_causes / relates_to；★ relates_to 绝不参与根因收敛（causal-edges.yaml）"
+
+  - code: IP-METRIC
+    name: 指标读数
+    question: "某对象某指标当前（或某时刻）的读数是多少？单位与阈值是什么？"
+    fields: [object, metric_code, value, unit, ts, threshold_ref, source]
+
+  - code: IP-FACT
+    name: 原始事实
+    question: "这条结论背后的 CCF 原始记录是哪几条？"
+    fields: [record_id, record_type, payload, ts, snapshot_id]
+    note: "支撑硬约束 C5（事实有据）与 false_claim 判定"
+
+  - code: IP-CASE
+    name: 用例相关事实检索
+    question: "给定本次用例的症状描述与时间窗，哪些事实与它相关？"
+    fields: [matched_records, matched_objects, time_window, symptom_terms]
+    note: "**这是主入口能力**：从自然语言症状定位到相关对象与事实集合"
+
+parity_required: [IP-OBJ-TOPO, IP-FAULT-CAUSAL, IP-METRIC, IP-FACT, IP-CASE]
+
+# -----------------------------------------------------------------------------
+# 二、可达性矩阵：每个实验组通过哪些工具拿到每个信息产品
+#     mode 说明封装方式的差异（这正是 C3 允许的差异）：
+#       query-language = 该组的 LLM 自己写查询语言去取（能力差异 → 被测变量）
+#       direct-read    = 接口直接返回该产品（结构已给定）
+#       rule-driven    = 由该组的规则库产出（确定性）
+#       composed       = 由多个接口组合得到（KG-T 的 IP-CASE 即如此）
+#     ★ v1.1：KG-T-free 的 5 项全部是 query-language，但**访问路径是第三方插件而非 :8303 端点**。
+#       「自由查询 + 插件直连」与「自由查询 + 自建端点」是两种访问方式，用 carrier_access 区分。
+#     ★ R-52（2026-10-07，用户裁定）：`access.KG-R/ONTO-R.tools` = `access.KG-Q/ONTO-Q.tools`
+#       **去掉 `cc_query`**（8 → 7），并逐条登记在 `tools_removed_from_setb`。理由是这两组的
+#       **每一条** via 路径本来就不含 `cc_query`（Q 臂每条 = R 臂对应条 + `cc_query`）⇒
+#       原来的 `tools` 字段把「Set B 全集」误当成了「该臂可用工具面」。
+#       ⇒ 该字段现与 **Dify 绑定面逐字一致**（结构性强制：R 臂模型物理上无法写查询），
+#         G24-10 按 `tools ∪ tools_removed_from_setb == Set B 全集` 做 fail-closed 断言。
+# -----------------------------------------------------------------------------
+access:
+  KG-Q:
+    tools: [cc_guide, cc_schema, cc_query, cc_facts, cc_trace, cc_cause, cc_propose, read_facts]
+    paths:
+      IP-OBJ-TOPO:    { via: [cc_trace, cc_query],                mode: query-language }
+      IP-FAULT-CAUSAL: { via: [cc_cause, cc_trace, cc_query],      mode: query-language }
+      IP-METRIC:      { via: [cc_facts, cc_query, read_facts],    mode: query-language }
+      IP-FACT:        { via: [cc_facts, cc_query],                mode: query-language }
+      IP-CASE:        { via: [cc_guide, cc_facts, cc_query],       mode: query-language }
+
+  ONTO-Q:
+    tools: [cc_guide, cc_schema, cc_query, cc_facts, cc_trace, cc_cause, cc_propose, read_facts]
+    paths:
+      IP-OBJ-TOPO:    { via: [cc_trace, cc_query],                mode: query-language }
+      IP-FAULT-CAUSAL: { via: [cc_cause, cc_trace, cc_query],      mode: query-language }
+      IP-METRIC:      { via: [cc_facts, cc_query, read_facts],    mode: query-language }
+      IP-FACT:        { via: [cc_facts, cc_query],                mode: query-language }
+      IP-CASE:        { via: [cc_guide, cc_facts, cc_query],       mode: query-language }
+    note: "★ 与 KG-Q 的 tools 列表**逐字相同**（同一对照对内部必须逐字相同）"
+
+  KG-R:
+    tools: [cc_guide, cc_schema, cc_facts, cc_trace, cc_cause, cc_propose, read_facts]
+    # ★ R-52（2026-10-07，用户裁定）：R 臂工具面 = Set B 全集**去掉 cc_query**（7 个），
+    #   由 Dify 侧**工具绑定**结构性强制（模型物理上无法写查询）—— 不是靠提示词自觉。
+    #   依据：本文件 access.KG-R/ONTO-R 的**每一条** via 路径都不含 cc_query
+    #   （Q 臂的每条对应路径 = R 臂路径 + cc_query）⇒ 该字段与 Dify 绑定面逐字一致。
+    #   G24-10 断言：tools ∪ tools_removed_from_setb == Set B 全集（fail-closed）。
+    tools_removed_from_setb: [cc_query]
+    paths:
+      IP-OBJ-TOPO:    { via: [cc_trace],                          mode: rule-driven }
+      IP-FAULT-CAUSAL: { via: [cc_cause, cc_trace],                mode: rule-driven }
+      IP-METRIC:      { via: [cc_facts, read_facts],              mode: rule-driven }
+      IP-FACT:        { via: [cc_facts],                          mode: rule-driven }
+      IP-CASE:        { via: [cc_guide, cc_cause],                 mode: rule-driven }
+
+  ONTO-R:
+    tools: [cc_guide, cc_schema, cc_facts, cc_trace, cc_cause, cc_propose, read_facts]
+    # ★ R-52：与 KG-R 逐字相同（同一对照对内部必须逐字相同），含同一条 tools_removed_from_setb。
+    tools_removed_from_setb: [cc_query]
+    paths:
+      IP-OBJ-TOPO:    { via: [cc_trace],                          mode: rule-driven }
+      IP-FAULT-CAUSAL: { via: [cc_cause, cc_trace],                mode: rule-driven }
+      IP-METRIC:      { via: [cc_facts, read_facts],              mode: rule-driven }
+      IP-FACT:        { via: [cc_facts],                          mode: rule-driven }
+      IP-CASE:        { via: [cc_guide, cc_cause],                 mode: rule-driven }
+    note: "★ 与 KG-R 的 tools 列表**逐字相同**（同一对照对内部必须逐字相同）；★ R-52 起两组同为 7 个（Set B 去掉 cc_query）。"
+
+  KG-T:
+    tools: [get_object_topology, get_fault_topology, get_metrics, get_facts, read_facts]
+    paths:
+      IP-OBJ-TOPO:    { via: [get_object_topology],                        mode: direct-read }
+      IP-FAULT-CAUSAL: { via: [get_fault_topology],                          mode: direct-read }
+      IP-METRIC:      { via: [get_metrics, read_facts],                     mode: direct-read }
+      IP-FACT:        { via: [get_facts],                                   mode: direct-read }
+      IP-CASE:        { via: [get_object_topology, get_facts],              mode: composed }
+    note: >
+      ★ 故意**没有** run_query / validate / run_rules —— 这是「不采用方案1的规则推理、
+      也不采用方案2的本体推理」的字面体现。IP-CASE 是 composed 而非一个工具：
+      由「拓扑定位相关对象」+「按对象取事实」两步组成，**这正是 C3 允许的封装差异**。
+
+  KG-T-dyn:
+    tools: [get_object_topology, get_fault_topology, get_metrics, get_facts, read_facts, collect_now]
+    paths:
+      IP-OBJ-TOPO:    { via: [get_object_topology],                        mode: direct-read }
+      IP-FAULT-CAUSAL: { via: [get_fault_topology],                          mode: direct-read }
+      IP-METRIC:      { via: [get_metrics, read_facts, collect_now],        mode: direct-read }
+      IP-FACT:        { via: [get_facts],                                   mode: direct-read }
+      IP-CASE:        { via: [get_object_topology, get_facts],              mode: composed }
+    in_main_comparison: false
+    note: "★ 补充组：`collect_now` 允许**动态补采** ⇒ 不再消费同一份 CCF，**违反 C1**，故不进主判据"
+
+  KG-T-free:
+    tools: [neo4j_query, read_live_facts]
+    carrier_access: plugin-direct              # ★ Dify 插件 nikola_milosevic/neo4j_query @ 0.2.0
+    service_port: null                         # ★ 完全不经 :8303（用户 m01621）
+    paths:
+      IP-OBJ-TOPO:    { via: [neo4j_query], mode: query-language }
+      IP-FAULT-CAUSAL: { via: [neo4j_query], mode: query-language }
+      IP-METRIC:      { via: [neo4j_query, read_live_facts], mode: query-language }
+      IP-FACT:        { via: [neo4j_query], mode: query-language }
+      IP-CASE:        { via: [neo4j_query], mode: query-language }
+    attribution: llm                           # ★ 无 cc_cause ⇒ 归因主体 = LLM
+    hard_dependency: >
+      ★ IP-FACT 在本组只能经图谱里的 :Evidence 节点取得（evidenceId ↔ CCF record_id），
+      因为 get_facts 是 :8303 端点、本组不得使用。⇒ 本组对「CCF → :Evidence 投影」有**硬依赖**：
+      若投影器未把 CCF 记录投影成 :Evidence，本组同时违反 C5（事实有据）与 G8（信息可及性）。
+      见风险 R16 与施工任务 M1.5c。
+    note: >
+      ★ **不是**「KG-T 去掉几个工具」：它换的是**归因主体**——cc_cause 不在工具面内，
+      根因收敛全由 LLM 完成。它与 KG-Q 共用同一张图、同一门查询语言，故 KG-T-free vs KG-Q
+      是**只动归因主体**的单变量对照（kgt-tools.yaml 五、line 2a）。
+
+  BASE:
+    # ★ R-55（2026-10-08）：原写 `cc_get_facts` —— 该名字在**四个服务里 0 命中**，是 D47
+    #   （中性工具的两个名字：主名 `read_facts` / 免费臂别名 `read_live_facts`）**之前的旧名残留**；
+    #   其余六臂的 tools 一律用 `read_facts` ⇒ BASE 与之对齐，绑**同一个**中性取数工具。
+    #   依据：`live-facts-tools.yaml#names`（primary=read_facts / free_alias=read_live_facts）
+    #   与 `#names.arm_usage`（`read_live_facts` 只给 KG-T-free）。
+    #   ★ 用途上这反而**加强**了实验：「数据怎么拿」对 BASE 与其它臂**逐字相同**，
+    #   唯一差别就是「有没有知识结构」——正是基线该有的样子。
+    tools: [read_facts]   # 无知识库；只读 CCF（:8304 中性取数）
+    paths:
+      IP-OBJ-TOPO:    { via: [read_facts], mode: composed }
+      IP-FAULT-CAUSAL: { via: [read_facts], mode: composed }
+      IP-METRIC:      { via: [read_facts], mode: composed }
+      IP-FACT:        { via: [read_facts], mode: direct-read }
+      IP-CASE:        { via: [read_facts], mode: composed }
+    note: >
+      BASE 只有原始事实；拓扑与因果必须由 LLM **从事实里自己归纳**。
+      这是「没有知识库」的诚实基线——它仍可达全部产品，只是**要靠推理重建结构**。
+
+# -----------------------------------------------------------------------------
+# 三、明确不对齐的内容（防日后误引为"不公平"）
+# -----------------------------------------------------------------------------
+excluded_from_parity:
+  - item: 变更提案（cc_propose，强制 dry_run）
+    reason: "属**执行侧**能力，不是诊断信息产品。本次验证阶段一律 dry_run（docs/00 裁决 5），无组执行变更，故不构成信息不对称。审计链由知识服务侧逐调用落盘，**不是 Agent 工具**，故不在本契约内。"
+  - item: 载体原生查询语言（Cypher / SPARQL）本身
+    reason: "这正是**被测变量**（线 1：KG-Q vs ONTO-Q）。要求它对齐等于取消实验。"
+
+# -----------------------------------------------------------------------------
+# 四、门禁 G8 的机械断言
+# -----------------------------------------------------------------------------
+gate:
+  id: G8
+  name: 信息可及性对齐
+  snapshot: shared/model/info-products.yaml
+  assertion: >
+    对 parity_required 中的每一项 IP，每个**主对比组**
+    （KG-Q / ONTO-Q / KG-R / ONTO-R / KG-T / KG-T-free）都必须在 access.<arm>.paths 中
+    至少有 1 条路径；缺失即判失败。
+    ★ KG-T-free 的 IP-FACT 路径**有前置于 B 阶段的前提**（:Evidence 投影，R16/M1.5c）：
+    该路径在契约上成立，但若投影器未实现，G8 必须在**实机快照**上重新判定为失败，
+    不得以「契约里写了」为由放行（见 gate.on_violation 第 2 句）。
+  exemptions:
+    - "KG-T-dyn 不在主对照内（in_main_comparison: false）"
+    - "BASE 为基线，列出但**不作对齐要求**（它没有知识库）"
+  on_violation: >
+    视为设计缺陷，必须补齐后再进入正式测量。**不得**用「该组不需要这类信息」
+    或「该产品的语义在该载体下不可表达」豁免——若真的不可表达，那就是
+    载体表达力的**结论**，必须写进报告，而不是跳过门禁。

@@ -1,0 +1,194 @@
+# =============================================================================
+# shared/deploy/port/collect-layer.manifest.yaml
+#   采集层（:8187 数据面）**打包 / 移植**的单一事实源。
+#
+#   采集层源码**随本仓一起发布**（`dist/collect-layer/`，本项目自研）。本清单把
+#   「打包时必须带走什么、每个文件的指纹是什么」变成一个**可机器校验**的声明：
+#   `pack_collect_layer.py --source dist/collect-layer --verify` 逐文件对账
+#   （bytes + sha256），不一致即 FAIL；树不在时报 BLOCKED，**不冒充 PASS**。
+#
+#   ★★ 权威来源 = `Dockerfile.collect` 的 COPY 清单，**不是** import 闭包。
+#      实测证明 import 闭包**不可**作为打包依据（三个反例见 `why_not_closure`）。
+#
+#   ★ 术语：下文「上游 / 上游基线」= 该树**迁入本仓之前**的开发仓库（同一作者）；
+#     它只用于记录指纹来源与改动历史。该树现已并入本仓，与全仓同为 Apache-2.0。
+# =============================================================================
+
+meta:
+  contract: collect-layer-port
+  version: "1.0.0"
+  date: "2026-10-07"
+  source_repo: "credit-card-sys-ops（本仓；该树迁入前在作者的另一仓库中开发）"
+  source_git_head: "8dcdefdfc11184cee6e385a1581985c2094e84cf"   # 2026-09-28，迁入基线
+  source_git_head_short: "8dcdefd"
+  authoritative_source: "Dockerfile.collect 的 COPY 清单（L76-L82）"
+  service_port: 8187
+  python: "3.12（python:3.12-slim；生产 venv 实测 3.12.3）"
+  launch: >-
+    tini -- sh -c "exec python -m uvicorn service.app_collect:app
+    --host 0.0.0.0 --port ${SVC_PORT} --workers 1"
+  required_env:
+    SVC_PORT: "8187（8181 为 v3 栈；单实例只监听一个）"
+    PYTHONPATH: "/app（或移植后 = bundle 根）"
+    PYTHONUNBUFFERED: "1"
+    PYTHONDONTWRITEBYTECODE: "1"
+  env_file: ".env（键名权威 = .env.example；**镜像内不含任何密钥**，全部运行时注入）"
+
+# -----------------------------------------------------------------------------
+# 为什么不拿 import 闭包当打包依据（三条实测反例，都会导致漏文件）
+# -----------------------------------------------------------------------------
+why_not_closure:
+  - id: W1-soft-dep
+    what: "service/collect_sim.py —— ★ 本条已被实测**证伪**，它**不是**软依赖（2026-10-12）"
+    detail: >-
+      原文（2026-10-07）声称：collect_api.py:43-49 有三重 try/except 守卫
+      ⇒ 缺它合法降级为 `_sim = None`，且「上游 Dockerfile.collect 刻意不 COPY 它」。
+      同时 `optional_soft_deps` 把它登记为「打包时**不带**」，打包器还会**断言它不在包里**。
+      ★ 实测证伪（在 部署宿主 的容器化部署上，缺它时的真实后果）：
+        gaussdb_probe.py:630-636 在**正常 live 路径**上就调用
+            conn = await _sim.connect_async((async_gaussdb.connect if _has_driver else None), self._conn_kwargs)
+        它注释里写的语义是「live 模式下这三个调用**零介入**（直通真实实现）」——
+        即 `collect_sim` 是**必经的 tap 层**，live 模式不是"绕过它"而是"经它直通"。
+        缺它 ⇒ `_sim = None` ⇒ 每次采集第一句即
+            AttributeError: 'NoneType' object has no attribute 'connect_async'
+        ⇒ **gaussdb 层全部探针段产出为 0**，只剩 `_real_topology()` 那条独立路径给的
+          8 条拓扑身份事实。而 `/health` 的 `gaussdb.ok` **仍然是 true**（它走的是
+          另一条查询路径）⇒ 表面上"数据库连得上"，实际**采集面整体失效**，极易误判。
+        实测读数（同一套环境，只差这一个文件）：
+            缺：total_facts=8    layer_errors={'gaussdb': "'NoneType' object has no attribute 'connect_async'"}
+            有：total_facts=505  layer_errors=None   layer_details.gaussdb.fact_count=497
+      ⇒ 结论：**它是必需文件**。已移入 `required_files`；本清单不再允许把它排除。
+      ⇒ 教训（通用）：`try/except ImportError → None` 只证明"**导入**可以失败"，
+        不证明"**功能**可以降级"。判断一个依赖是否必需，必须看**调用点**，不看导入点的守卫。
+  - id: W2-lazy-path
+    what: "storages/dorado_collector.py 是**惰性 import + 运行时 sys.path 插入**"
+    detail: >-
+      storage_probe.py:185 / :413 在函数体内 `from dorado_collector import ...`；
+      :80-83 先用「本文件上溯 3 级 + /storages」算出目录并 sys.path.insert。
+      ⇒ 动态 import 闭包**看不到它**（只在真正采存储层时才加载）。
+      漏掉它 ⇒ 存储层探针在移植后运行期才失败。
+  - id: W3-data-files
+    what: "data/ 是**数据文件**，任何 import 闭包都看不到"
+    detail: >-
+      Dockerfile.collect L82 `COPY data/ /app/data/`；消费者实测 = storage_probe.py:421
+      引用 `data/rules/{default,advanced}.yaml` 的存储层规则。共 4 个文件。
+
+# -----------------------------------------------------------------------------
+# 布局硬约束（移植时**不得**拍平目录）
+# -----------------------------------------------------------------------------
+layout_constraint:
+  rule: "`service/` 与 `storages/` 必须是**同级目录**，且 `data/` 与其同级"
+  why: >-
+    storage_probe.py:80-83 用 `dirname(dirname(dirname(abspath(__file__)))) + /storages`
+    定位 dorado 采集器 ⇒ 目录层级是**运行期契约**，拍平会让存储层探针找不到模块。
+  check: "pack 时断言 <bundle>/service/probes/storage_probe.py 与 <bundle>/storages/ 同级存在"
+
+# -----------------------------------------------------------------------------
+# 必需文件（每个都带 bytes + sha256；实测于 2026-10-07）
+# -----------------------------------------------------------------------------
+required_files:
+  # —— 数据面服务自身 ——
+  - {path: service/__init__.py,        role: "服务包入口（含探针注册表）", bytes: 8664,  sha256: 3997dcf413194b2825b2a2500653c622f26e6b82485321fae048c8937c005e01}
+  - {path: service/common.py,          role: "公共层（env 装载 / 内部调用中间件 / 压缩）", bytes: 13411, sha256: 81b4efd62b0ed629fbb3f4429935cb34da52cbe01f8e665b5804eb3deffcc7c1}
+  - {path: service/collect_api.py,     role: "数据面路由（10 端点）★ 本项目有改动（2026-10-13 修 _real_topology 静默丢节点）", bytes: 67813, sha256: 1a81edf97accfaa165d61c7de55754dc592506002b63ad8a9f1ad3b3c068577b}
+  - {path: service/app_collect.py,     role: "唯一进程入口（34 行，不 import 知识面）", bytes: 1273,  sha256: 1a44a9a61e5357d92361a6a5b8be490a328ae82dbdbfd1192a316df85095b64b}
+  # —— 探针（10 个）——
+  - {path: service/probes/__init__.py,       role: "探针注册表（pkgutil 自动发现）", bytes: 12503, sha256: 103d19f83f08b8548944769f298813ed5a8464518b832ba59def6fe4008b7563}
+  - {path: service/probes/gaussdb_probe.py,  role: "gaussdb 层探针 ★ 本项目改动（P0.5 delta / P0.7 聚合 / P0.9 修 is_standby 布尔 / 2026-10-13 修锁等待口径与事务年龄时区）", bytes: 102686, sha256: a2f32f7b6de28ddbc5784751d45dd37413961dd1a17560cd976a7861104b3ddf}
+  - {path: service/probes/os_probe.py,       role: "os 层探针（SSH 到各节点）★ P0.7 增宿主级聚合：fs 最大使用率 / I/O 错误总数 / 网卡 down 数", bytes: 100991, sha256: eca26caa16bdee489e5cc19d4cb374671dca06764f38a37412ffde3b7bb3708d}
+  # ★ 2026-10-12 重写：L2 载体由 k8s 改为**裸 docker 容器**后，这两层探针的通道整体换掉
+  #   （k8s Prometheus / HTTP /health → Docker API + 宿主 cgroup + 宿主 /proc + GaussDB 归因）。
+  #   成因与逐条通道说明见两个文件自己的文件头；配套改动：
+  #     · deploy/compose.yml  collect 服务增加 3 条只读挂载 + group_add（docker 组）
+  #     · shared/model/v3-ccf-map.yaml  l1-l2 / l1-l3 profile 按真实可采集集合收敛
+  - {path: service/probes/container_probe.py, role: "container 层探针 ★ 本项目 M1.6 新增 / 2026-10-12 重写为裸 docker 通道 + 本机宿主 OS 采集", bytes: 37120, sha256: 3869e47bab5e6aab454b73cc1b87e3754e19b7755aa5c72d4b0fd5ba497509d4}
+  - {path: service/probes/app_probe.py,      role: "app 层探针 ★ M1.6 新增 / 2026-10-12 重写（宿主 /proc + GaussDB 归因）/ P0-B 增应用遥测日志 / P0.6 增 TPS+延迟分布+累计量", bytes: 35180, sha256: f6bfa35e7b93cc90a2c4100dbb8ca46ce38c156bf38fced4e51f104cd0d63a09}
+  - {path: service/probes/storage_probe.py,  role: "storage 层探针（依赖 storages/）", bytes: 35681, sha256: 716a4e749aa7fee3d11b9726abc1eef17fe74f1de01528f4cb8f37b303cd2560}
+  - {path: service/probes/tpops_probe.py,    role: "tpops 层探针", bytes: 23934, sha256: db5823719a45147fac1c3b20a38119539eae625bf0fd79e0ccad572278bef044}
+  - {path: service/probes/alarm_probe.py,    role: "告警探针", bytes: 18372, sha256: 2cba1f758deae25226fc60750101d30457a2c9570085a1bb14db2dccf3700abb}
+  - {path: service/probes/io_relay.py,       role: "IO 中继", bytes: 15436, sha256: 4bbe4d76f68abcbaa33550562bd5c75df55f78438972f1446761353f8e4b2bef}
+  - {path: service/probes/plan_now.py,       role: "即时计划", bytes: 20933, sha256: 69e32655c1c48cfb1ba34ad0a3fe9ec175c65e39f18502fed7e4383b8381dcc4}
+  # —— 存储采集封装（惰性依赖，见 W2）——
+  - {path: storages/dorado_collector.py, role: "dorado 采集封装（惰性 import + sys.path 定位）", bytes: 39443, sha256: dfcf9028d4febcc361466d7f504e8c23eb8047ea8a8213ea35ab5bcd9ed2ecda}
+  # —— 数据文件（见 W3）——
+  - {path: data/rules/default.yaml,      role: "规则（存储层探针引用）", bytes: 23187, sha256: 032326de3e182ecc2d2224eb5b490a2fa63f5be39a53fdafcb7b1302450d61e2}
+  - {path: data/rules/advanced.yaml,     role: "规则（存储层探针引用）", bytes: 24631, sha256: 6672620f1149a74075428c1cab2dab7528826751d18d8d34dfa2201320e1be32}
+  - {path: data/actions/action_map.yaml, role: "动作映射", bytes: 6128,  sha256: b7179df1b4deef9a332b52bbdec0ad1fbf2636f4ee8da2a017070d8de58755c0}
+  - {path: data/runbooks/templates.yaml, role: "处置模板", bytes: 18769, sha256: 5cbe58277d3789f064d10ecc0909003cbc0b87abdec6ba56c8430de4db506a37}
+  # —— 重建用（可选，但移植时强烈建议带）——
+  - {path: requirements.txt, role: "钉版依赖（19 条）", bytes: 540,  sha256: 57e8cd66d6c23c16d33d3f4d89b5abe43c82d54c959db0c280974fa19163ba73, optional: false}
+  - {path: .env.example,     role: ".env 键名权威（不含密钥）", bytes: 2056, sha256: da952ca00ab1ca4a7611d0a2c3f265c816336b9ad0b6ade3d7f70a6d12777301, optional: false}
+  # ★ 2026-10-12 由 optional_soft_deps 移入：W1 已被实测证伪，它是**必需文件**。
+  #   gaussdb_probe.py:630-636 在 live 路径上必经 `_sim.connect_async(...)`；
+  #   缺它 ⇒ gaussdb 层全部段落产出为 0（而 gaussdb.ok 仍为 true，极具迷惑性）。
+  #   实测：缺 → total_facts=8 且 layer_errors 报 NoneType.connect_async；
+  #         有 → total_facts=505、layer_errors=None、fact_count=497。
+  - {path: service/collect_sim.py, role: "★ 采集 tap 层（live 模式直通真实实现；**非**软依赖）", bytes: 49357, sha256: 4440e51f1df367cca7f998cffd272c5f3c9c3e8bdd74c02d6b5c3bdcffdef409}
+
+# 可缺（有守卫，缺它合法降级）—— 打包时**不带**，仅登记
+# ★ 2026-10-12：本条原为 service/collect_sim.py，已被 W1 的实测证伪并移入 required_files。
+#   当前**没有**已证实的软依赖 ⇒ 故意留空，而不是留一条错的。
+optional_soft_deps: []
+
+# 明确**不得**进入包（知识面）——pack 时断言它们不存在
+excluded_knowledge_plane:
+  - service/main.py
+  - service/knowledge_api.py
+  - service/app_knowledge.py
+  - service/twin_view.py
+  - service/smtp_mail.py
+  - service/es_log_search.py
+
+# -----------------------------------------------------------------------------
+# 本项目在上游留下的改动（上游 git status --porcelain 实测）
+#   ★ 只按上游 commit 打包会丢掉其中 2 个**未跟踪的新增文件**
+# -----------------------------------------------------------------------------
+project_patches:
+  - {path: service/probes/container_probe.py, kind: added,   batch: M1.6, note: "container 层探针，本项目专用（上游无此类对象采集能力）"}
+  - {path: service/probes/app_probe.py,       kind: added,   batch: M1.6, note: "app 层探针，本项目专用"}
+  - {path: service/probes/container_probe.py, kind: patched, batch: M2.10, note: "窗口基线 delta：increase(<series>[DELTA_WINDOW_S]) + delta/deltaWindowS"}
+  - {path: service/probes/app_probe.py,       kind: patched, batch: M2.10, note: "同窗口基线；两次采样受 APP_DELTA_SAMPLE 控制（默认关）"}
+  - {path: service/probes/container_probe.py, kind: rewritten, batch: "2026-10-12", note: "★ 通道整体换掉：k8s Prometheus → Docker Engine API（身份/状态/限额/Env）+ 宿主 cgroup v2（cpu.stat.nr_throttled / memory.events.oom_kill）+ 宿主 /proc（兜底定位 cgroup 路径）。窗口基线改为**采集侧状态文件**（cgroup 文件无历史，Prometheus 才有的 increase() 不可用）"}
+  - {path: service/probes/container_probe.py, kind: patched, batch: "2026-10-12 P0.6", note: "★ 新增**应用节点本机 OS 指标**（_local_host_os_facts）：读 /host/proc/{stat,meminfo,loadavg,diskstats} ⇒ host.cpu_usage / os.mem.free_kb+total_kb / os.load.avg1+avg5 / host.disk_util / node.disk_io_wait。根因：os 探针是 SSH 式的、目标只来自 GAUSSDB_NODES（3 个 DB 节点），**从不含应用节点**（build-host=192.0.2.11，与 DB 的 192.0.2.x 不同网段）⇒ Host 对象建得出来但 host.* 指标零条。采集容器已挂 /host/proc ⇒ 本地直读即可，**无需 SSH/凭据，且这些 path 早已有到 host.* 的映射（零契约改动）**"}
+  - {path: service/probes/app_probe.py,       kind: rewritten, batch: "2026-10-12", note: "★ 通道整体换掉：HTTP GET /health（应用不监听任何端口）→ Docker API 读 Config.Env + 宿主 /proc/<宿主pid>/{status,stat,cmdline}（app.thread_count / app.uptime_s）+ GaussDB pg_stat_activity 按 application_name 归因（app.datasource.{active,idle}_connections）。JVM 内部量与 HikariCP 池内计数器**如实登记为无通道**，不伪造 0"}
+  - {path: service/probes/app_probe.py,       kind: patched,   batch: "2026-10-12 P0-B", note: "★ 新增应用实时遥测日志通道（read_telemetry）：解析 `/out/logs/ccsim-<hostname>-*.log` 的 `[run] phase=… tps=… p50/p95/p99` 与 `连接池获取偏慢 … 耗时=Xms`、池建/关计数 ⇒ app.endpoint.{qps,p99_ms,error_rate} 与 app.datasource.acquire_wait_ms。带**时效保护**：超过 CC_APP_TELEMETRY_MAX_AGE_S 报 notCollected(telemetry_stale)，不把陈旧读数当现值"}
+  - {path: service/probes/gaussdb_probe.py,   kind: patched,   batch: "2026-10-12 P0.5", note: "★ 新增窗口基线（delta）：累计计数器/量规经**采集侧状态文件**做差，让 predicate:increased/decreased 可机判。单调计数器（deadlocks/xact_rollback/slow_sql_count/temp_files_count/seq_scan/idx_scan）差值为负视为重置⇒不产出、不取绝对值；量规（n_dead_tup/会话类）允许负增量。键=path|obj_id（Table 级逐表做差）；deltaWindowS=实际间隔；基线过期⇒不产出"}
+  - {path: service/probes/gaussdb_probe.py,   kind: patched,   batch: "2026-10-13 M1/M2/M3", note: "★ 修三处「判据恒不成立」的采集缺陷（由 fi-e2e 端到端故障注入测试发现，免部署重放验证 PASS）：① session_detail 新增 xact_age_ms —— 原实现把 xact_start 渲染成无时区字符串（DB 会话时区 Etc/GMT-8）再与探针宿主机 datetime.now()（UTC）相减 ⇒ transaction.duration_ms 恒为 -8h（实测 -28797184），改用 SQL 内 now()-xact_start；② sessions.lock_wait 原用 count(CASE WHEN enqueue IS NOT NULL) ⇒ GaussDB 不填 enqueue，恒 0，改用 (SELECT count(*) FROM pg_locks WHERE NOT granted)（实测注入 biz_hot_row 时 0 vs 6，7 个 waiting 会话）；③ session_detail 新增 lock_wait_type（pg_locks NOT granted 按 pid 关联的 locktype，实测 tuple/transactionid，均在契约 enum 内），替代原 sd.get(chr(39)enqueue(chr(39)) or chr(39)lock_wait(chr(39)) 的恒字面量兜底。影响：FM-DB-LOCK-WAIT 由不可判变可判，覆盖 db_lock/sql_long_tx/biz_hot_row/biz_lock_range/sql_lock_chain 5 类注入。"}
+  - {path: service/collect_api.py,            kind: modified, batch: "(上游工作区既有改动)", note: "上游 HEAD 之后被改；与探针补丁同批带走的既成事实"}
+  - {path: service/probes/gaussdb_probe.py,   kind: modified, batch: "(上游工作区既有改动)", note: "同上"}
+
+runtime_deps:
+  os_packages: [sshpass, openssh-client, curl, tini, ca-certificates]
+  pip_pinned:   # 摘自 requirements.txt（19 条，逐字）
+    - annotated-doc==0.0.5
+    - annotated-types==0.8.0
+    - anyio==4.15.1
+    - async_gaussdb==0.30.4
+    - certifi==2026.7.22
+    - charset-normalizer==3.5.1
+    - click==8.5.0
+    - fastapi==0.141.1
+    - h11==0.16.0
+    - idna==3.19
+    - pydantic==2.13.5
+    - pydantic_core==2.46.5
+    - PyYAML==6.0.3
+    - requests==2.34.2
+    - starlette==1.6.0
+    - typing_extensions==4.16.0
+    - typing-inspection==0.4.4
+    - urllib3==2.7.0
+    - uvicorn==0.52.4
+  note: "上游实测全部为纯 Python wheel（含 async_gaussdb）⇒ **不需要** build-essential/gcc"
+
+# -----------------------------------------------------------------------------
+# 本项目**自己写的**采集层（已在树内，无需 vendor；此处登记以便对照）
+# -----------------------------------------------------------------------------
+already_in_tree:
+  - {path: shared/collect/freeze.py,             role: "CCF 固化器（硬约束 C1 的唯一入口）"}
+  - {path: shared/collect/live_facts.py,         role: "中性取数 read_facts 实现"}
+  - {path: shared/collect/live_facts_service.py, role: "取数服务（:8304）"}
+  - {path: shared/collect/m5_inject_build.py,    role: "M5 用例注入构造"}
+  - {path: shared/collect/v3-fact-inventory.json, role: "事实清单"}
+  - {path: shared/model/ccf.schema.json,         role: "CCF JSON Schema"}
+  - {path: shared/model/v3-ccf-map.yaml,         role: "v3 Fact → CCF 映射"}

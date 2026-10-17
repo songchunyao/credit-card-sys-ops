@@ -1,0 +1,443 @@
+# ============================================================================
+# scheme2-onto/ontology/cc-causal.ttl  ·  方案2 因果域模块（ccc:）
+# ----------------------------------------------------------------------------
+# 职责（docs/04 §3 模块表）：27 条因果边（n 元因果）+ 4 条条件边 + 契约白名单
+#   有向环 + 3 组区分器 + 叶子根因的排除法（根因个体的判据在 cc-fault.ttl）。
+# 命名空间（逐字取自 type-map.yaml#namespaces.onto）：ccc = .../onto/causal#
+# 上游契约：shared/model/causal-edges.yaml（v1.0.0；relation_enum = causes |
+#   conditional_causes | relates_to；transitive: false；cycles 白名单 1 项）
+#
+# ★ n 元因果的建模方式（docs/04 §D5 决策）：
+#   因果**不是**直接断言在故障模式之间的二元谓词，而是把「这条因果主张」本身
+#   建成个体 ccc:CausalLink，再用 ccc:cause / ccc:effect 指向两端。理由：
+#   一条因果主张还带 chain / evidence / 条件 / 出处，这些都是**边**的属性；
+#   RDF 三元组没有边 ⇒ 若不物化，就只能把这些属性挂到端点故障模式上（那是错的，
+#   因为同一端点有多条不同边）。方案1 的 LPG 直接把属性挂在边上，这是它的自然
+#   表达；本体的做法是**物化边**（reification），代价是多一层个体，收益是边属性
+#   有独立的 domain/range 与基数约束。★ 本条已进末条报告的「诚实清单」。
+#
+# ★ 条件边（conditional_causes）从「边上的 condition 字段」升级为**一等公民**
+#   个体 ccc:Condition：条件自己有 metric / op / 参照档位 / 实体属性，并且能独立
+#   被查询、被校验、被引用。条件里的阈值同样是**引用式**（→ ccm:Threshold 档位
+#   个体），文件名里零内联数值 —— 与 docs/04 §4.5 的草案写法不同（见 X-3）。
+#
+# ★ T4 与契约缺陷 X-8：docs/04 §8 要求「每条 ccc:CausalLink 有 ccc:provenance，
+#   且其 IRI ∈ 契约」。但 causal-edges.yaml 的 provenance 字段值是**字面量
+#   "authored"**（出处令牌），契约里**没有任何 IRI**。本模块的做法：
+#     ① 把 18 条边的出处物化为 ccc:ContractProvenance 个体 ccc:prov-E1..E18，
+#        每个带 provenanceToken "authored" / provenanceDocument / provenanceEdgeId；
+#     ② 每条 CausalLink 经 ccc:provenance 指向自己的那个个体（IRI 确定可复算）。
+#   ⇒ 这是「按契约语义确定性派生 IRI」，不是自造事实；已在 TTL 与报告里登记。
+#
+# ★ OWL 原生 vs SHACL 补足（docs/04 §D6，分开计）：
+#   OWL 原生（本模块）：rdfs:subClassOf / domain / range / owl:inverseOf /
+#     owl:FunctionalProperty 与 owl:InverseFunctionalProperty（见下）、
+#     个体的类型断言与 owl:AllDifferent（27 条边两两不同）。
+#   SHACL 补足（ccs:）：linkKind 枚举 ∈ relation_enum、condition 必须成对
+#     （op+operand 同现）、条件边的 condTier 必填、evidenceText 非空 等 CWA 约束。
+# ============================================================================
+@prefix ccc:     <https://credit-card-ops.ai/onto/causal#> .
+@prefix ccf:     <https://credit-card-ops.ai/onto/fault#> .
+@prefix ccm:     <https://credit-card-ops.ai/onto/metric#> .
+@prefix cc:      <https://credit-card-ops.ai/onto/topology#> .
+@prefix cco:     <https://credit-card-ops.ai/onto/core#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix dcat:    <http://www.w3.org/ns/dcat#> .
+
+ccc: a owl:Ontology , dcat:Dataset ;
+    dcterms:title "信用卡跨层运维本体 · 因果域模块（cc-causal）"@zh ;
+    dcterms:description "27 条因果边（n 元物化）+ 4 条条件边 + 7 条链 + 3 组区分器 + 契约白名单环 + 27 条出处。"@zh ;
+    cco:contractSource "shared/model/causal-edges.yaml (v1.0.0)" ;
+    skos:note "因果主张一律物化为 ccc:CausalLink 个体（n 元），边属性（chain/evidence/条件/出处）因此拥有独立 domain/range，可被 SPARQL 直接查、可被 SHACL 校验。"@zh ;
+    skos:note "契约 meta.transitive=false 只约束**推理**与语料生成；T6 的环检测用有界属性路径 ccc:cause{2,4} 自反匹配，与传递闭包无关（docs\\04 §8 T6 明写）。"@zh .
+
+# ===========================================================================
+# 1) 类
+# ===========================================================================
+ccc:CausalLink a owl:Class ;
+    rdfs:subClassOf cco:DependentEntity ;
+    rdfs:label "因果主张（n 元）"@zh ;
+    rdfs:comment "一条被物化的因果边：cause + effect + chain + evidence + （可选）condition。依存于两端，故 ⊑ cco:DependentEntity。"@zh ;
+    cco:rigidity "+R" ; cco:identity "-I" ; cco:unity "+U" ; cco:dependence "+D" ;
+    cco:dependenceCriterion ccc:cause ;
+    cco:contractSource "causal-edges.yaml#/edges" .
+
+ccc:Condition a owl:Class ;
+    rdfs:subClassOf cco:DependentEntity ;
+    rdfs:label "触发条件"@zh ;
+    rdfs:comment "conditional_causes 的条件：一个指标 + 一个比较 + 一个参照（阈值档位个体或实体属性）。"@zh ;
+    cco:rigidity "+R" ; cco:identity "-I" ; cco:unity "+U" ; cco:dependence "+D" ;
+    cco:dependenceCriterion ccc:conditionOf ;
+    cco:contractSource "causal-edges.yaml#/edges/condition" .
+
+ccc:Chain a owl:Class ;
+    rdfs:subClassOf cco:InformationEntity ;
+    rdfs:label "故障链"@zh ;
+    rdfs:comment "F1..F7 的链编号（契约 edges[].chain 字段的取值集合）。链的**语义与名称**在 docs\\01，本模块不擅取名字。"@zh ;
+    cco:rigidity "+R" ; cco:identity "-I" ; cco:unity "+U" ; cco:dependence "-D" ;
+    cco:contractSource "causal-edges.yaml#/edges/chain（取值集合）; 语义见 docs/01-场景建模与范围定义.md" .
+
+ccc:Discriminator a owl:Class ;
+    rdfs:subClassOf cco:InformationEntity ;
+    rdfs:label "区分器"@zh ;
+    rdfs:comment "「同症状不同根因」的判定依据：靠**某个指标正常**定罪（否定性证据）。契约 discriminators 3 项。"@zh ;
+    cco:rigidity "+R" ; cco:identity "-I" ; cco:unity "+U" ; cco:dependence "-D" ;
+    cco:contractSource "causal-edges.yaml#/discriminators" .
+
+ccc:ContractProvenance a owl:Class ;
+    rdfs:subClassOf cco:InformationEntity ;
+    rdfs:label "契约出处"@zh ;
+    rdfs:comment "契约 provenance 令牌（字面量 \"authored\"）的物化。见 X-8。"@zh ;
+    cco:rigidity "+R" ; cco:identity "-I" ; cco:unity "+U" ; cco:dependence "-D" ;
+    cco:contractSource "causal-edges.yaml#/edges/provenance" .
+
+# ===========================================================================
+# 2) 对象属性
+# ===========================================================================
+ccc:cause a owl:ObjectProperty ; rdfs:domain ccc:CausalLink ; rdfs:range ccf:FaultMode ;
+    rdfs:label "因"@zh ; rdfs:comment "契约 from 字段（起点故障模式）。"@zh .
+ccc:effect a owl:ObjectProperty ; rdfs:domain ccc:CausalLink ; rdfs:range ccf:FaultMode ;
+    rdfs:label "果"@zh ; rdfs:comment "契约 to 字段（终点故障模式）。"@zh .
+
+ccc:condition a owl:ObjectProperty ; rdfs:domain ccc:CausalLink ; rdfs:range ccc:Condition ;
+    owl:inverseOf ccc:conditionOf ;
+    rdfs:label "触发条件"@zh ; rdfs:comment "仅 conditional_causes 边有；causes 边**不**断言本属性（CWA 由 SHACL 补）。"@zh .
+ccc:conditionOf a owl:ObjectProperty ; rdfs:domain ccc:Condition ; rdfs:range ccc:CausalLink ;
+    rdfs:label "条件所属因果边"@zh .
+
+ccc:relatesTo a owl:ObjectProperty ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( ccf:FaultMode ccf:RootCause ) ] ;
+    rdfs:range  [ a owl:Class ; owl:unionOf ( ccf:FaultMode ccf:RootCause ) ] ;
+    rdfs:label "相关（非因果）"@zh ;
+    rdfs:comment "契约 relation_enum 的 relates_to（E16/E17）：**不参与**因果收敛，也不参与环检测。"@zh .
+
+ccc:inChain a owl:ObjectProperty ; rdfs:domain ccc:CausalLink ; rdfs:range ccc:Chain ;
+    owl:inverseOf ccc:hasLink ;
+    rdfs:label "所属链"@zh .
+ccc:hasLink a owl:ObjectProperty ; rdfs:domain ccc:Chain ; rdfs:range ccc:CausalLink ;
+    rdfs:label "链上的因果边"@zh .
+
+ccc:condMetric a owl:ObjectProperty ; rdfs:domain ccc:Condition ; rdfs:range ccm:Metric ;
+    rdfs:label "条件指标"@zh .
+ccc:condThreshold a owl:ObjectProperty ; rdfs:domain ccc:Condition ; rdfs:range ccm:Threshold ;
+    rdfs:label "条件阈值档"@zh ;
+    rdfs:comment "★ 引用式：条件里的比较参照是本体中的档位个体（替代 docs\\04 §4.5 草案的内联数值，见 X-3）。"@zh .
+ccc:condEntityProperty a owl:ObjectProperty ; rdfs:domain ccc:Condition ; rdfs:range owl:DatatypeProperty ;
+    rdfs:label "条件参照的实体属性"@zh ;
+    rdfs:comment "operand 形如 entity_property:Container.memLimitMb ⇒ 指向本体属性 IRI。"@zh .
+
+ccc:provenance a owl:ObjectProperty ; rdfs:domain ccc:CausalLink ; rdfs:range ccc:ContractProvenance ;
+    rdfs:label "出处"@zh ; rdfs:comment "T4 校验：每条因果边都有，且指向契约派生的出处个体。"@zh .
+ccc:discriminates a owl:ObjectProperty ; rdfs:domain ccc:Discriminator ;
+    rdfs:range [ a owl:Class ; owl:unionOf ( ccf:FaultMode ccf:RootCause ) ] ;
+    rdfs:label "区分对象"@zh ; rdfs:comment "契约 pair 的两个成员（每个区分器恰好 2 条断言）。"@zh .
+ccc:discriminatorMetric a owl:ObjectProperty ; rdfs:domain ccc:Discriminator ; rdfs:range ccm:Metric ;
+    rdfs:label "区分指标"@zh ; rdfs:comment "契约 discriminator_metric。"@zh .
+
+# ===========================================================================
+# 3) 数据属性
+# ===========================================================================
+ccc:linkKind a owl:DatatypeProperty ; rdfs:domain ccc:CausalLink ; rdfs:range xsd:string ;
+    rdfs:comment "契约 relation：causes | conditional_causes | relates_to。"@zh .
+ccc:chainCode a owl:DatatypeProperty ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( ccc:CausalLink ccc:Chain ccc:Discriminator ) ] ;
+    rdfs:range xsd:string ; rdfs:comment "契约 chain 字段原值（如 E18 = F5/F6/F7；E19–E27 = F2/F4/F6/F7）。"@zh .
+ccc:evidenceText a owl:DatatypeProperty ; rdfs:domain ccc:CausalLink ; rdfs:range xsd:string ;
+    rdfs:comment "契约 evidence 原文逐字保留。"@zh .
+ccc:provenanceToken a owl:DatatypeProperty ; rdfs:domain ccc:ContractProvenance ; rdfs:range xsd:string ;
+    rdfs:comment "契约 provenance 原值（本契约为字面量 \"authored\"）。"@zh .
+ccc:provenanceDocument a owl:DatatypeProperty ; rdfs:domain ccc:ContractProvenance ; rdfs:range xsd:string .
+ccc:provenanceVersion a owl:DatatypeProperty ; rdfs:domain ccc:ContractProvenance ; rdfs:range xsd:string .
+ccc:provenanceEdgeId a owl:DatatypeProperty ; rdfs:domain ccc:ContractProvenance ; rdfs:range xsd:string ;
+    rdfs:comment "契约 edges[].id（E1..E27）⇒ 出处个体与边一一对应，可复算。"@zh .
+ccc:condOp a owl:DatatypeProperty ; rdfs:domain ccc:Condition ; rdfs:range xsd:string ;
+    rdfs:comment "契约 condition.op（> | <）。"@zh .
+ccc:condOperand a owl:DatatypeProperty ; rdfs:domain ccc:Condition ; rdfs:range xsd:string ;
+    rdfs:comment "契约 condition.operand 原文（如 \"threshold:qps_high#critical\"）。"@zh .
+ccc:condTier a owl:DatatypeProperty ; rdfs:domain ccc:Condition ; rdfs:range xsd:string ;
+    rdfs:comment "★ 档位必填（X-3 的落地）：warning | critical。与 ccc:condThreshold 指向的档位个体一致。"@zh .
+ccc:condThresholdReference a owl:DatatypeProperty ; rdfs:domain ccc:Condition ; rdfs:range xsd:string ;
+    rdfs:comment "形如 threshold:<名称>#<档位>（可机检的引用键）。"@zh .
+ccc:symptomShared a owl:DatatypeProperty ; rdfs:domain ccc:Discriminator ; rdfs:range xsd:string ;
+    rdfs:comment "契约 symptom_shared。"@zh .
+ccc:discriminatorRule a owl:DatatypeProperty ; rdfs:domain ccc:Discriminator ; rdfs:range xsd:string ;
+    rdfs:comment "契约 rule 原文。"@zh .
+ccc:discriminatorNote a owl:DatatypeProperty ; rdfs:domain ccc:Discriminator ; rdfs:range xsd:string .
+# T7（无未使用属性）在首轮跑到此处时发现 ccc:linkNote 是死公理（无契约出处、无断言、无外部引用）
+# ⇒ 按「死公理消除」删除，而不是留一条永不使用的属性声明。
+
+# ===========================================================================
+# 4) 7 条链（契约 edges[].chain 的取值集合 = F1..F7）
+# ===========================================================================
+ccc:F1 a ccc:Chain ; ccc:chainCode "F1" ; rdfs:label "F1" ; cco:contractSource "causal-edges.yaml#/edges/chain=F1" .
+ccc:F2 a ccc:Chain ; ccc:chainCode "F2" ; rdfs:label "F2" ; cco:contractSource "causal-edges.yaml#/edges/chain=F2" .
+ccc:F3 a ccc:Chain ; ccc:chainCode "F3" ; rdfs:label "F3" ; cco:contractSource "causal-edges.yaml#/edges/chain=F3" .
+ccc:F4 a ccc:Chain ; ccc:chainCode "F4" ; rdfs:label "F4" ; cco:contractSource "causal-edges.yaml#/edges/chain=F4" .
+ccc:F5 a ccc:Chain ; ccc:chainCode "F5" ; rdfs:label "F5" ; cco:contractSource "causal-edges.yaml#/edges/chain=F5" .
+ccc:F6 a ccc:Chain ; ccc:chainCode "F6" ; rdfs:label "F6" ; cco:contractSource "causal-edges.yaml#/edges/chain=F6" .
+ccc:F7 a ccc:Chain ; ccc:chainCode "F7" ; rdfs:label "F7" ; cco:contractSource "causal-edges.yaml#/edges/chain=F7" .
+
+# ===========================================================================
+# 5) 18 条出处个体（X-8 的落地：contract provenance token → 确定性 IRI）
+# ===========================================================================
+ccc:prov-E1 a ccc:ContractProvenance ; ccc:provenanceToken "authored" ; ccc:provenanceDocument "shared/model/causal-edges.yaml" ; ccc:provenanceVersion "1.0.0" ; ccc:provenanceEdgeId "E1" ; rdfs:label "causal-edges.yaml#E1 出处"@zh .
+ccc:prov-E2 a ccc:ContractProvenance ; ccc:provenanceToken "authored" ; ccc:provenanceDocument "shared/model/causal-edges.yaml" ; ccc:provenanceVersion "1.0.0" ; ccc:provenanceEdgeId "E2" ; rdfs:label "causal-edges.yaml#E2 出处"@zh .
+ccc:prov-E3 a ccc:ContractProvenance ; ccc:provenanceToken "authored" ; ccc:provenanceDocument "shared/model/causal-edges.yaml" ; ccc:provenanceVersion "1.0.0" ; ccc:provenanceEdgeId "E3" ; rdfs:label "causal-edges.yaml#E3 出处"@zh .
+ccc:prov-E4 a ccc:ContractProvenance ; ccc:provenanceToken "authored" ; ccc:provenanceDocument "shared/model/causal-edges.yaml" ; ccc:provenanceVersion "1.0.0" ; ccc:provenanceEdgeId "E4" ; rdfs:label "causal-edges.yaml#E4 出处"@zh .
+ccc:prov-E5 a ccc:ContractProvenance ; ccc:provenanceToken "authored" ; ccc:provenanceDocument "shared/model/causal-edges.yaml" ; ccc:provenanceVersion "1.0.0" ; ccc:provenanceEdgeId "E5" ; rdfs:label "causal-edges.yaml#E5 出处"@zh .
+ccc:prov-E6 a ccc:ContractProvenance ; ccc:provenanceToken "authored" ; ccc:provenanceDocument "shared/model/causal-edges.yaml" ; ccc:provenanceVersion "1.0.0" ; ccc:provenanceEdgeId "E6" ; rdfs:label "causal-edges.yaml#E6 出处"@zh .
+ccc:prov-E7 a ccc:ContractProvenance ; ccc:provenanceToken "authored" ; ccc:provenanceDocument "shared/model/causal-edges.yaml" ; ccc:provenanceVersion "1.0.0" ; ccc:provenanceEdgeId "E7" ; rdfs:label "causal-edges.yaml#E7 出处"@zh .
+ccc:prov-E8 a ccc:ContractProvenance ; ccc:provenanceToken "authored" ; ccc:provenanceDocument "shared/model/causal-edges.yaml" ; ccc:provenanceVersion "1.0.0" ; ccc:provenanceEdgeId "E8" ; rdfs:label "causal-edges.yaml#E8 出处"@zh .
+ccc:prov-E9 a ccc:ContractProvenance ; ccc:provenanceToken "authored" ; ccc:provenanceDocument "shared/model/causal-edges.yaml" ; ccc:provenanceVersion "1.0.0" ; ccc:provenanceEdgeId "E9" ; rdfs:label "causal-edges.yaml#E9 出处"@zh .
+ccc:prov-E10 a ccc:ContractProvenance ; ccc:provenanceToken "authored" ; ccc:provenanceDocument "shared/model/causal-edges.yaml" ; ccc:provenanceVersion "1.0.0" ; ccc:provenanceEdgeId "E10" ; rdfs:label "causal-edges.yaml#E10 出处"@zh .
+ccc:prov-E11 a ccc:ContractProvenance ; ccc:provenanceToken "authored" ; ccc:provenanceDocument "shared/model/causal-edges.yaml" ; ccc:provenanceVersion "1.0.0" ; ccc:provenanceEdgeId "E11" ; rdfs:label "causal-edges.yaml#E11 出处"@zh .
+ccc:prov-E12 a ccc:ContractProvenance ; ccc:provenanceToken "authored" ; ccc:provenanceDocument "shared/model/causal-edges.yaml" ; ccc:provenanceVersion "1.0.0" ; ccc:provenanceEdgeId "E12" ; rdfs:label "causal-edges.yaml#E12 出处"@zh .
+ccc:prov-E13 a ccc:ContractProvenance ; ccc:provenanceToken "authored" ; ccc:provenanceDocument "shared/model/causal-edges.yaml" ; ccc:provenanceVersion "1.0.0" ; ccc:provenanceEdgeId "E13" ; rdfs:label "causal-edges.yaml#E13 出处"@zh .
+ccc:prov-E14 a ccc:ContractProvenance ; ccc:provenanceToken "authored" ; ccc:provenanceDocument "shared/model/causal-edges.yaml" ; ccc:provenanceVersion "1.0.0" ; ccc:provenanceEdgeId "E14" ; rdfs:label "causal-edges.yaml#E14 出处"@zh .
+ccc:prov-E15 a ccc:ContractProvenance ; ccc:provenanceToken "authored" ; ccc:provenanceDocument "shared/model/causal-edges.yaml" ; ccc:provenanceVersion "1.0.0" ; ccc:provenanceEdgeId "E15" ; rdfs:label "causal-edges.yaml#E15 出处"@zh .
+ccc:prov-E16 a ccc:ContractProvenance ; ccc:provenanceToken "authored" ; ccc:provenanceDocument "shared/model/causal-edges.yaml" ; ccc:provenanceVersion "1.0.0" ; ccc:provenanceEdgeId "E16" ; rdfs:label "causal-edges.yaml#E16 出处"@zh .
+ccc:prov-E17 a ccc:ContractProvenance ; ccc:provenanceToken "authored" ; ccc:provenanceDocument "shared/model/causal-edges.yaml" ; ccc:provenanceVersion "1.0.0" ; ccc:provenanceEdgeId "E17" ; rdfs:label "causal-edges.yaml#E17 出处"@zh .
+ccc:prov-E19 a ccc:ContractProvenance ; ccc:provenanceToken "authored" ; ccc:provenanceDocument "shared/model/causal-edges.yaml" ; ccc:provenanceVersion "1.0.0" ; ccc:provenanceEdgeId "E19" ; rdfs:label "causal-edges.yaml#E19 出处"@zh .
+ccc:prov-E20 a ccc:ContractProvenance ; ccc:provenanceToken "authored" ; ccc:provenanceDocument "shared/model/causal-edges.yaml" ; ccc:provenanceVersion "1.0.0" ; ccc:provenanceEdgeId "E20" ; rdfs:label "causal-edges.yaml#E20 出处"@zh .
+ccc:prov-E21 a ccc:ContractProvenance ; ccc:provenanceToken "authored" ; ccc:provenanceDocument "shared/model/causal-edges.yaml" ; ccc:provenanceVersion "1.0.0" ; ccc:provenanceEdgeId "E21" ; rdfs:label "causal-edges.yaml#E21 出处"@zh .
+ccc:prov-E22 a ccc:ContractProvenance ; ccc:provenanceToken "authored" ; ccc:provenanceDocument "shared/model/causal-edges.yaml" ; ccc:provenanceVersion "1.0.0" ; ccc:provenanceEdgeId "E22" ; rdfs:label "causal-edges.yaml#E22 出处"@zh .
+ccc:prov-E23 a ccc:ContractProvenance ; ccc:provenanceToken "authored" ; ccc:provenanceDocument "shared/model/causal-edges.yaml" ; ccc:provenanceVersion "1.0.0" ; ccc:provenanceEdgeId "E23" ; rdfs:label "causal-edges.yaml#E23 出处"@zh .
+ccc:prov-E24 a ccc:ContractProvenance ; ccc:provenanceToken "authored" ; ccc:provenanceDocument "shared/model/causal-edges.yaml" ; ccc:provenanceVersion "1.0.0" ; ccc:provenanceEdgeId "E24" ; rdfs:label "causal-edges.yaml#E24 出处"@zh .
+ccc:prov-E25 a ccc:ContractProvenance ; ccc:provenanceToken "authored" ; ccc:provenanceDocument "shared/model/causal-edges.yaml" ; ccc:provenanceVersion "1.0.0" ; ccc:provenanceEdgeId "E25" ; rdfs:label "causal-edges.yaml#E25 出处"@zh .
+ccc:prov-E26 a ccc:ContractProvenance ; ccc:provenanceToken "authored" ; ccc:provenanceDocument "shared/model/causal-edges.yaml" ; ccc:provenanceVersion "1.0.0" ; ccc:provenanceEdgeId "E26" ; rdfs:label "causal-edges.yaml#E26 出处"@zh .
+ccc:prov-E27 a ccc:ContractProvenance ; ccc:provenanceToken "authored" ; ccc:provenanceDocument "shared/model/causal-edges.yaml" ; ccc:provenanceVersion "1.0.0" ; ccc:provenanceEdgeId "E27" ; rdfs:label "causal-edges.yaml#E27 出处"@zh .
+
+# ===========================================================================
+# 6) 4 条条件个体（conditional_causes：E6 / E7 / E9 / E12）
+# ===========================================================================
+ccc:Cond-E6 a ccc:Condition ;
+    ccc:conditionOf ccc:E6 ; ccc:condMetric ccm:m_app_endpoint_qps ;
+    ccc:condOp ">" ; ccc:condOperand "threshold:qps_high#critical" ; ccc:condTier "critical" ;
+    ccc:condThresholdReference "threshold:qps_high#critical" ; ccc:condThreshold ccm:t_qps_high_critical ;
+    skos:note "★ 该档位的 warning/critical 在契约里均为 null（未标定）⇒ 条件不可机判，真机规则必产 0 条（标定缺口，见诚实清单）。"@zh ;
+    cco:contractSource "causal-edges.yaml#/edges[id=E6]/condition" .
+ccc:Cond-E7 a ccc:Condition ;
+    ccc:conditionOf ccc:E7 ; ccc:condMetric ccm:m_host_cpu_usage_ratio ;
+    ccc:condOp ">" ; ccc:condOperand "threshold:cpu_usage_ratio_severe#critical" ; ccc:condTier "critical" ;
+    ccc:condThresholdReference "threshold:cpu_usage_ratio_severe#critical" ; ccc:condThreshold ccm:t_cpu_usage_ratio_severe_critical ;
+    cco:contractSource "causal-edges.yaml#/edges[id=E7]/condition" .
+ccc:Cond-E9 a ccc:Condition ;
+    ccc:conditionOf ccc:E9 ; ccc:condMetric ccm:m_host_mem_available_ratio ;
+    ccc:condOp "<" ; ccc:condOperand "threshold:mem_available_ratio_severe#critical" ; ccc:condTier "critical" ;
+    ccc:condThresholdReference "threshold:mem_available_ratio_severe#critical" ; ccc:condThreshold ccm:t_mem_available_ratio_severe_critical ;
+    cco:contractSource "causal-edges.yaml#/edges[id=E9]/condition" .
+ccc:Cond-E12 a ccc:Condition ;
+    ccc:conditionOf ccc:E12 ; ccc:condMetric ccm:m_container_mem_working_set_mb ;
+    ccc:condOp ">" ; ccc:condOperand "entity_property:Container.memLimitMb" ;
+    ccc:condEntityProperty cc:memLimitMb ;
+    skos:note "本条件用**实体属性**而非阈值档位（契约原文如此）⇒ 无 condTier；SHACL 形状允许两种参照之一。"@zh ;
+    cco:contractSource "causal-edges.yaml#/edges[id=E12]/condition" .
+
+# ===========================================================================
+# 7) 27 条因果边（与契约 edges 集合相等）
+# ===========================================================================
+ccc:E1 a ccc:CausalLink ; ccc:cause ccf:FM-DB-SLOW-QUERY ; ccc:effect ccf:FM-APP-POOL-EXHAUSTED ;
+    ccc:linkKind "causes" ; ccc:chainCode "F2" ; ccc:inChain ccc:F2 ; ccc:provenance ccc:prov-E1 ;
+    ccc:evidenceText "慢查询长时间占用会话 → 应用侧连接被耗尽" ;
+    cco:neutralCode "E1" ; cco:contractSource "causal-edges.yaml#/edges[id=E1]" ; rdfs:label "E1" .
+ccc:E2 a ccc:CausalLink ; ccc:cause ccf:FM-DB-LOCK-WAIT ; ccc:effect ccf:FM-DB-SLOW-QUERY ;
+    ccc:linkKind "causes" ; ccc:chainCode "F2" ; ccc:inChain ccc:F2 ; ccc:provenance ccc:prov-E2 ;
+    ccc:evidenceText "锁等待表现为执行时间长" ;
+    cco:neutralCode "E2" ; cco:contractSource "causal-edges.yaml#/edges[id=E2]" ; rdfs:label "E2" .
+ccc:E3 a ccc:CausalLink ; ccc:cause ccf:FM-DB-SESSION-POOL-FULL ; ccc:effect ccf:FM-APP-DS-CONNECT-FAIL ;
+    ccc:linkKind "causes" ; ccc:chainCode "F2" ; ccc:inChain ccc:F2 ; ccc:provenance ccc:prov-E3 ;
+    ccc:evidenceText "数据库拒绝新会话 → 应用连接失败" ;
+    cco:neutralCode "E3" ; cco:contractSource "causal-edges.yaml#/edges[id=E3]" ; rdfs:label "E3" .
+ccc:E4 a ccc:CausalLink ; ccc:cause ccf:FM-DB-SLOW-QUERY ; ccc:effect ccf:FM-DB-SESSION-POOL-FULL ;
+    ccc:linkKind "causes" ; ccc:chainCode "F2" ; ccc:inChain ccc:F2 ; ccc:provenance ccc:prov-E4 ;
+    ccc:evidenceText "慢查询堆积会话" ;
+    cco:neutralCode "E4" ; cco:contractSource "causal-edges.yaml#/edges[id=E4]" ; rdfs:label "E4" .
+ccc:E5 a ccc:CausalLink ; ccc:cause ccf:FM-APP-POOL-EXHAUSTED ; ccc:effect ccf:FM-APP-ENDPOINT-SLOW ;
+    ccc:linkKind "causes" ; ccc:chainCode "F1" ; ccc:inChain ccc:F1 ; ccc:provenance ccc:prov-E5 ;
+    ccc:evidenceText "无可用连接 → 请求排队 → P99 劣化" ;
+    skos:note "★ 契约白名单里唯一有向环的组成边之一（E5 + E6）。"@zh ;
+    cco:neutralCode "E5" ; cco:contractSource "causal-edges.yaml#/edges[id=E5]" ; rdfs:label "E5" .
+ccc:E6 a ccc:CausalLink ; ccc:cause ccf:FM-APP-ENDPOINT-SLOW ; ccc:effect ccf:FM-APP-POOL-EXHAUSTED ;
+    ccc:linkKind "conditional_causes" ; ccc:chainCode "F1" ; ccc:inChain ccc:F1 ; ccc:provenance ccc:prov-E6 ;
+    ccc:condition ccc:Cond-E6 ;
+    ccc:evidenceText "高负载下排队反噬（反馈环，成环案例之一）" ;
+    skos:note "★ 契约白名单里唯一有向环的组成边之二（E5 + E6）；条件不成立时环不可达 ⇒ 不违反 transitive:false。"@zh ;
+    cco:neutralCode "E6" ; cco:contractSource "causal-edges.yaml#/edges[id=E6]" ; rdfs:label "E6" .
+ccc:E7 a ccc:CausalLink ; ccc:cause ccf:FM-HOST-CPU-CONTENTION ; ccc:effect ccf:FM-CTR-CPU-THROTTLED ;
+    ccc:linkKind "conditional_causes" ; ccc:chainCode "F3" ; ccc:inChain ccc:F3 ; ccc:provenance ccc:prov-E7 ;
+    ccc:condition ccc:Cond-E7 ;
+    ccc:evidenceText "宿主机争抢超过阈值时才触发 cgroup 限流" ;
+    cco:neutralCode "E7" ; cco:contractSource "causal-edges.yaml#/edges[id=E7]" ; rdfs:label "E7" .
+ccc:E8 a ccc:CausalLink ; ccc:cause ccf:FM-CTR-CPU-THROTTLED ; ccc:effect ccf:FM-APP-ENDPOINT-SLOW ;
+    ccc:linkKind "causes" ; ccc:chainCode "F3" ; ccc:inChain ccc:F3 ; ccc:provenance ccc:prov-E8 ;
+    ccc:evidenceText "容器被限流 → 应用线程得不到 CPU → 响应变慢" ;
+    cco:neutralCode "E8" ; cco:contractSource "causal-edges.yaml#/edges[id=E8]" ; rdfs:label "E8" .
+ccc:E9 a ccc:CausalLink ; ccc:cause ccf:FM-HOST-MEM-PRESSURE ; ccc:effect ccf:FM-CTR-OOM-KILLED ;
+    ccc:linkKind "conditional_causes" ; ccc:chainCode "F4" ; ccc:inChain ccc:F4 ; ccc:provenance ccc:prov-E9 ;
+    ccc:condition ccc:Cond-E9 ;
+    ccc:evidenceText "宿主机内存紧张才触发容器 OOM（路径甲：宿主机紧张）" ;
+    skos:note "★ F4 的两条并行路径之一（路径甲）；与 E12（路径乙：容器 limit 过小）互斥判定，见 ccc:D3。"@zh ;
+    cco:neutralCode "E9" ; cco:contractSource "causal-edges.yaml#/edges[id=E9]" ; rdfs:label "E9" .
+ccc:E10 a ccc:CausalLink ; ccc:cause ccf:FM-CTR-OOM-KILLED ; ccc:effect ccf:FM-APP-INSTANCE-RESTART ;
+    ccc:linkKind "causes" ; ccc:chainCode "F4" ; ccc:inChain ccc:F4 ; ccc:provenance ccc:prov-E10 ;
+    ccc:evidenceText "容器被杀 → 应用实例重启" ;
+    cco:neutralCode "E10" ; cco:contractSource "causal-edges.yaml#/edges[id=E10]" ; rdfs:label "E10" .
+ccc:E11 a ccc:CausalLink ; ccc:cause ccf:FM-APP-INSTANCE-RESTART ; ccc:effect ccf:FM-APP-ENDPOINT-SLOW ;
+    ccc:linkKind "causes" ; ccc:chainCode "F4" ; ccc:inChain ccc:F4 ; ccc:provenance ccc:prov-E11 ;
+    ccc:evidenceText "重启期间请求失败" ;
+    cco:neutralCode "E11" ; cco:contractSource "causal-edges.yaml#/edges[id=E11]" ; rdfs:label "E11" .
+ccc:E12 a ccc:CausalLink ; ccc:cause ccf:FM-APP-HEAP-PRESSURE ; ccc:effect ccf:FM-CTR-OOM-KILLED ;
+    ccc:linkKind "conditional_causes" ; ccc:chainCode "F4" ; ccc:inChain ccc:F4 ; ccc:provenance ccc:prov-E12 ;
+    ccc:condition ccc:Cond-E12 ;
+    ccc:evidenceText "应用自身堆膨胀触及容器 limit（路径乙：容器 limit 过小）" ;
+    skos:note "★ F4 的两条并行路径之二（路径乙）；宿主机的 mem_available_ratio 此时正常 —— 这正是 docs\\04 §6 r04 的双路径否定性证据。"@zh ;
+    cco:neutralCode "E12" ; cco:contractSource "causal-edges.yaml#/edges[id=E12]" ; rdfs:label "E12" .
+ccc:E13 a ccc:CausalLink ; ccc:cause ccf:FM-CTR-NET-UNREACHABLE ; ccc:effect ccf:FM-APP-DS-CONNECT-FAIL ;
+    ccc:linkKind "causes" ; ccc:chainCode "F6" ; ccc:inChain ccc:F6 ; ccc:provenance ccc:prov-E13 ;
+    ccc:evidenceText "容器到 DB 网络不通 → 连接超时" ;
+    cco:neutralCode "E13" ; cco:contractSource "causal-edges.yaml#/edges[id=E13]" ; rdfs:label "E13" .
+ccc:E14 a ccc:CausalLink ; ccc:cause ccf:FM-DB-INSTANCE-DOWN ; ccc:effect ccf:FM-APP-DS-CONNECT-FAIL ;
+    ccc:linkKind "causes" ; ccc:chainCode "F7" ; ccc:inChain ccc:F7 ; ccc:provenance ccc:prov-E14 ;
+    ccc:evidenceText "实例故障/切换 → 连接瞬时中断" ;
+    cco:neutralCode "E14" ; cco:contractSource "causal-edges.yaml#/edges[id=E14]" ; rdfs:label "E14" .
+ccc:E15 a ccc:CausalLink ; ccc:cause ccf:FM-DB-INSTANCE-DOWN ; ccc:effect ccf:FM-DB-SESSION-POOL-FULL ;
+    ccc:linkKind "causes" ; ccc:chainCode "F7" ; ccc:inChain ccc:F7 ; ccc:provenance ccc:prov-E15 ;
+    ccc:evidenceText "切换期间会话堆积" ;
+    cco:neutralCode "E15" ; cco:contractSource "causal-edges.yaml#/edges[id=E15]" ; rdfs:label "E15" .
+ccc:E16 a ccc:CausalLink ; ccc:cause ccf:FM-DB-SLOW-QUERY ; ccc:effect ccf:FM-DB-LOCK-WAIT ;
+    ccc:linkKind "relates_to" ; ccc:chainCode "F2" ; ccc:inChain ccc:F2 ; ccc:provenance ccc:prov-E16 ;
+    ccc:evidenceText "慢查询与锁等待常同时出现，但不互为因果" ;
+    skos:note "★ 相关而非因果：linkKind=relates_to，**不参与**因果收敛与环检测；为便于查询另断言方向无关的 ccc:relatesTo。"@zh ;
+    cco:neutralCode "E16" ; cco:contractSource "causal-edges.yaml#/edges[id=E16]" ; rdfs:label "E16" .
+ccc:E17 a ccc:CausalLink ; ccc:cause ccf:FM-APP-HEAP-PRESSURE ; ccc:effect ccf:FM-HOST-MEM-PRESSURE ;
+    ccc:linkKind "relates_to" ; ccc:chainCode "F4" ; ccc:inChain ccc:F4 ; ccc:provenance ccc:prov-E17 ;
+    ccc:evidenceText "同一宿主机上常同时出现" ;
+    skos:note "★ 同 E16：relates_to 不参与收敛。"@zh ;
+    cco:neutralCode "E17" ; cco:contractSource "causal-edges.yaml#/edges[id=E17]" ; rdfs:label "E17" .
+ccc:E18 a ccc:CausalLink ; ccc:cause ccf:FM-APP-DS-CONNECT-FAIL ; ccc:effect ccf:FM-APP-ENDPOINT-SLOW ;
+    ccc:linkKind "causes" ; ccc:chainCode "F5" , "F6" , "F7" ; ccc:inChain ccc:F5 , ccc:F6 , ccc:F7 ;
+    ccc:provenance ccc:prov-E18 ;
+    ccc:evidenceText "F5/F6/F7 的共同出口" ;
+    cco:neutralCode "E18" ; cco:contractSource "causal-edges.yaml#/edges[id=E18]" ; rdfs:label "E18" .
+ccc:E19 a ccc:CausalLink ; ccc:cause ccf:FM-DB-DEADLOCK ; ccc:effect ccf:FM-DB-SLOW-QUERY ;
+    ccc:linkKind "causes" ; ccc:chainCode "F5" , "F6" , "F7" ; ccc:inChain ccc:F5 , ccc:F6 , ccc:F7 ;
+    ccc:provenance ccc:prov-E19 ;
+    ccc:evidenceText "F5/F6/F7 的共同出口" ;
+    cco:neutralCode "E19" ; cco:contractSource "causal-edges.yaml#/edges[id=E19]" ; rdfs:label "E19" .
+ccc:E20 a ccc:CausalLink ; ccc:cause ccf:FM-DB-IDLE-IN-TX ; ccc:effect ccf:FM-DB-LOCK-WAIT ;
+    ccc:linkKind "causes" ; ccc:chainCode "F5" , "F6" , "F7" ; ccc:inChain ccc:F5 , ccc:F6 , ccc:F7 ;
+    ccc:provenance ccc:prov-E20 ;
+    ccc:evidenceText "F5/F6/F7 的共同出口" ;
+    cco:neutralCode "E20" ; cco:contractSource "causal-edges.yaml#/edges[id=E20]" ; rdfs:label "E20" .
+ccc:E21 a ccc:CausalLink ; ccc:cause ccf:FM-DB-SEQ-SCAN ; ccc:effect ccf:FM-DB-SLOW-QUERY ;
+    ccc:linkKind "causes" ; ccc:chainCode "F5" , "F6" , "F7" ; ccc:inChain ccc:F5 , ccc:F6 , ccc:F7 ;
+    ccc:provenance ccc:prov-E21 ;
+    ccc:evidenceText "F5/F6/F7 的共同出口" ;
+    cco:neutralCode "E21" ; cco:contractSource "causal-edges.yaml#/edges[id=E21]" ; rdfs:label "E21" .
+ccc:E22 a ccc:CausalLink ; ccc:cause ccf:FM-DB-ROLLBACK-STORM ; ccc:effect ccf:FM-DB-SLOW-QUERY ;
+    ccc:linkKind "causes" ; ccc:chainCode "F5" , "F6" , "F7" ; ccc:inChain ccc:F5 , ccc:F6 , ccc:F7 ;
+    ccc:provenance ccc:prov-E22 ;
+    ccc:evidenceText "F5/F6/F7 的共同出口" ;
+    cco:neutralCode "E22" ; cco:contractSource "causal-edges.yaml#/edges[id=E22]" ; rdfs:label "E22" .
+ccc:E23 a ccc:CausalLink ; ccc:cause ccf:FM-HOST-DISK-FULL ; ccc:effect ccf:FM-DB-INSTANCE-DOWN ;
+    ccc:linkKind "causes" ; ccc:chainCode "F5" , "F6" , "F7" ; ccc:inChain ccc:F5 , ccc:F6 , ccc:F7 ;
+    ccc:provenance ccc:prov-E23 ;
+    ccc:evidenceText "F5/F6/F7 的共同出口" ;
+    cco:neutralCode "E23" ; cco:contractSource "causal-edges.yaml#/edges[id=E23]" ; rdfs:label "E23" .
+ccc:E24 a ccc:CausalLink ; ccc:cause ccf:FM-HOST-DISK-IO-ERROR ; ccc:effect ccf:FM-DB-INSTANCE-DOWN ;
+    ccc:linkKind "causes" ; ccc:chainCode "F5" , "F6" , "F7" ; ccc:inChain ccc:F5 , ccc:F6 , ccc:F7 ;
+    ccc:provenance ccc:prov-E24 ;
+    ccc:evidenceText "F5/F6/F7 的共同出口" ;
+    cco:neutralCode "E24" ; cco:contractSource "causal-edges.yaml#/edges[id=E24]" ; rdfs:label "E24" .
+ccc:E25 a ccc:CausalLink ; ccc:cause ccf:FM-HOST-NET-IFACE-DOWN ; ccc:effect ccf:FM-CTR-NET-UNREACHABLE ;
+    ccc:linkKind "causes" ; ccc:chainCode "F5" , "F6" , "F7" ; ccc:inChain ccc:F5 , ccc:F6 , ccc:F7 ;
+    ccc:provenance ccc:prov-E25 ;
+    ccc:evidenceText "F5/F6/F7 的共同出口" ;
+    cco:neutralCode "E25" ; cco:contractSource "causal-edges.yaml#/edges[id=E25]" ; rdfs:label "E25" .
+ccc:E26 a ccc:CausalLink ; ccc:cause ccf:FM-DB-REPLICATION-LAG ; ccc:effect ccf:FM-APP-DS-CONNECT-FAIL ;
+    ccc:linkKind "causes" ; ccc:chainCode "F5" , "F6" , "F7" ; ccc:inChain ccc:F5 , ccc:F6 , ccc:F7 ;
+    ccc:provenance ccc:prov-E26 ;
+    ccc:evidenceText "F5/F6/F7 的共同出口" ;
+    cco:neutralCode "E26" ; cco:contractSource "causal-edges.yaml#/edges[id=E26]" ; rdfs:label "E26" .
+ccc:E27 a ccc:CausalLink ; ccc:cause ccf:FM-DB-UNUSED-INDEX ; ccc:effect ccf:FM-DB-SLOW-QUERY ;
+    ccc:linkKind "causes" ; ccc:chainCode "F5" , "F6" , "F7" ; ccc:inChain ccc:F5 , ccc:F6 , ccc:F7 ;
+    ccc:provenance ccc:prov-E27 ;
+    ccc:evidenceText "F5/F6/F7 的共同出口" ;
+    cco:neutralCode "E27" ; cco:contractSource "causal-edges.yaml#/edges[id=E27]" ; rdfs:label "E27" .
+
+# 相关（非因果）断言：E16/E17 的二元视图（不参与收敛；环检测只看 ccc:cause）
+ccf:FM-DB-SLOW-QUERY     ccc:relatesTo ccf:FM-DB-LOCK-WAIT .
+ccf:FM-APP-HEAP-PRESSURE ccc:relatesTo ccf:FM-HOST-MEM-PRESSURE .
+
+# ★ 27 条因果边两两不同（OWL 原生公理；方案1 的 LPG 只能在代码里断言）
+[ a owl:AllDifferent ; owl:distinctMembers (
+    ccc:E1 ccc:E2 ccc:E3 ccc:E4 ccc:E5 ccc:E6 ccc:E7 ccc:E8 ccc:E9 ccc:E10
+    ccc:E11 ccc:E12 ccc:E13 ccc:E14 ccc:E15 ccc:E16 ccc:E17 ccc:E18
+    ccc:E19 ccc:E20 ccc:E21 ccc:E22 ccc:E23 ccc:E24 ccc:E25 ccc:E26 ccc:E27 ) ] .
+
+# ★ 一条边恰好一个因、一个果（OWL 原生基数公理；SHACL 侧另有必填校验）
+ccc:cause  a owl:FunctionalProperty .
+ccc:effect a owl:FunctionalProperty .
+
+# ===========================================================================
+# 8) 3 组区分器（契约 discriminators；靠「某指标正常」定罪 = 否定性证据）
+# ===========================================================================
+ccc:D1 a ccc:Discriminator ;
+    ccc:discriminates ccf:FM-APP-POOL-EXHAUSTED , ccf:FM-DB-SESSION-POOL-FULL ;
+    ccc:discriminatorMetric ccm:m_db_pool_session_used_ratio ;
+    ccc:symptomShared "应用连接获取失败" ;
+    ccc:discriminatorRule "数据库侧正常 → 应用侧；数据库侧贴顶 → 数据库侧" ;
+    ccc:discriminatorNote "★ 靠「某指标正常」定罪 —— 否定性证据" ;
+    ccc:chainCode "F2" ;
+    cco:contractSource "causal-edges.yaml#/discriminators[pair=FM-APP-POOL-EXHAUSTED|FM-DB-SESSION-POOL-FULL]" ;
+    rdfs:label "区分器：应用侧连接池耗尽 vs 数据库会话池耗尽"@zh .
+ccc:D2 a ccc:Discriminator ;
+    ccc:discriminates ccf:FM-CTR-NET-UNREACHABLE , ccf:FM-APP-AUTH-INCOMPATIBLE ;
+    ccc:discriminatorMetric ccm:m_app_datasource_connect_latency_ms ;
+    ccc:symptomShared "应用连不上数据库" ;
+    ccc:discriminatorRule "超时（达 connectionTimeoutMs）→ 网络；立即失败 → 认证/协议" ;
+    ccc:chainCode "F5" , "F6" ;
+    cco:contractSource "causal-edges.yaml#/discriminators[pair=FM-CTR-NET-UNREACHABLE|FM-APP-AUTH-INCOMPATIBLE]" ;
+    rdfs:label "区分器：容器网络不可达 vs JDBC 认证不兼容"@zh .
+ccc:D3 a ccc:Discriminator ;
+    ccc:discriminates ccf:FM-HOST-MEM-PRESSURE , ccf:FM-APP-HEAP-PRESSURE ;
+    ccc:discriminatorMetric ccm:m_host_mem_available_ratio ;
+    ccc:symptomShared "容器 OOM 被杀" ;
+    ccc:discriminatorRule "宿主机内存紧张 → E9 路径；宿主机正常但容器 limit 小 → E12 路径" ;
+    ccc:chainCode "F4" ;
+    cco:contractSource "causal-edges.yaml#/discriminators[pair=FM-HOST-MEM-PRESSURE|FM-APP-HEAP-PRESSURE]" ;
+    rdfs:label "区分器：宿主机内存紧张 vs 应用堆压力"@zh .
+
+# ===========================================================================
+# 9) 契约元数据固化（环白名单 / 传递性开关）
+# ===========================================================================
+# 契约 meta.cycles 白名单唯一项 [FM-APP-POOL-EXHAUSTED, FM-APP-ENDPOINT-SLOW]，
+# 对应 E5(E5: POOL→ENDPOINT) + E6(E6: ENDPOINT→POOL) 这一对；E6 为条件边。
+# T6 用 SPARQL 属性路径 ccc:cause{2,4} 自反检测环，检出集合必须 ⊆ 本白名单。
+# 契约 meta.transitive = false ⇒ 本体**不**声明 ccc:cause 的 owl:TransitiveProperty
+# 属性特征（只约束推理与语料生成；不阻碍有界属性路径的环检测）。
+[ a owl:AllDifferent ; owl:distinctMembers ( ccc:prov-E1 ccc:prov-E2 ccc:prov-E3 ccc:prov-E4 ccc:prov-E5
+  ccc:prov-E6 ccc:prov-E7 ccc:prov-E8 ccc:prov-E9 ccc:prov-E10 ccc:prov-E11 ccc:prov-E12 ccc:prov-E13
+  ccc:prov-E14 ccc:prov-E15 ccc:prov-E16 ccc:prov-E17 ccc:prov-E18
+  ccc:prov-E19 ccc:prov-E20 ccc:prov-E21 ccc:prov-E22
+  ccc:prov-E23 ccc:prov-E24 ccc:prov-E25 ccc:prov-E26 ccc:prov-E27 ) ] .
+
+# ===========================================================================
+# 10) 契约偏差登记
+# ===========================================================================
+# X-3  docs/04 §4.5 草案把阈值内联为 ccc:condValue "0.9"^^xsd:decimal；本模块统一
+#      改为引用式（ccc:condThreshold → ccm:Threshold 档位个体 + ccc:condTier 档位名），
+#      条件个体里**零内联数值**。
+# X-4  docs/04 §4.5 把 `ccc:CausalLink-E7 a owl:Class` 写成类；本模块正确地声明
+#      `ccc:CausalLink a owl:Class`，E7 是它的个体 ccc:E7。
+# X-8  docs/04 §8 T4 要求「ccc:provenance 的 IRI ∈ 契约」，但 causal-edges.yaml 的
+#      provenance 字段值是字面量 "authored"，契约内**无任何 IRI** ⇒ 本模块把出处
+#      物化为 ccc:ContractProvenance 个体（ccc:prov-E1..E27，IRI 由契约
+#      provenance + edges[].id 确定性派生），并在个体上保留 provenanceToken 原文。
+# 契约缺口  meta.cycles 已登记唯一有向环，但契约**没有**给出「哪些边可条件性成环」
+#      之外的深度上界；G8（因果深度 ≤4）属 cc_query 护栏，本体不表达。

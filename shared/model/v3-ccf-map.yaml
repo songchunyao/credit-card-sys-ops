@@ -1,0 +1,570 @@
+# v3-ccf-map.yaml — 采集层 Fact → CCF 的显式映射表（M1.1 交付物）
+#
+# 权威依据
+#   docs/02-方案2设计（本体+LLM）.md  §4 适配器契约 / §7 隐藏耦合 H1-H17 / §8 差距 G1-G7
+#   契约：shared/model/ccf.schema.json（12 typeCode / 70 metricCode）+ shared/model/topology.yaml（13 类型 / 14 关系）
+#   上游事实清单：
+#     shared/collect/v3-fact-inventory.json      实测（gaussdb 153 + os 99 = 252 条 path）
+#     shared/collect/_inventory/v3-facts.raw.json AST 全量（399 path / 51 obj_type / 493 callsite）
+#
+# ★ 三条硬规则（docs/02 §4-A）
+#   1) 只做显式映射。未列出的 path 一律进 droppedFacts（path_unmapped），禁止静默丢弃；
+#      禁止用通配/前缀匹配代替映射条目。映射表只管「往 CCF 搬什么」，不负责「上游少采了什么」。
+#   2) path → metricCode 以 CCF 的 70 个指标为权威坐标系。落不到的一律丢弃并记账，
+#      绝不为「多采点」给 metrics.yaml 加指标（docs/02 §9 U5）。
+#   3) 上游事实顺序不确定（ThreadPoolExecutor）⇒ 由 freeze.py 全序排序后再编号，本表不依赖顺序。
+#
+# ★ obj_type 不是可靠判别式（AST 扫描的 6 条实测结论，映射表必须自己兜住）
+#   T1 obj_type=instance 同时覆盖集群 / tpops 实例 / gaussdb 实例三种身份域；
+#   T2 同一 obj_type 内 obj_id 约定冲突：table 既用裸表名又用 tbl-<name>；ultrapath_vlun 既用裸名又用 <host>|<name>；
+#   T3 同一 path 挂多个 obj_type（8 条），例如 session.wait_event 属于 {session, lock, wait_event, 无}；
+#   T4 同一 path 双生产者（27 条）：探针的 6 键事实与 collect_api 的 5 键事实各发一次；
+#   T5 59 个 callsite 完全无 obj_type（5 键事实）；其中 10 条 path 没有任何带 obj_type 的同胞；
+#   T9 obj_type=node 混了 node.* / os.* / host.* / storage.* 四套命名空间（共 71 条 path）⇒ path 前缀不能反推 obj_type。
+#   ⇒ 本表按 (obj_type, path) 与 (obj_type, obj_id) 双维度写规则；只映射能落到 metricCode 的 path。
+#
+# ★ 已知缺口（本版故意留空，不得用 --force-write 掩盖）
+#   - N1(container) / N2(app)：**M1.6 已建探针**（service/probes/container_probe.py + app_probe.py）
+#     ⇒ 20 个 app.*/container.* 指标已可采；映射见 path_to_metric 的 container.*/app.* 段与 app_derive 块。
+#   - 上游无对应事实 ⇒ 本版无映射：db.instance.cpu_usage_ratio / mem_usage_ratio / long_txn_age_s / io_wait_pct、
+#     db.cluster.switchover_total、db.query.mean_exec_ms / exec_count / returned_rows / seq_scan_ratio、
+#     db.pool.session_waiting / conn_rejected_total、db.session.query_elapsed_s、
+#     host.conntrack_count / net_rx_bytes / net_tx_bytes。
+#   - ★ M1.8a 复核补出**第 16 个**零观测指标，且它与上面 15 个**不同类**：`db.session.wait_event`
+#     在本表里**有**映射（session.wait_event → db.session.wait_event，见下方 Session 段），
+#     零观测的原因是**上游事实粒度不足、不是缺映射**：真机该事实为
+#     `{path: session.wait_event, value: "HashAgg - build hash", obj_id: "wait:HashAgg - build hash",
+#       obj_type: wait_event}` —— 按等待事件名聚合的计数，**不带任何会话标识**，
+#     而契约里该指标挂在 `Session` 对象上 ⇒ 无身份可挂，被 objtype_to_type 的 `wait_event: {drop: true}`
+#     丢弃（记账 `objtype_dropped:wait_event = 1`）。**不造假会话**，登记在 zero-instance-ledger.yaml。
+#   - Query → Session 的 RUNS_QUERY 边需要 pid 与 query id 的关联，上游事实不具备 ⇒ 本版不建该边。
+#     ★ M1.8a 复核（2026-09-28）把「不具备」落到可复算的数字上：
+#       · 原始探针（旧载体机 上 `get_probe("gaussdb").collect(sections=["session_detail","slow_sql_detail"])`）：
+#         会话侧 `unique_sql_id ∈ {'0','2761204323'}`（36 行里 35 行为 0/None）、慢 SQL 侧
+#         `unique_query_id ∈ {1011272715, 1629133430, 2197765120, 690118240}` ⇒ **交集为空**；
+#       · 更根本：**提升后的事实层里根本没有任何 id/pid 字段** —— `all_facts` 292 个 path 中，
+#         含 `sql_id` / `query_id` / `.pid` / `sessionid` / `client_addr` 的 path **0 条**
+#         （探针上报的 unique_sql_id 未进 /tools/gather 的事实层）⇒ 无从建立连接键。
+#     ⇒ 不建边，登记在 `shared/model/zero-instance-ledger.yaml`（不得为凑边造 join）。
+#   - Query → Table 的 ACCESSES 边：事实层**有**连接键（`sql.seq_scan_tables`，4 条，值均为 `orders`，
+#     obj_id = `sql-<unique_query_id>`），但**目标对象不存在**：`orders` 不是 Table 对象
+#     （CCF 30 个 Table 全是 `tbl-snap_*` / `tbl-new_order` / `tbl-tables_snap_timestamp`），
+#     因为探针为 `orders` 发的 `table.*` 事实（table.fillfactor / table.idx_scan /
+#     table.hot_update_ratio_pct / table.dead_ratio）**都不是本表映射的 path** ⇒ 无契约指标码 ⇒ 被 drop。
+#     ⇒ 不建「指向不存在对象」的边，登记在 zero-instance-ledger.yaml（**不得**为此往 metrics.yaml 加指标）。
+#   - DatabaseSessionPool → Session 的 HAS_SESSION 边：**1.2.0 曾是缺口**（freeze.py 用 `len(pools)==1`
+#     守卫，真机 2 个池 ⇒ 一条边都不建，19 个 Session 全孤立）。**1.3.0 已修**：归因规则见下面
+#     pool_objects.session_attribution（单探针 ⇒ 只看到所连实例的会话；实例身份由 gather 自报拓扑现算）。
+#   - 存储面（storage.* / dorado*）与网络面（net_iface / roce_port）超出四层范围（docs/02 §8 G1），全部不映射。
+meta:
+  version: "1.3.0"
+  date: "2026-09-28"
+  revision: "1.3.0 = M1.8a：新增 pool_objects.session_attribution（HAS_SESSION 的有证据归因，规则数据化）；1.2.0 = M1.7 采集覆盖补充"
+  owner_doc: "docs/02-方案2设计（本体+LLM）.md"
+  fact_keys: ["path", "value", "obj_id", "obj_type", "source", "ts"]
+  scope_layers: ["gaussdb", "os", "app"]
+
+# ------------------------------------------------------------------ obj_type → CCF 类型
+# 未列出的 obj_type 一律进 droppedFacts（objtype_unmapped）。
+objtype_to_type:
+  # ---- gaussdb 层 ----
+  cluster:
+    type: GaussDBCluster
+    provenance: gaussdb
+    by_path:
+      # ★ T9/T3：obj_type=cluster 里混着实例级与 os 侧事实，按 path 分流
+      "^cluster\\.connection_(total|max)$":
+        type: GaussDBInstance
+      "^node\\.":
+        type: GaussDBInstance
+      "^gaussdb\\.session\\.":
+        type: GaussDBInstance
+      "^cluster\\.io_scheduler":
+        provenance: os
+      # ★ 取值桶泄漏：obj_id 形如 `cluster:<state>` 的 session.state / session.wait_event
+      #   属于 Session，不能因为 obj_type=cluster 就挂到集群对象上（真实来源是 obj_type=session）。
+      "^session\\.":
+        drop: true
+  replication:
+    type: GaussDBCluster
+    provenance: gaussdb
+  session:
+    type: Session
+    provenance: gaussdb
+  transaction:
+    # ★ 会话内的事务：归到 Session 上（tx-<pid> 经 obj_id_rewrite 收敛为 sess-<pid>）
+    type: Session
+    provenance: gaussdb
+  sql:
+    type: Query
+    provenance: gaussdb
+  table:
+    type: Table
+    provenance: gaussdb
+  # ---- os 层 ----
+  node:
+    # ★ T9：obj_type=node 同时装着 host.*（主机）与 storage.*；能落到 metricCode 的只有主机侧，
+    #    其余在 path_to_metric 阶段就已经 path_unmapped，不会污染 Host 对象。
+    type: Host
+    provenance: os
+  # ---- app 层（M1.6 新增；N1 container / N2 app 探针已建）----
+  # ★ 不用 obj_type=host（本表上方已按 T9 明确丢弃）：主机侧事实一律走 node。
+  container:        {type: Container,      provenance: container}
+  app_instance:     {type: AppInstance,    provenance: app}
+  app_endpoint:     {type: AppEndpoint,    provenance: app}
+  jdbc_datasource:  {type: JdbcDataSource, provenance: app}
+  # ---- 明确丢弃：无 CCF 类型，或超出四层范围 ----
+  alert:      {drop: true}
+  alert_group: {drop: true}
+  alert_scope: {drop: true}
+  asp:        {drop: true}
+  wait_event: {drop: true}
+  lock:       {drop: true}
+  index:      {drop: true}
+  tables:     {drop: true}
+  wlm:        {drop: true}
+  wlm_user:   {drop: true}
+  io_relay:   {drop: true}
+  io_disk:    {drop: true}
+  io_recent:  {drop: true}
+  block_device: {drop: true}
+  filesystem: {drop: true}
+  lvm_lv:     {drop: true}
+  local_disk: {drop: true}
+  net_iface:  {drop: true}
+  nvme_ctrl:  {drop: true}
+  nvme_device: {drop: true}
+  nvme_path:  {drop: true}
+  nvme_subsys: {drop: true}
+  nvme_target: {drop: true}
+  pcie_device: {drop: true}
+  roce_port:  {drop: true}
+  ultrapath_path: {drop: true}
+  ultrapath_vlun: {drop: true}
+  dorado_controller: {drop: true}
+  dorado_storage: {drop: true}
+  dorado_disk: {drop: true}
+  dorado_lun: {drop: true}
+  dorado_pool: {drop: true}
+  dorado_replication: {drop: true}
+  dorado_volume_set: {drop: true}
+  dorado_array: {drop: true}
+  dorado_eth_port: {drop: true}
+  nof_path_view: {drop: true}
+  controller: {drop: true}
+  alarm:      {drop: true}
+  host:       {drop: true}
+  instance:   {drop: true}
+  slow_sql:   {drop: true}
+  top_sql:    {drop: true}
+# ------------------------------------------------------------------ path → metricCode
+# 每条 = 一次显式搬运；未列出的 path 一律 path_unmapped 并记账。
+path_to_metric:
+  # ---------------- Host（os 层，obj_type=node）----------------
+  host.cpu_usage:        {metric: host.cpu_usage_ratio, unit: ratio, raw_unit: "pct(0-100)"}
+  os.load.avg1:          {metric: host.load1, unit: null}
+  os.load.avg5:          {metric: host.load5, unit: null}
+  host.disk_util:        {metric: host.disk_util, unit: percent}
+  node.disk_io_wait:     {metric: host.disk_io_wait, unit: percent}
+  # ★ T7 同值别名显式丢弃：不再产生第二条同指标观测
+  node.cpu_usage:        {drop: true, reason: redundant_alias_of_host_cpu_usage}
+  node.disk_util:        {drop: true, reason: redundant_alias_of_host_disk_util}
+  os.mem.free_kb:        {drop: true, reason: consumed_by_derive_metrics}
+  os.mem.total_kb:       {drop: true, reason: consumed_by_derive_metrics}
+  # ---------------- GaussDBInstance（obj_type=cluster，经 by_path 改判）----------------
+  cluster.connection_max:   {metric: db.instance.max_connections, unit: 个}
+  cluster.connection_total: {metric: db.instance.session_count, unit: 个}
+  gaussdb.session.waiting:  {metric: db.instance.waiting_connections, unit: 个}
+  node.buffer_hit_ratio:    {metric: db.instance.buffer_hit_ratio, unit: percent}
+  node.connection_usage_ratio: {drop: true, reason: redundant_derived_db_pool_session_used_ratio}
+  # ---------------- GaussDBCluster ----------------
+  replication.replay_lag_mb: {metric: db.cluster.replication_lag_mb, unit: MB}
+  # ---------------- Session ----------------
+  session.state:       {metric: db.session.state, kind: text}
+  session.wait_event:  {metric: db.session.wait_event, kind: text}
+  transaction.duration_ms: {metric: db.session.xact_age_s, unit: s, raw_unit: ms}
+  # ---------------- Query ----------------
+  sql.slow_exec_ms:    {metric: db.query.max_exec_ms, unit: ms}
+  # ---------------- Table ----------------
+  table.n_live_tup:        {metric: db.table.live_tuples, unit: 行}
+  table.dead_tuple_ratio:  {metric: db.table.dead_tuple_ratio, unit: ratio}
+  table.size_bytes:        {metric: db.table.size_mb, unit: MB, raw_unit: bytes}
+  table.stat_stale_days:   {metric: db.table.last_analyze_age_h, unit: h, raw_unit: days}
+  # ★ T7 别名：同一张表的死元组比例有三条 path，只保留 table.dead_tuple_ratio
+  gaussdb.table.dead_ratio:     {drop: true, reason: redundant_alias_of_table_dead_tuple_ratio}
+  table.dead_tuple_ratio_pct:   {drop: true, reason: redundant_alias_of_table_dead_tuple_ratio}
+  # ★ M2.11（裁决 14，2026-09-28）：table.schema_name 是 **Table 的 key 取值来源**
+  #   （见下方 auto_objects.Table.key_fact），不是指标 —— 真机 ABox 里它落在
+  #   cc:schemaName 键属性上（type-map.yaml 已声明），故按身份元数据记账丢弃，
+  #   与上面 5 条真机对账同理。丢弃它**不影响**对象键：冻结侧从原始事实取键值。
+  table.schema_name:            {drop: true, reason: identity_metadata_not_a_metric}
+  # ---------------- 真机对账（2026-09-28，R9 报出的 5 条）----------------
+  # 身份/拓扑元数据：真实存在但不是指标，且拓扑的权威来源是 gather.topology{}（docs/02 §5）
+  cluster.id:           {drop: true, reason: identity_metadata_not_a_metric}
+  cluster.primary_ip:   {drop: true, reason: identity_metadata_not_a_metric}
+  node.host:            {drop: true, reason: identity_metadata_not_a_metric}
+  node.ip:              {drop: true, reason: identity_metadata_not_a_metric}
+  # ★ CCF 70 指标里没有网络带宽项；按 U5「不为对齐而加指标」⇒ 记账丢弃
+  node.net_bandwidth_mbps: {drop: true, reason: no_metric_in_ccf_u5}
+  # ---------------- Container（obj_type=container；N1 探针）----------------
+  container.cpu_usage_ratio:       {metric: container.cpu_usage_ratio, unit: ratio}
+  container.cpu_throttled_periods: {metric: container.cpu_throttled_periods, unit: 次}
+  container.mem_working_set_mb:    {metric: container.mem_working_set_mb, unit: MB}
+  container.oom_kill_total:        {metric: container.oom_kill_total, unit: 次}
+  container.restart_total:         {metric: container.restart_total, unit: 次}
+  container.status:                {metric: container.status, kind: text}
+  # ---------------- AppInstance / AppEndpoint / JdbcDataSource（obj_type=app_*；N2 探针）----
+  # 应用侧单实例健康面：JVM 三条（heap/gc/thread）由探针向 APP 的 /status 取，单位在探针侧归一
+  app.uptime_s:                    {metric: app.uptime_s, unit: s}
+  app.heap_used_ratio:             {metric: app.heap_used_ratio, unit: ratio}
+  app.gc_pause_ms:                 {metric: app.gc_pause_ms, unit: ms}
+  app.thread_count:                {metric: app.thread_count, unit: 个}
+  # ── ★ P0-B：三条端点指标由**应用遥测日志**供给（探针 read_telemetry）。
+  #   `null_reason` 指定 value=None 时的 reason：应用在 hold 待命、无进行中的 run
+  #   时遥测陈旧，此时报 notCollected（**不把几小时前的读数当现值**）。
+  app.endpoint.p99_ms:             {metric: app.endpoint.p99_ms, unit: ms,    null_reason: telemetry_stale}
+  app.endpoint.error_rate:         {metric: app.endpoint.error_rate, unit: ratio, null_reason: telemetry_stale}
+  app.endpoint.qps:                {metric: app.endpoint.qps, unit: 次/s,   null_reason: telemetry_stale}
+  app.endpoint.tps:                {metric: app.endpoint.tps, unit: 次/s, null_reason: telemetry_stale}
+  app.endpoint.p50_ms:             {metric: app.endpoint.p50_ms, unit: ms, null_reason: telemetry_stale}
+  app.endpoint.p95_ms:             {metric: app.endpoint.p95_ms, unit: ms, null_reason: telemetry_stale}
+  app.endpoint.max_ms:             {metric: app.endpoint.max_ms, unit: ms, null_reason: telemetry_stale}
+  app.endpoint.success_total:      {metric: app.endpoint.success_total, unit: 次}
+  app.endpoint.fail_total:         {metric: app.endpoint.fail_total, unit: 次}
+  node.fs_max_used_pct:                {metric: host.fs_max_used_pct, unit: percent}
+  node.disk_io_errors_total:           {metric: host.disk_io_errors_total, unit: 次}
+  node.net_iface_down_count:           {metric: host.net_iface_down_count, unit: 个}
+  node.net_iface_total:                {metric: host.net_iface_total, unit: 个}
+  cluster.replay_lag_bytes_max:        {metric: db.cluster.replay_lag_bytes_max, unit: bytes}
+  cluster.replication_not_streaming_count: {metric: db.cluster.replication_not_streaming_count, unit: 个}
+  cluster.alert_active_count:          {metric: db.cluster.alert_active_count, unit: 个}
+  table.index_count:                   {metric: db.table.index_count, unit: 个}
+  table.unused_index_count:            {metric: db.table.unused_index_count, unit: 个}
+  replication.pending_bytes:           {metric: db.cluster.replication_pending_bytes, unit: bytes}
+  replication.flush_pending_bytes:     {metric: db.cluster.replication_flush_pending_bytes, unit: bytes}
+  replication.sender_count:            {metric: db.cluster.walsender_count, unit: 个}
+  replication.slot_count:              {metric: db.cluster.replication_slot_count, unit: 个}
+  replication.slot_active_count:       {metric: db.cluster.replication_slot_active_count, unit: 个}
+  replication.is_standby:              {metric: db.cluster.is_standby}
+  # 连接池七条：F5/F6（池耗尽 vs 连接失败）的区分点全在这里，必须逐条采到
+  app.datasource.active_connections: {metric: app.datasource.active_connections, unit: 个}
+  app.datasource.idle_connections:   {metric: app.datasource.idle_connections, unit: 个}
+  app.datasource.pending_threads:    {metric: app.datasource.pending_threads, unit: 个}
+  # ★ P0-B：acquire_wait_ms 由遥测日志的「连接池获取偏慢 … 耗时=Xms」供给
+  app.datasource.acquire_wait_ms:    {metric: app.datasource.acquire_wait_ms, unit: ms, null_reason: telemetry_stale}
+  app.datasource.connect_latency_ms: {metric: app.datasource.connect_latency_ms, unit: ms}
+  app.datasource.connect_fail_total: {metric: app.datasource.connect_fail_total, unit: 次}
+  app.datasource.timeout_total:      {metric: app.datasource.timeout_total, unit: 次}
+
+  # ── ★★ P0-A（2026-10-12）：GaussDB 侧**已采集但原先未映射**的证据 12 条 ★★ ──
+  #   这些 fact 一直真机在采（一次 gather 里都实际出现），只是没进 CCF；
+  #   补上映射即可支撑对应故障的判定（见 tmp/_fault_coverage_gap_analysis.md）。
+  cluster.deadlocks:             {metric: db.cluster.deadlocks, unit: 次}
+  cluster.xact_rollback:         {metric: db.cluster.xact_rollback, unit: 次}
+  cluster.slow_sql_count:        {metric: db.cluster.slow_query_count, unit: 次}
+  gaussdb.session.active:        {metric: db.instance.active_sessions, unit: 个}
+  gaussdb.session.idle_in_xact:  {metric: db.instance.idle_in_xact, unit: 个}
+  gaussdb.session.lock_wait:     {metric: db.instance.lock_waits, unit: 个}
+  sql.temp_files_count:          {metric: db.cluster.temp_files, unit: 个}
+  sql.temp_file_written:         {metric: db.cluster.temp_file_written, unit: null}
+  table.seq_scan:                {metric: db.table.seq_scan, unit: 次}
+  table.idx_scan:                {metric: db.table.idx_scan, unit: 次}
+  table.n_dead_tup:              {metric: db.table.dead_tuples, unit: 行}
+  table.hot_update_ratio_pct:    {metric: db.table.hot_update_ratio_pct, unit: percent}
+
+# ------------------------------------------------------------------ 单位换算（发生在 freeze 侧）
+# 采集层只调「单位跟随 fact 自身」，换算与取整一律在此声明，并回填 rawValue / rawUnit。
+unit_convert:
+  host.cpu_usage:          {factor: 0.01,   from_unit: "pct(0-100)", round: 4}
+  transaction.duration_ms: {factor: 0.001,  from_unit: ms,           round: 0}
+  table.size_bytes:        {factor: 9.5367431640625e-07, from_unit: bytes, round: 2}
+  table.stat_stale_days:   {factor: 24,     from_unit: days,         round: 2}
+
+# ------------------------------------------------------------------ obj_id 收敛（同一实体的多套命名 → 一个 CCF 对象）
+obj_id_rewrite:
+  - {obj_type: sql,         pattern: '^sql-now-(.+)$',  replace: 'sql-\1'}
+  - {obj_type: transaction, pattern: '^tx-([0-9]+)$',   replace: 'sess-\1'}
+  - {obj_type: table,       pattern: '^(?!tbl-)(.+)$',  replace: 'tbl-\1'}
+
+# ------------------------------------------------------------------ 取值桶伪对象（★ T5/H3）
+# 这些 obj_id 是「指标取值 / 事件名」拼出来的，不是稳定标识：必须丢弃，
+# 否则会凭空多出对象并把 expected.objectsMin 虚假满足（H3 假通过 G5）。
+pseudo_objects:
+  - {obj_type: cluster,     pattern: '^cluster:(active|idle|waiting|idle_in_xact|lock_wait)$', rewrite: drop}
+  - {obj_type: transaction, pattern: '^tx:long$', rewrite: drop}
+
+# ------------------------------------------------------------------ 由观测补建的对象
+# 上游只在事实里给出 obj_id，没有对象表；这三类对象的属性全部来自事实本身。
+#
+# 键的两种写法（freeze.py 的 ensure_objects 只读本块，不硬编码类型/属性/取值）：
+#   key_attr:  <单键，向后兼容>      键值 = obj_id 的 local 段（`:` 之后的部分）
+#   key_attrs: [多键]                逐键取值，来源见 key_fact / key_id_pattern；
+#                                    **缺任一 key_attr 即 FreezeError（fail-closed）**，
+#                                    不回退成单键、不补空串、不猜。
+auto_objects:
+  Session: {key_attr: sessionId}
+  Query:   {key_attr: queryId}
+  # ★ M2.11（裁决 14，2026-09-28）：Table 身份 = (schemaName, tableName)。
+  #   契约来源：shared/model/topology.yaml:189 `key_attrs: [schemaName, tableName]`
+  #   （真机确有跨 schema 同名表：`snapshot.snapshot` 与 `db4ai.snapshot`；
+  #     只取 relname 会让两张不同的表静默并成一个对象）。
+  #   取值来源，逐键声明：
+  #     schemaName ← **事实** table.schema_name（上游 gaussdb_probe.py 新增采集列）
+  #     tableName  ← **obj_id**：`tbl-<schemaname>.<relname>` 的 local 段（具名捕获组解析）
+  #   为何 schemaName 不解析 obj_id：裁决 14 要求 schemaName 是**采到的实测值**，
+  #   而 obj_id 里的 schema 段只是同一来源的第二次编码；以事实为准，obj_id 只定身份。
+  Table:
+    key_attrs: [schemaName, tableName]
+    key_fact:
+      schemaName: {path: table.schema_name, obj_type: table}
+    key_id_pattern: '^(?:tbl-)?(?P<schemaName>[^.]+)\.(?P<tableName>.+)$'
+
+# ------------------------------------------------------------------ 会话池对象（每个实例一个）
+pool_objects:
+  type: DatabaseSessionPool
+  per_parent_type: GaussDBInstance
+  relation: HAS_SESSION_POOL
+  key_attr: poolId
+  id_suffix: "-pool"
+  session_relation: HAS_SESSION
+  # ★ M1.8a：HAS_SESSION 的归因规则（**数据**，freeze.py 只读本块，不硬编码类型/属性/策略）。
+  #   问题：会话事实不带实例身份（`session.*` 的 obj_type=session/cluster，没有 node/ip），
+  #         而一个集群有 N 个池 ⇒ 「这个会话属于哪个池」不能靠猜。
+  #   依据：一次 /tools/gather = 一个探针连接 = 一个 DSN ⇒ 该次采集**只可能**看到探针所连实例上的会话；
+  #         探针所连实例由采集面自报的拓扑现算（不读 .env、不看进程、不猜角色）。
+  #   外部佐证（只读核实，不进代码路径）：旧载体机 的 `/opt/upstream-agent/.env` =
+  #         `GAUSSDB_DSN = host=192.0.2.12 port=8000 dbname=postgres` ⇒ 正是 ip_index 的
+  #         `192.0.2.12 → dn_6001 / Primary / is_primary=true` ⇒ 会话归到 `dn_6001-pool`。
+  #   归因不到 ⇒ **不挂边**，按 unattributed_reason 记账（走 droppedFacts.byReason 既有通道）。
+  session_attribution:
+    strategy: single_probe_instance
+    target_from: topology.primary_ip        # 探针目标的唯一权威来源（gather 顶层 topology）
+    # 证据链按顺序尝试，先成功者为准；命中的 `basis` 逐字写进 CCF `x.sessionAttribution.basis`
+    # 与每条 HAS_SESSION 关系的 provenance.probe，使读者能判断这条边为什么成立。
+    evidence_order:
+      - {use: ip_index_is_primary, basis: "single_probe_instance/ip_index.is_primary"}
+      - {use: node_role_prefix,    basis: "single_probe_instance/node_role_prefix", role_prefix: "prim"}
+    require_parent_type: GaussDBInstance     # 归因目标必须是本块 per_parent_type 的实例
+    unattributed_reason: session_pool_unattributed
+    unattributed_basis: "unattributed/no_probe_target_evidence"
+
+# ------------------------------------------------------------------ L1/L2 app 层拓扑（M1.6）
+# 权威来源（与 docs/02 §5.2 对称）：L3 拓扑 = gather.topology{}（GaussDB 自报）；
+# L1/L2（应用 / 容器 / 宿主）= gather.app_topology{}（N1 container_probe + N2 app_probe）。
+# ★ 两段互不覆盖：拓扑段没有 k8s worker，app 段没有数据库节点。freeze 只做身份收敛与形状校验。
+# ★ 显式映射：段里未在下面列出的子键一律不建对象；关系只按 relations 清单建，不猜、不补。
+app_derive:
+  version: "1.1.0"
+  section: app_topology
+  # ★ 命名约定（M1.6 定稿）：attrs 里的名字**逐字等于** topology.yaml 里该类型的 attrs 名，
+  #   不设别名、不做大小写归一；探针必须按这些名字发字段，否则该属性缺席（而非被猜中）。
+  #   - id_field   = 探针给出的本地 id（relations 里的 from_field/to_field 引用的就是它）
+  #   - link_attrs = 指向父对象的显式外键（不是 CCF attr，只用于建边），同样由探针给出
+  #   - key 一律由 key_attrs 从该条记录现取；缺任一 key_attr ⇒ raise（fail-closed），不回退不猜。
+  keys:
+    hosts:
+      type: Host
+      id_field: hostId
+      key_attrs: [hostname]
+      attrs: [hostname, ip, role, osVersion, kernelVersion, cpuCores, memTotalGb]
+    containers:
+      type: Container
+      id_field: containerId
+      key_attrs: [containerId]
+      link_attrs: [hostId]
+      attrs: [containerId, image, imageDigest, state, restartCount, memLimitMb, cpuLimitCores]
+    apps:
+      type: CreditCardApp
+      id_field: appId
+      key_attrs: [appCode]
+      attrs: [appCode, appName, version, techStack, sloP99Ms]
+    app_instances:
+      type: AppInstance
+      id_field: instanceId
+      key_attrs: [instanceId]
+      link_attrs: [appId, containerId]
+      attrs: [instanceId, jvmVersion, pid, startTime]
+    # ── ★★ 2026-10-12（P0-B）：`app_endpoints` **恢复** ★★ ────────────────────
+    #   上一轮（同日）曾因「应用不监听任何端口 ⇒ 无端点可观测」把它移出本清单。
+    #   该判断**只对了一半**：端点确实不是 HTTP 端点，但**工作负载入口是真实存在的**，
+    #   而且应用**自己**把它测出来了 —— 每 reportInterval 一行写进
+    #   `<results>/logs/ccsim-<hostname>-<date>.log`：
+    #       [run] phase=MEASURED t=270s tps=1424.85 ok=… fail=… p50=… p95=… p99=… max=…
+    #   ⇒ app 探针（`read_telemetry`）据此产出 `app.endpoint.{qps,p99_ms,error_rate}`。
+    #   因此 `AppEndpoint` 重新成为**可实例化**的对象，`EXPOSES` 边也随之成立。
+    #   ★ 语义边界（写清楚，避免读者误解）：这个端点代表**该实例的仿真工作负载入口**
+    #     （`path=/sim/run`、`protocol=internal`），**不是** HTTP 服务端点。
+    #   ★ 时效性：应用在 `hold` 下平时不跑仿真 ⇒ 遥测会陈旧。此时端点**对象仍建**，
+    #     但三项指标报 notCollected（`null_reason: telemetry_stale`），
+    #     故它们**不进** `expected.metrics` 的必须集（否则空闲期冻结必失败）。
+    app_endpoints:
+      type: AppEndpoint
+      id_field: endpointId
+      key_attrs: [path, protocol]
+      link_attrs: [appId]
+      attrs: [path, protocol, sloP99Ms]
+    datasources:
+      type: JdbcDataSource
+      id_field: datasourceId
+      key_attrs: [dsCode]
+      link_attrs: [appInstanceId, dbHost]
+      attrs: [dsCode, driverName, driverVersion, jdbcUrlMasked, authMode, sslEnabled, poolImpl,
+              maxPoolSize, minIdle, connectionTimeoutMs, idleTimeoutMs, validationQuery]
+  # 关系的 from/to 都是**双方条目上的显式字段**，不靠命名习惯推断
+  # ★ 2026-10-12（P0-B）：`EXPOSES` 随 `app_endpoints` 一并恢复（见上方注释）。
+  relations:
+    - {code: HAS_APP_INSTANCE, list: app_instances, from_type: CreditCardApp,  from_field: appId,          to_type: AppInstance,    to_field: instanceId,   to_kind: same}
+    - {code: EXPOSES,          list: app_endpoints, from_type: CreditCardApp,  from_field: appId,          to_type: AppEndpoint,    to_field: endpointId,   to_kind: same}
+    - {code: RUNS_IN,          list: app_instances, from_type: AppInstance,    from_field: instanceId,     to_type: Container,      to_field: containerId,  to_kind: same}
+    - {code: USES_DATASOURCE,  list: datasources,   from_type: AppInstance,    from_field: appInstanceId,  to_type: JdbcDataSource, to_field: datasourceId, to_kind: same}
+    - {code: DEPLOYED_ON,      list: containers,    from_type: Container,      from_field: containerId,    to_type: Host,           to_field: hostId,       to_kind: same}
+    - {code: CONNECTS_TO,      list: datasources,   from_type: JdbcDataSource, from_field: datasourceId,   to_kind: cluster}
+    - {code: RESOLVES_TO,      list: datasources,   from_type: JdbcDataSource, from_field: datasourceId,   to_kind: instance_by_ip, to_field: dbHost}
+
+# ------------------------------------------------------------------ 由拓扑派生的观测
+derive_topology:
+  - metric: db.cluster.up_nodes
+    type: GaussDBCluster
+    unit: 个
+    up_exclude: [Down, down, Unknown, unknown, Unreachable, unreachable, null]   # ★ 2026-10-13：探针不再静默丢不可达节点，改以 node_status="Unreachable" 显式登记（事故：.182 拒绝远程连接 `Forbid remote connection with trust method!` 被 `except: continue` 无声抹掉）⇒ 该状态必须计入「不算 up」，否则「连不上」会被算成「在线」（方向危险）
+  - metric: db.cluster.down_nodes
+    type: GaussDBCluster
+    unit: 个
+    down_values: [Down, down]
+  - metric: db.instance.up
+    type: GaussDBInstance
+    unit: null
+    boolean: true
+    per_node: true
+    up_exclude: [Down, down, Unknown, unknown, Unreachable, unreachable, null]   # ★ 2026-10-13：探针不再静默丢不可达节点，改以 node_status="Unreachable" 显式登记（事故：.182 拒绝远程连接 `Forbid remote connection with trust method!` 被 `except: continue` 无声抹掉）⇒ 该状态必须计入「不算 up」，否则「连不上」会被算成「在线」（方向危险）
+
+# ------------------------------------------------------------------ 由事实/观测派生的比值
+derive_metrics:
+  - metric: host.mem_available_ratio
+    target_type: Host
+    kind: fact_ratio
+    fact_obj_type: node
+    num_path: os.mem.free_kb
+    den_path: os.mem.total_kb
+    unit: ratio
+    round: 4
+    note: >-
+      上游只给 os.mem.free_kb / os.mem.total_kb，没有 MemAvailable。
+      用 free/total 作保守代理：free ≤ available ⇒ 比值偏小 ⇒ 更容易触发阈值，方向安全（fail-loud）。
+  - metric: db.pool.session_used_ratio
+    target_type: DatabaseSessionPool
+    kind: ccf_ratio
+    num_metric: db.instance.session_count
+    den_metric: db.instance.max_connections
+    unit: ratio
+    round: 4
+    note: "与 metrics.yaml 声明一致：db.pool.session_used_ratio.source = derived。"
+
+# ------------------------------------------------------------------ 覆盖门禁的期望集合
+# 只放「真机上必然出现」的指标。宁可集合窄、逐里程碑扩，也不要放过一次缺行（fail-closed）。
+expected_profiles:
+  l3-only:
+    types: [GaussDBCluster, GaussDBInstance, DatabaseSessionPool, Session, Table, Host]
+    metrics:
+      - db.cluster.up_nodes
+      - db.cluster.down_nodes
+      - db.instance.up
+      - db.instance.max_connections
+      - db.instance.session_count
+      - db.instance.waiting_connections
+      - db.instance.buffer_hit_ratio
+      - db.pool.session_used_ratio
+      - db.session.state
+      - db.table.live_tuples
+      - db.table.dead_tuple_ratio
+      - db.table.size_mb
+      - host.cpu_usage_ratio
+      - host.mem_available_ratio
+      - host.load1
+      - host.load5
+      - host.disk_util
+      - host.disk_io_wait
+    objectsMin: {GaussDBCluster: 1, GaussDBInstance: 1, DatabaseSessionPool: 1, Host: 1}
+
+  # ★ M1.6：应用/容器层。只放「部署成功就必然出现」的项；relationsMin 是这一层的关键判据
+  #   —— 没有 RUNS_IN/DEPLOYED_ON，容器就不是「跑起来了」，而只是「被记录了」。
+  #
+  # ★★ 2026-10-12 收敛（L2 载体由 k8s 改为**裸 docker 容器**后的真实可采集集合）★★
+  #   背景：L1/L2 两层的采集通道在真机上重写过（见上游 service/probes/{container,app}_probe.py
+  #   的文件头）。收敛的**判据是实测**，不是降标准：
+  #     · AppEndpoint 与 app.endpoint.* 三条：仿真器**不监听任何端口**
+  #       （实测 `docker inspect .NetworkSettings.Ports` = `map[]`）⇒ 无端点可观测，
+  #       造一个 AppEndpoint 就是凭空发明对象。⇒ 移出 types/objectsMin，EXPOSES 移出 relationsMin。
+  #       （`AppEndpoint` 类型本身保留在拓扑契约里 —— 它对别的部署形态仍然成立。）
+  #     · app.heap_used_ratio / app.gc_pause_ms：JVM 内部量。容器镜像**无 shell**
+  #       （`docker exec … sh` → `executable file not found`），宿主 `jcmd` 亦无法 attach
+  #       容器内 JVM（`AttachNotSupportedException`，PID 命名空间隔离的必然结果）。
+  #     · app.datasource.pending_threads / acquire_wait_ms / connect_latency_ms /
+  #       connect_fail_total / timeout_total：HikariCP **池内部计数器**，只存在于 JVM 堆内。
+  #     ⇒ 上列 10 条**无任何可采通道**，故不再列入**覆盖门禁的必须集**。
+  #       它们仍留在 shared/model/metrics.yaml（指标契约对别的部署形态有效），
+  #       且探针**不伪造 0**（宁可不产出，也不造假值）。
+  #   ★ 保留下来的 app 侧 4 条全部有实测通道：
+  #       app.uptime_s / app.thread_count        ← 宿主 /proc/<宿主pid>/{stat,status}
+  #       app.datasource.{active,idle}_connections ← pg_stat_activity 按 application_name 归因
+  l1-l2:
+    types: [CreditCardApp, AppInstance, AppEndpoint, JdbcDataSource, Container, Host]
+    metrics:
+      - container.cpu_usage_ratio
+      - container.cpu_throttled_periods
+      - container.mem_working_set_mb
+      - container.oom_kill_total
+      - container.restart_total
+      - container.status
+      - app.uptime_s
+      - app.thread_count
+      - app.datasource.active_connections
+      - app.datasource.idle_connections
+      # ★ app.endpoint.* 与 app.datasource.acquire_wait_ms **刻意不进本必须集**：
+      #   它们只在有进行中的仿真轮次（遥测新鲜）时才有值；应用 hold 待命时是
+      #   notCollected(telemetry_stale)。进了必须集就会让「空闲期冻结」必然失败。
+      #   ⇒ 它们仍是**可选证据**：跑仿真/注故障的窗口里自然会被采到。
+    objectsMin: {CreditCardApp: 1, AppInstance: 1, AppEndpoint: 1, JdbcDataSource: 1, Container: 1, Host: 1}
+    relationsMin: {HAS_APP_INSTANCE: 1, EXPOSES: 1, RUNS_IN: 1, DEPLOYED_ON: 1, USES_DATASOURCE: 1, CONNECTS_TO: 1, RESOLVES_TO: 1}
+
+  # ★ M1.6 真机全链档：一次真机 gather 同时带 gaussdb / os / container / app 四层。
+  #   与上面两档的关系：l3-only 与 l1-l2 是**分层验证**档（夹具/单层回归用），
+  #   本档是**真机全链**档 —— 缺任何一层、缺任何一条 layer 关系都会 fail-closed。
+  #   ★ 为什么必须另设一档而不是复用 l1-l2：profile 的 types/metrics 是**硬必须集**
+  #     （freeze.py:1099-1100 的 missing_types/missing_metrics 直接判不通过），
+  #     复用任一分层档都会把另一层的对象判成「不该出现」，掩盖真实的缺层。
+  l1-l3:
+    types: [GaussDBCluster, GaussDBInstance, DatabaseSessionPool, Session, Table, Host,
+            CreditCardApp, AppInstance, AppEndpoint, JdbcDataSource, Container]
+    metrics:
+      - db.cluster.up_nodes
+      - db.cluster.down_nodes
+      - db.instance.up
+      - db.instance.max_connections
+      - db.instance.session_count
+      - db.instance.waiting_connections
+      - db.instance.buffer_hit_ratio
+      - db.pool.session_used_ratio
+      - db.session.state
+      - db.table.live_tuples
+      - db.table.dead_tuple_ratio
+      - db.table.size_mb
+      - host.cpu_usage_ratio
+      - host.mem_available_ratio
+      - host.load1
+      - host.load5
+      - host.disk_util
+      - host.disk_io_wait
+      - container.cpu_usage_ratio
+      - container.cpu_throttled_periods
+      - container.mem_working_set_mb
+      - container.oom_kill_total
+      - container.restart_total
+      - container.status
+      - app.uptime_s
+      - app.thread_count
+      - app.datasource.active_connections
+      - app.datasource.idle_connections
+    objectsMin: {GaussDBCluster: 1, GaussDBInstance: 1, DatabaseSessionPool: 1, Host: 1,
+                 CreditCardApp: 1, AppInstance: 1, AppEndpoint: 1, JdbcDataSource: 1, Container: 1}
+    relationsMin: {HAS_APP_INSTANCE: 1, EXPOSES: 1, RUNS_IN: 1, DEPLOYED_ON: 1, USES_DATASOURCE: 1, CONNECTS_TO: 1, RESOLVES_TO: 1}

@@ -1,0 +1,910 @@
+# -*- coding: utf-8 -*-
+# =============================================================================
+# G23 · answer_shape 形状契约（§6.3 ③ 的执行口径）
+#
+# 契约原文（逐字）：docs/00-总体设计与裁决记录.md §6.3（第 326-341 行）
+#     for each 用例 q in 用例集:
+#         assert answer_shape_kg(q) == answer_shape_onto(q)   # 形状，非内容
+#   「不自检通过，评测结果不得采信。这是防『分母不同』的硬门禁。」
+# 分工补充（逐字）：docs/00-总体设计与裁决记录.md §6.3（第 343 行）
+#   「①②③ 管实例与回答的一致性（ABox 已被强制统一、不计入成本）」
+#   ⇒ ③ 的期望是**相等**（不适用 ④ 的排除清单）。
+#
+# 本文件是**数据**：门禁 shared/verify/answer_shape_gate.py 只读它 + 两张映射表，
+# 不在代码里写死任何载体专有列名（纪律同 type-map.yaml / rel-map.yaml 的
+# 「映射是数据不是代码」）。
+#
+# -----------------------------------------------------------------------------
+# 诚实边界（必须与门禁 --help / 文件头注释逐字一致）
+# -----------------------------------------------------------------------------
+#   B1. PASS 的含义**只是**「两款载体的回答结构一致」，**不是**「回答内容正确」。
+#   B2. ③ 属 ABox 一致性（docs/00-总体设计与裁决记录.md §6.3（第 343 行）），**不计入成本**，
+#       且 **PASS 不能补偿 T10 的失败**。
+#   B3. 今天**没有** 50 条正式评测用例集（那是 M5，且受 docs/06 §9 的 U-D 用例规模
+#       裁决阻塞）⇒ 本契约只**预留**扩展位 `extensions.fifty_case_slot`（键名与字段
+#       见该节），G23 **不自己发明**那 50 条。
+#   B4. 两侧载体型号不同（Neo4j 5.26.30 Community / GraphDB 10.8.0）：空结果 vs
+#       无绑定、Neo4j 多重边 vs RDF 三元组集合语义、TBox 个体（故障/因果层）与
+#       ABox 实例（拓扑层）分居不同命名图 —— 这些形态差异**必须逐条如实记录，
+#       不得在归一化里「抹平」**。
+# =============================================================================
+
+meta:
+  gate: G23
+  version: "1.0.2"
+  date: "2026-09-29"
+  owner: "M2.26（1.0.1 由 M2.22 交付）"
+  artifact: shared/verify/answer_shape_gate.py
+  contract_of: "docs/00-总体设计与裁决记录.md §6.3（第 326-341 行）"
+  cost_exempt: "docs/00-总体设计与裁决记录.md §6.3（第 343 行）"
+  revision: "1.0.2 = ③ 的比对面改为「契约声明面」（M2.26）：两条真机 DIFF（Q05 故障影响面、Q08 证据落地）经取证是两个**原生**建模差异（LPG 中「类」只是标签、边是一等资源可直接带属性；RDF 中「类」是资源、三元组不可带属性 ⇒ 「类」的代表形式与边属性的承载位置分叉），不再让原生形状硬碰。新增 per-case `declared_surface`（逐列 canonical / kg / onto / source；跨载体列另加 reason + carrier_position）+ `neutral_extension.carrier_position.entries`（跨载体对照表：两侧原生名 + 两侧列 token + 两侧载体位置 + reason + source）+ 三条不变式 G23-09/10/11（空声明面/悬空引用或漏 reason、source/声明列在原生列里不存在 ⇒ ERROR）；Q05 的 KG 查询按中性类型码 DISTINCT 归一到类粒度（列改 obj.ccfType），ONTO 查询并列 ccf:fmComponentType ⇒ 两侧 4 列 14 行；Q08 把 HAS_EVIDENCE.relation_id 声明为 KG 独有列（ONTO 侧「这条证据属于谁」由节点级 cc:Evidence.recordId 承担）；比对逻辑未改（仍复用同一个 compare_descriptors），原生形状另存 native_shape_kg/native_shape_onto 并逐例打印；新增诚实边界 B5。1.0.1 = 取证修正轮：Q02/Q06 的 ONTO 判据通路改用对象属性 ccf:jMetric / ccf:jThreshold（原用字面量导致 Q06 恒 0 行）；Q03/Q04 修正因果链方向（?l ccc:cause ?因 ; ccc:effect ?果）并按 F/G/H/P/Q 段取证加 linkKind 对齐与链接互异约束（两侧 59 行/43 端点对一致）；Q07 属性对应改为 cco:neutralCode / ccc:chainCode / ccc:evidenceText（原 ccc:provenanceEdgeId / ccc:description 不存在、ccc:linkKind 语义不符）；neutral_extension 增 ccf:Judgment 类映射、删 ccf:jOperandRef / ccf:jOperandEntityProperty（普查不存在）；契约引用改为「路径 + §号（第 N-M 行）」体例以满足 G20 规则⑥。1.0.0 = 首版：Q01–Q08 用例层 + rel-map 14 条 asserted 关系型的关系粒度层；形状描述符四字段归一化；BLOCKED/PARAM_ERROR 三态退出码对齐 shared/verify/parity.py 的 M2.18 先例"
+  honest_boundaries:
+    - "B1 PASS 只表示两款载体的回答结构一致，不表示回答内容正确。"
+    - "B2 ③ 属 ABox 一致性（docs/00:343），不计入成本；PASS 不能补偿 T10 的失败。"
+    - "B3 今天没有 50 条正式评测用例集（M5，受 docs/06 §9 的 U-D 裁决阻塞）；本契约只预留 extensions.fifty_case_slot，G23 不发明那 50 条。"
+    - "B4 两侧载体型号不同（Neo4j 5.26.30 Community / GraphDB 10.8.0）；空结果 vs 无绑定、多重边 vs 三元组集合、TBox 个体 vs ABox 实例等形态差异逐条如实记录，不抹平。"
+    - "B5 PASS 只表示「在契约声明面（declared_surface）上一致」；声明面是契约声明的信息粒度与列集合，不是两款载体的全部原生信息 —— 「类」的代表形式与边属性的承载位置这两个原生差异仍然存在（已登记 R-19），本契约不据此宣称两载体等价、也不证明两侧内容正确；原生形状逐例打印在 native_shape_kg / native_shape_onto 与 --json 里，不抹平。"
+
+# -----------------------------------------------------------------------------
+# 唯一数据源（映射是数据不是代码；门禁只读这三张表）
+# -----------------------------------------------------------------------------
+sources:
+  type_map: shared/mapping/type-map.yaml
+  rel_map: shared/mapping/rel-map.yaml
+  targets: shared/deploy/targets.yaml
+
+# -----------------------------------------------------------------------------
+# 命名图（快照图模板取自 sources.targets；tbox 图 targets.yaml 未登记，故在此声明）
+# -----------------------------------------------------------------------------
+graphs:
+  snapshot_template_from: shared/deploy/targets.yaml
+  tbox: "https://credit-card-ops.ai/onto/graph/tbox"
+  tbox_note: "targets.yaml 只登记 named_graph_template（快照图）；故障/因果/指标/阈值层是 TBox 个体，落在独立命名图 <…/graph/tbox>，故在此显式声明。取证一律带 ?infer=false。"
+
+# -----------------------------------------------------------------------------
+# 形状描述符：逐字定义（「至少包含」三字段；后两字段是本契约的加固，不是放松）
+# -----------------------------------------------------------------------------
+descriptor:
+  compared_fields:
+    - "grain_scope"
+    - "columns"
+    - "bound_columns"
+    - "realized_scope"
+    - "rows_class"
+  fields:
+    grain_scope: "行作用域内出现的中性类型名集合（排序去重）。来源 = 查询文本里的载体标签/类，经两张映射表归一。**静态**（由查询文本决定，与数据无关）。"
+    columns: "该查询返回的**中性列名**集合（排序去重）。中性列名 = `<中性类型>.<中性属性名>`（节点/个体属性）或 `<中性关系码>.<中性属性名>`（关系属性）。**静态**（由查询文本决定，与数据无关）。"
+    bound_columns: "columns 的子集：在**至少一行**结果里取到非空值的那些中性列。**动态**（数据相关）——它就是用来抓「KG 侧全 null 的列 vs ONTO 侧根本没有该绑定」这类形态差异（诚实边界 B4）。"
+    realized_scope: "grain_scope 的子集：其**所有**列在**所有**行上都为空的中性类型，从 grain_scope 中剔除后的结果。**动态**（数据相关）。"
+    rows_class: "行数量级档：zero（rows==0）/ one（rows==1）/ many（rows>=2）。**动态**（数据相关）。"
+    rows: "原始行数。**只进报告，不参与比对**（精确计数归 G14 shared/verify/parity.py 的 byType/byRelation；本门禁只比分档）。"
+    rows_band: "更细的行数分档（0 / 1 / 2-4 / 5-16 / 17-64 / 65+）。**只进报告，不参与比对**；两侧不同档时发 WARN。"
+  rows_class_rules:
+    zero: "rows == 0"
+    one: "rows == 1"
+    many: "rows >= 2"
+  rows_band_rules:
+    b0: "rows == 0"
+    b1: "rows == 1"
+    b2: "2 <= rows <= 4"
+    b3: "5 <= rows <= 16"
+    b4: "17 <= rows <= 64"
+    b5: "rows >= 65"
+  excluded_from_comparison:
+    - "任何**值**（标识值、指标值、阈值、文本、时间戳）——那是内容；值等由 G22 shared/verify/abox_identity_gate.py 负责。"
+    - "关系端点的身份键元组值——值等归 G22（G22-07 / G22-08 已实现关系维度身份集比对）；G23 只比形状（列集合 / 行数量级 / 作用域）。"
+    - "行的顺序。"
+    - "精确行数（只比分档；count 只进报告）。"
+
+# -----------------------------------------------------------------------------
+# 归一化规则（逐字）：载体专有名 → 中性名，全部查两张表，代码不写死任何列名
+# -----------------------------------------------------------------------------
+normalization:
+  type_name:
+    kg: "sources.type_map#types 的每个键 K：kg_label → K（例如 kg_label CC_Table → Table）"
+    onto: "sources.type_map#types 的每个键 K：onto_class → K（CURIE 用 sources.type_map#prefixes + namespaces.onto.base 展开为 IRI；例如 cc:Table → Table）"
+  attr_name:
+    kg: "sources.type_map#types[*].attrs 的每个键 A：attrs[A].kg_property → A；另 sources.type_map#metrics 的每个键 M：metrics[M].kg_property → M"
+    onto: "sources.type_map#types[*].attrs 的每个键 A：attrs[A].onto_property → A；另 sources.type_map#metrics 的每个键 M：metrics[M].onto_property → M"
+  common_attr_name:
+    kg: "sources.type_map#common_properties.kg 的每个键 C：该键的值 → C（例如 ccfId → instance_id、ccfLayer → layer、ccfType → neutral_type、ccfSnapshotId → snapshot、ccfRelId → relation_id）"
+    onto: "sources.type_map#common_properties.onto 的每个键 C：该键的值 → C"
+  relation_name:
+    kg: "sources.rel_map#relations 的每个键 R：kg_reltype → R；另 rel_map#inverse_relations 同法"
+    onto: "sources.rel_map#relations 的每个键 R：onto_property → R；另 rel_map#inverse_relations 同法"
+  relation_attr_name:
+    kg: "关系属性的中性名必须由本契约 neutral_extension 显式给出（rel-map 只登记关系端点类型与载体名，不登记关系属性）"
+    onto: "同上"
+  neutral_column_token: "<中性类型名>.<中性属性名>（节点/个体属性）或 <中性关系码>.<中性属性名>（关系属性）"
+  static_vs_dynamic: "columns / grain_scope 由**查询文本**归约（静态，空结果时仍良定义）；bound_columns / realized_scope / rows_class / rows / rows_band 由**结果集**归约（动态）。"
+  fail_closed:
+    - "任一台词在两张表里查不到 ⇒ ERROR（G23-06 unmappable_*），**不得**把原始载体名当中性名透传，**不得**静默丢弃该列，**不得**用空集代替。"
+    - "查询文本里出现的行作用域变量若无载体标签/类（多态变量），除本契约 cases[*].var_type_overrides 显式声明外 ⇒ ERROR（G23-06 untyped_row_var）。"
+    - "查询文本里凡不是 `<var>.<prop>`（Cypher）或 `?var <curie:prop> ?alias`（SPARQL）形态的返回表达式 ⇒ ERROR（G23-06 unnormalizable_return_expr）。"
+    - "只接受只读查询：出现 CREATE / MERGE / SET / DELETE / REMOVE / DROP / INSERT / LOAD / CLEAR 等写子句 ⇒ ERROR 并拒绝执行（G23-05）。"
+
+# -----------------------------------------------------------------------------
+# ★ 显式扩展：故障/因果/指标/阈值层
+#
+#   为什么需要它（必须让队长看到，不得含糊）：
+#     type-map.yaml 只覆盖 CCF 拓扑层 14 个类型 + 70 个指标；rel-map.yaml 只覆盖
+#     15 条拓扑关系（14 asserted + 1 derived）。而 docs/03 §8 的 Q02–Q07 落在
+#     **故障模式 / 判据 / 因果 / 阈值** 层，其载体专有列名**不在**这两张表内。
+#   本节的处置：
+#     为避免「在 Python 代码里写死列名」（那是「映射是数据不是代码」明令禁止的），
+#     这些列的归一化规则**同样以数据**形式写在本契约里。它是 G23 的补判据，
+#     在报告里逐条登记，供队长裁定是否应上游落进 type-map / rel-map。
+#   ★ 本节**不**把两侧的形态差异抹平，但也不再让**原生**形状硬碰：KG 的 CC_AFFECTS 是
+#     **实例级**（42 条，指向 CC_Session / CC_Host 等实例），而 ONTO 的 ccf:affects 是
+#     **类级**（14 条，指向 cc:JdbcDataSource / cc:Query 等类）——两者中性列集合必然不同。
+#     M2.26 的处置：③ 先把两侧**投影到契约声明的信息面**（cases[*].declared_surface，
+#     同一信息粒度与列集合），再用**同一个** compare_descriptors 比对；未被声明面覆盖的原生
+#     token 原样参与比对 ⇒ 如实判 DIFF，**绝不静默丢弃**；原生形状另存 native_shape_kg /
+#     native_shape_onto 并逐例打印。两个原生差异（「类」的代表形式、边属性的承载位置）
+#     同时登记为风险 R-19、写进诚实边界 B5，**不**在门禁里抹平。
+# -----------------------------------------------------------------------------
+neutral_extension:
+  note: "G23 补判据：故障/因果/指标/阈值层的中性名。数据来源 = docs/03 §8、scheme1-kg/queries/*.cypher、scheme2-onto/tests/cq_probes.py 的实测口径；不来自 type-map/rel-map。"
+  note_precedence: "★ 解析优先级：type-map 的 types[*].attrs / metrics / common_properties **先于**本节的 kg_property / onto_property（门禁 class Mapping :234-253 用 setdefault 建表、:271-274 才叠 ext），故本节只能补**两边都查不到**的中性名。推论：KG 侧 `j.role`（type-map 里 Host.role / GaussDBInstance.role 已登记为 role）与 `m.metricCode`（Evidence.attrs.metricCode 已登记为 metricCode）的中性名由 type-map 钉死，本节必须把 ONTO 侧同一概念的属性也登记成**同一个**中性名（ccf:jRole→role、ccm:metricCode→metricCode），否则同一概念两侧得到两个中性名、形状比对恒 DIFF（首版即如此：role/j_role、metricCode/metric_code）。中性名仅是标识符：token 带作用域前缀（如 JUDGED_BY.role 与 Host.role 不混同），值一律不参与比对。"
+  kg_label:
+    CC_FaultMode: FaultMode
+    CC_Metric: Metric
+    CC_Threshold: Threshold
+    CC_Finding: Finding
+    CC_Rule: Rule
+    CC_Query: Query
+    CC_Session: Session
+    CC_Host: Host
+    CC_Table: Table
+    CC_Evidence: Evidence
+  onto_class:
+    "ccf:Judgment": JUDGED_BY
+    "ccf:FaultMode": FaultMode
+    "ccm:Metric": Metric
+    "ccm:Threshold": Threshold
+    "ccf:Finding": Finding
+    "ccp:Rule": Rule
+    "ccc:CausalLink": CausalLink
+    "ccc:ContractProvenance": ContractProvenance
+    "cc:Query": Query
+    "cc:Session": Session
+    "cc:Host": Host
+    "cc:Table": Table
+    "cc:Evidence": Evidence
+  kg_reltype:
+    CC_JUDGED_BY: JUDGED_BY
+    CC_CAUSES: CAUSES
+    CC_RELATES_TO: RELATES_TO
+    CC_AFFECTS: AFFECTS
+    CC_HAS_EVIDENCE: HAS_EVIDENCE
+  onto_reltype:
+    "ccf:judgedBy": JUDGED_BY
+    "ccc:cause": CAUSES
+    "ccc:effect": CAUSES_EFFECT
+    "ccc:relatesTo": RELATES_TO
+    "ccf:affects": AFFECTS
+    "cc:hasEvidence": HAS_EVIDENCE
+  kg_property:
+    fmCode: fault_mode_code
+    fmName: fault_mode_name
+    fmLayer: layer
+    fmComponentType: component_type
+    fmSeverity: severity
+    fmDetectionMode: detection_mode
+    metricCode: metric_code
+    metricObject: metric_object
+    metricLayer: layer
+    metricUnit: unit
+    metricKgProperty: metric_property
+    thrCode: threshold_code
+    thrWarning: threshold_warning
+    thrCritical: threshold_critical
+    role: role
+    op: j_op
+    operandKind: j_operand_kind
+    operandValue: j_operand_value
+    operandRef: j_operand_ref
+    contractId: edge_contract_id
+    chain: chain
+    description: description
+    provenance: provenance
+    recordId: record_id
+    severity: affects_severity
+  onto_property:
+    "ccf:faultModeCode": fault_mode_code
+    "ccf:displayName": fault_mode_name
+    "ccf:faultLayer": layer
+    "ccf:fmComponentType": component_type
+    "ccf:severity": severity
+    "ccf:fmDetectionMode": detection_mode
+    "ccm:metricCode": metricCode
+    "cco:metricCode": metricCode
+    "ccm:metricObjectType": metric_object
+    "ccm:metricLayer": layer
+    "ccm:metricUnit": unit
+    "ccm:metricProperty": metric_property
+    "ccm:thresholdName": threshold_code
+    "ccm:warningTier": threshold_warning
+    "ccm:criticalTier": threshold_critical
+    "ccf:jRole": role
+    "ccf:jOp": j_op
+    "ccf:jPredicate": j_predicate
+    "ccf:jOperandKind": j_operand_kind
+    "ccf:jOperandValue": j_operand_value
+    "ccf:jThresholdReference": j_operand_ref
+    "ccf:jMetricCode": metric_code
+    "ccc:chainCode": chain
+    "ccc:evidenceText": description
+    "cco:neutralCode": edge_contract_id
+    "cc:recordId": record_id
+    "cc:metricCode": metric_code
+    "cc:status": status
+    "cc:rawValue": raw_value
+    "cc:rawUnit": raw_unit
+    "cc:probe": probe
+    "cc:capturedAt": captured_at
+    "ccf:affectsSeverity": affects_severity
+    "ccc:provenance": provenance
+
+  # ---------------------------------------------------------------------------
+  # ★ 跨载体对照表（M2.26）：③ 的「声明面」靠它把两侧对齐到**同一信息粒度**
+  #   同一条信息在两侧的**载体位置**本来不同 ⇒ 必须显式登记，不能靠列名巧合：
+  #     · LPG：类只能是**标签**（不是节点），边是**一等资源**、可直接带属性；
+  #     · RDF：类是**资源**，三元组**不可**带属性（关系属性须具体化或改挂个体）。
+  #   cases[*].declared_surface 里两侧 token 不同的条目必须引用本表的 id，
+  #   门禁逐字核对（G23-10）；删掉本表条目 ⇒ 该例悬空引用即 ERROR。
+  # ---------------------------------------------------------------------------
+  carrier_position:
+    note: "跨载体对照表（数据形式，G23 补判据）：逐条登记同一信息在两款载体上的**原生名**（kg_native / onto_native）、中立化后在形状描述符里的**列 token**（kg / onto；null = 该侧不是一列）、以及**载体位置**（carrier_position.kg / .onto）。cases[*].declared_surface.columns 里 kg ≠ onto 的条目必须用 carrier_position 引用本表 id，门禁逐字核对（G23-10）；每条必须有 reason + source（文档路径 + §号）。删掉本表条目 ⇒ 该用例变成**悬空引用 ERROR**；删掉用例侧的对应声明 ⇒ 该例如实判 **DIFF**（对照是承重的，不是装饰）。"
+    entries:
+      - id: CP-AFFECTS
+        neutral: AFFECTS.component_type
+        kg: AnyObject.neutral_type
+        onto: FaultMode.component_type
+        kg_native: ["CC_AFFECTS", "obj.ccfType（被影响实例的中性类型码；P1 写在每个节点上）"]
+        onto_native: ["ccf:affects", "ccf:fmComponentType"]
+        carrier_position:
+          kg: "关系边 CC_AFFECTS（LPG 边是一等资源、可直接带属性），宾语是**实例**（真机 42 条 = 14 个故障模式按 fmComponentType 批量挂到该类型的全部现存实例：19/4/3/3/2/2/2/1/1/1/1/1/1/1）"
+          onto: "对象属性 ccf:affects（RDF 三元组不可带属性），宾语是**类**（14 条，owl:Class）"
+        reason: "「受影响的组件类型」这条信息两侧都答得出来，但**载体位置**不同：KG 只能从被影响**实例**的 ccfType 读（LPG 的类不是节点，没有类型节点可指向），ONTO 只能从**故障模式**个体的 ccf:fmComponentType 读（宾语是类，类上没有实例属性）。真机取证：每个故障模式被影响实例的中性类型集合**唯一**且逐条等于其 fmComponentType ⇒ KG 侧按类型码 DISTINCT 归一到 14 行，才与 ONTO 的 14 个类同粒度。这是方案 2 的一处真实建模成本（类级宾语/关系属性需改造），不是投影缺陷。"
+        source: "docs/03-方案1设计（知识图谱+LLM）.md §4.3（含门禁断言 T3：每个 FaultMode 至少有 1 条 AFFECTS 出边、目标类型 = 其 fmComponentType）；docs/04-方案2设计（本体+LLM）.md §2；docs/00-总体设计与裁决记录.md §6.3"
+      - id: CP-AFFECTS-SEVERITY
+        neutral: affects_severity
+        kg: AFFECTS.affects_severity
+        onto: FaultMode.affects_severity
+        kg_native: ["CC_AFFECTS.severity（边属性）"]
+        onto_native: ["ccf:affectsSeverity（故障模式个体属性）"]
+        carrier_position:
+          kg: "关系边属性 a.severity（LPG 边可直接带属性）"
+          onto: "故障模式个体属性 ccf:affectsSeverity（RDF 三元组不可带属性 ⇒ 只能改挂到个体）"
+        reason: "严重度是**边属性**：LPG 的边可直接带属性，RDF 三元组不可 ⇒ ONTO 侧物化成故障模式个体属性 ccf:affectsSeverity（scheme2-onto/ontology/cc-fault.ttl 的 ccf:affects 注释自述此口径）。同一取值、两种载体位置 ⇒ 必须显式声明，不能靠列名巧合。"
+        source: "docs/03-方案1设计（知识图谱+LLM）.md §4.3；scheme2-onto/ontology/cc-fault.ttl（ccf:affects 注释：副作用属性 severity 物化为 ccf:affectsSeverity）；docs/00-总体设计与裁决记录.md §6.3"
+      - id: CP-HAS-EVIDENCE
+        neutral: HAS_EVIDENCE.relation_id
+        kg: HAS_EVIDENCE.relation_id
+        onto: null
+        kg_native: ["CC_HAS_EVIDENCE", "CC_HAS_EVIDENCE.ccfRelId（P1 在每条边上写的投影关系身份键）"]
+        onto_native: ["cc:hasEvidence"]
+        carrier_position:
+          kg: "关系边属性 h.ccfRelId（关系型本身是边；边属性 ⇒ KG 独有列）"
+          onto: "**不存在**：ONTO 有关系型 cc:hasEvidence，但没有「关系身份键」这种列（type-map#common_properties.onto 无 relation_id）；「这条证据属于谁」由**节点级** cc:Evidence.recordId 承担（C5 溯源）"
+        reason: "关系身份键 ccfRelId 是 LPG 边属性的直接产物（type-map#common_properties：kg 有 relation_id、onto 没有）⇒ KG 侧多一列。ONTO 侧该信息的承担者是**节点级** cc:Evidence.recordId（真机逐条可回指 CCF 记录 id），故本列按 KG 侧 carrier_specific 声明、不计入声明面比对；两侧行数仍须一致（真机 191/191）。"
+        source: "shared/mapping/type-map.yaml #common_properties（kg 有 relation_id、onto 无）；docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）；docs/04-方案2设计（本体+LLM）.md §2（cc:Evidence.recordId = CCF 记录 id、逐条可溯源）；docs/00-总体设计与裁决记录.md §6.3"
+
+# -----------------------------------------------------------------------------
+# 判据清单（逐条编号；报告里逐条打印）
+# -----------------------------------------------------------------------------
+criteria:
+  G23-00: "可达性/前置条件：任一载体不可达、契约文件缺失/空/不可解析、映射表缺失、CC_NEO4J_PASSWORD 缺失、ONTO 侧不存在 snapshotId 对应的命名图 ⇒ RESULT: BLOCKED 且 exit 2（措辞与退出码照抄 shared/verify/parity.py 的 M2.18 先例）。绝不打印 PASS。"
+  G23-01: "用例层：逐条执行本契约 cases[*] 的两侧查询，各自归约成形状描述符后逐字段比对。"
+  G23-02: "关系粒度层：对 sources.rel_map#relations 中每一条 asserted: true 的关系型，两侧各跑一次「端点身份键」形状查询，只比列集合/行数量级/作用域，**不比身份值**（值等归 G22 shared/verify/abox_identity_gate.py 的 G22-07 / G22-08）。契约口径：**值等 → G22；形等 → G23**。"
+  G23-03: "反恒真下限：--min-cases（默认 8）非法 ⇒ PARAM_ERROR exit 2；实际用例数 < --min-cases ⇒ ERROR。另要求至少 3 个用例的 rows_class != zero（至少一侧成立），否则报「空集相等」恒真风险 ⇒ 真机默认 WARN、--strict 升 ERROR。"
+  G23-04: "分侧计数与明细：逐用例给出 shape_kg / shape_onto / SAME|DIFF|unresolved，并汇总 cases_total / same / diff / unresolved；有任何 DIFF ⇒ FAIL exit 1；有 unresolved 且无 DIFF ⇒ 视 --strict（默认 WARN + exit 0，--strict ⇒ exit 1）。"
+  G23-05: "幂等/只读：只发 SELECT/MATCH；不得写入任何库；重复运行结果一致。"
+  G23-06: "归一化 fail-closed：不可归一化的类型/属性/关系型、无标签的行作用域变量、非 <var>.<prop> 形态的返回表达式 ⇒ ERROR。"
+  G23-07: "禁止短路：任一侧查询报错/超时/HTTP 非 200 ⇒ 该用例记 unresolved（--strict 升 ERROR），**绝不用空描述符代替**。（合法空结果 rows_class=zero 是**真实描述符**，不属 unresolved。）"
+  G23-09: "声明面非空且逐列有据：`declared_surface.columns` 必须 ≥1 条，且每条必须有非空 `canonical` / `kg` / `onto` / `source`（source = 文档路径 + §号，不写行号）⇒ 否则 ERROR（该例记 unresolved）。空声明面会让比对退化成恒真，故 fail-closed。"
+  G23-10: "跨载体对照与排除项逐条有据：① `declared_surface.columns` 里 `kg != onto` 的条目必须给出非空 `reason`，且 `carrier_position` 必须指向 `neutral_extension.carrier_position.entries` 里**存在**的条目 id，该条目登记的 `kg`/`onto` 列 token 必须与用例条目逐字一致 ⇒ 悬空引用/不一致/缺 reason 一律 ERROR；② `carrier_specific_columns` 每条必须有非空 `reason` + `source`，若带 `carrier_position` 则该条目在本侧的列 token 必须与登记一致、且另一侧登记必须为空（载体专有性）⇒ 否则 ERROR；③ 表级：`carrier_position.entries` 每条必须有 `id` / `neutral` / 「两侧载体位置」`carrier_position.kg` + `.onto`（写「不存在」也算有）/ `reason` / `source`，且有列 token 的一侧必须登记该侧原生名（`kg_native` / `onto_native`）⇒ 缺表或缺项 ERROR。"
+  G23-11: "反恒真闸门（声明列必须真实存在）：声明条目的 `kg` / `onto` 原生 token 必须分别出现在该侧**原生**描述符的 `columns` 里；`carrier_specific_columns` 的 token 必须出现在其声明的一侧、且在另一侧**不存在** ⇒ 否则 ERROR（该例记 unresolved）。声明面只在**内部**把两侧对齐到同一粒度：**未被声明覆盖的原生 token 不静默丢弃，仍照原样参与比对 ⇒ 如实判 DIFF**。"
+
+# -----------------------------------------------------------------------------
+# 用例集：Q01–Q08（docs/03 §8 基线查询的中性形状条目）
+# -----------------------------------------------------------------------------
+case_set:
+  id_prefix: Q
+  min_cases_default: 8
+  note: "以下 8 条即今天的用例层全部内容；每例的中性形状 = grain_scope + columns + rows_class（见 descriptor），并由本契约 cases[*].declared_surface 声明 ③ 的比对面（逐列 canonical / kg / onto / source；跨载体列另加 reason + carrier_position）。"
+  deviations_from_source:
+    - "契约查询**不写 ORDER BY**：行序不属形状（属内容），且排序会引入载体差异噪声。"
+    - "契约查询**不施加业务参数过滤**（如 q01 的 $appCode、q02 的 $metricCodes）：参数值是内容不是形状，且施加后若某侧缺该值会让整例塌成 zero，反而**掩盖**形状差异。队长若要恢复参数化，改本契约 cases[*].params 即可（数据驱动）。"
+    - "Q02 源查询用 collect(...) 把判据聚合成一列：聚合是**内容折叠**，折叠后形状不可比。契约改为**逐判据一行**（行粒度化），形状才可比。"
+    - "Q05 的 KG 侧 CC_AFFECTS 指向多态实例（9 种标签），无单一载体标签 ⇒ 契约在 var_type_overrides 显式声明中性类型 AnyObject，并如实登记这是**声明的宽化**而非从映射表推出。M2.26 进一步把两侧对齐到**同一信息粒度**：KG 查询改用 `obj.ccfType`（中性类型码）并 `RETURN DISTINCT`，把 42 条实例行归一到 14 个类型码；ONTO 查询并列 `ccf:fmComponentType`。两侧都是「故障模式 → 受影响组件**类型**」的 14 行 4 列；跨载体列（受影响组件类型、严重度）由 declared_surface + carrier_position 显式声明来源（见 R-19）。"
+    - "③ 的比对面 = 契约**声明面**（M2.26）：`cases[*].declared_surface.columns` 逐列声明 canonical（契约面 token）与两侧原生 token；**未被声明覆盖的原生 token 原样参与比对 ⇒ 如实判 DIFF**（绝不静默丢弃，也绝不用声明面把差异删掉当解法）；两侧 token 不同的条目必须给 reason + 指向 `neutral_extension.carrier_position.entries` 的 id。比对仍复用**同一个** compare_descriptors；原生形状另存 native_shape_kg / native_shape_onto 并逐例打印。"
+    - "声明面**不是**按侧白名单：它只做**跨载体**列对应（另一侧没有的列必须显式登记为 carrier_specific 并给 reason + source），且 G23-11 反查每条声明列必须真实存在于该侧**原生**列 ⇒ 不一致即 ERROR；**不**把 DIFF 降级成 WARN，**不**改任何阈值/下限/判据。"
+    - "Q08 的 HAS_EVIDENCE.relation_id（KG 边属性 h.ccfRelId）声明为 **KG 侧 carrier_specific**：ONTO 没有「关系身份键」列（common_properties.onto 无 relation_id），该信息由**节点级** cc:Evidence.recordId 承担 ⇒ 该列不计入声明面比对（仍逐例打印并进 --json），两侧行数照旧必须一致（真机 191/191）。"
+    - "Q02/Q06 的 ONTO 判据通路改用**对象属性** ccf:jMetric（判据→ccm:Metric 个体）与 ccf:jThreshold（判据→档位个体，7+3=10），与 KG 的 `->(m:CC_Metric)` 和阈值面同义；不再用字面量 ccf:jMetricCode / ccf:jThresholdReference 去连个体（后者是字符串，连 ccm:Threshold 恒 0 行 —— 首版真实缺陷）。"
+    - "Q03/Q04 关系型对齐：KG 的 `:CC_CAUSES`（16 条）与 ONTO 的 ccc:linkKind ∈ {causes(12), conditional_causes(4)} 逐条一一对应，2 条 `:CC_RELATES_TO` ↔ linkKind=relates_to（按 cco:neutralCode ↔ r.contractId 逐边核对，证据 tmp/_g23_shape_probe.py 的 F2/F3）⇒ ONTO 侧加 `FILTER(?linkKind != \"relates_to\")`。这对齐的是**关系型集合**（结构），不是取值（内容）；四种关系取值一律不参与描述符比对。"
+    - "Q03/Q04 计数语义对齐：Neo4j 单条变长模式内**关系不得重复**（关系同构），而 SPARQL 的 `?l1…?l4` 允许绑定同一个体 ⇒ ONTO 侧加两两 `FILTER(?li != ?lj)`。对齐后两侧 59 行 / 43 个端点对（逐深度 16/17/15/11）完全一致；未加时 ONTO 为 67 行（多出的 8 条是链接复用）。证据：E3（KG 59/43）、H1–H4（KG 显式 4 段合计 59）、Q4（ONTO 59/43）。"
+    - "Q06 阈值面的连接语义对齐：ONTO 侧在阈值 OPTIONAL 内加 `ccm:thresholdMetric ?m` 把档位个体钉到判据自身指向的度量（KG 侧 `th.thrCode = replace(split(j.operandRef,'#')[0],'threshold:','')` 本身就是逐判据的字符串钉法）。这不改变任何取值，只消除 ONTO 侧档位个体跨度量匹配造成的行数爆炸（177 → 23；KG 26）。证据：E11（ccm:thresholdMetric 覆盖 12 个阈值个体）、E12（钉后档位连接仍 10 条，与未钉时 D3=10 相同 ⇒ 阈值面未被削弱）、E13（整例 23 行）。"
+    - "中性名对齐（不是判据放宽）：KG 侧 `j.role` / `m.metricCode` 的中性名由 type-map 既有条目钉死（role / metricCode），故 neutral_extension 把 ONTO 侧同一概念的属性登记为**同一**中性名（ccf:jRole→role、ccm:metricCode / cco:metricCode→metricCode）。原写法 j_role / metric_code 会让同一概念在两侧得到两个中性名 ⇒ 形状比对恒 DIFF（首版实测 Q02/Q06 各 1~2 个字段 DIFF 全由此来）。token 带作用域前缀，故 JUDGED_BY.role 与 Host.role 不会混同；值不参与比对。"
+  cases:
+    - id: Q01
+      title: 全栈拓扑（业务 → 承载 → 数据）
+      source: scheme1-kg/queries/q01-topology.cypher
+      doc: docs/03-方案1设计（知识图谱+LLM）.md
+      graph: snapshot
+      grep_scope: "CreditCardApp | AppInstance | Container | Host | JdbcDataSource | GaussDBCluster | GaussDBInstance | DatabaseSessionPool | Session | Query | Table"
+      kg: |
+        MATCH (app:CC_CreditCardApp)
+        OPTIONAL MATCH (app)-[:CC_HAS_APP_INSTANCE]->(inst:CC_AppInstance)
+        OPTIONAL MATCH (inst)-[:CC_RUNS_IN]->(ctr:CC_Container)
+        OPTIONAL MATCH (ctr)-[:CC_DEPLOYED_ON]->(host:CC_Host)
+        OPTIONAL MATCH (inst)-[:CC_USES_DATASOURCE]->(ds:CC_JdbcDataSource)
+        OPTIONAL MATCH (ds)-[:CC_CONNECTS_TO]->(cl:CC_GaussDBCluster)
+        OPTIONAL MATCH (cl)-[:CC_HAS_DB_INSTANCE]->(dbi:CC_GaussDBInstance)
+        OPTIONAL MATCH (dbi)-[:CC_HAS_SESSION_POOL]->(pool:CC_DatabaseSessionPool)
+        OPTIONAL MATCH (pool)-[:CC_HAS_SESSION]->(sess:CC_Session)
+        OPTIONAL MATCH (sess)-[:CC_RUNS_QUERY]->(qry:CC_Query)
+        OPTIONAL MATCH (qry)-[:CC_ACCESSES]->(tbl:CC_Table)
+        RETURN app.ccfId AS appId, app.ccfLayer AS appLayer,
+               inst.ccfId AS instanceId, inst.ccfLayer AS instanceLayer,
+               ctr.ccfId AS containerId, ctr.ccfLayer AS containerLayer,
+               host.ccfId AS hostId, ds.ccfId AS datasourceId,
+               cl.ccfId AS clusterId, dbi.ccfId AS dbInstanceId,
+               pool.ccfId AS poolId, sess.ccfId AS sessionId,
+               qry.ccfId AS queryId, tbl.ccfId AS tableId, tbl.ccfLayer AS tableLayer
+      onto: |
+        SELECT ?appId ?appLayer ?instanceId ?instanceLayer ?containerId ?containerLayer
+               ?hostId ?datasourceId ?clusterId ?dbInstanceId ?poolId ?sessionId
+               ?queryId ?tableId ?tableLayer
+        WHERE {
+          GRAPH <{{GRAPH}}> {
+            ?app a cc:CreditCardApp ; cc:ccfId ?appId .
+            OPTIONAL { ?app cc:ccfLayer ?appLayer }
+            OPTIONAL { ?app cc:hasAppInstance ?inst . ?inst a cc:AppInstance ; cc:ccfId ?instanceId . OPTIONAL { ?inst cc:ccfLayer ?instanceLayer } }
+            OPTIONAL { ?inst cc:runsIn ?ctr . ?ctr a cc:Container ; cc:ccfId ?containerId . OPTIONAL { ?ctr cc:ccfLayer ?containerLayer } }
+            OPTIONAL { ?ctr cc:deployedOn ?host . ?host a cc:Host ; cc:ccfId ?hostId }
+            OPTIONAL { ?inst cc:usesDataSource ?ds . ?ds a cc:JdbcDataSource ; cc:ccfId ?datasourceId }
+            OPTIONAL { ?ds cc:connectsTo ?cl . ?cl a cc:GaussDBCluster ; cc:ccfId ?clusterId }
+            OPTIONAL { ?cl cc:hasDbInstance ?dbi . ?dbi a cc:GaussDBInstance ; cc:ccfId ?dbInstanceId }
+            OPTIONAL { ?dbi cc:hasSessionPool ?pool . ?pool a cc:DatabaseSessionPool ; cc:ccfId ?poolId }
+            OPTIONAL { ?pool cc:hasSession ?sess . ?sess a cc:Session ; cc:ccfId ?sessionId }
+            OPTIONAL { ?sess cc:runsQuery ?qry . ?qry a cc:Query ; cc:ccfId ?queryId }
+            OPTIONAL { ?qry cc:accesses ?tbl . ?tbl a cc:Table ; cc:ccfId ?tableId . OPTIONAL { ?tbl cc:ccfLayer ?tableLayer } }
+          }
+        }
+      declared_surface:
+        columns:
+          - canonical: AppInstance.instance_id
+            kg: AppInstance.instance_id
+            onto: AppInstance.instance_id
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: AppInstance.layer
+            kg: AppInstance.layer
+            onto: AppInstance.layer
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: Container.instance_id
+            kg: Container.instance_id
+            onto: Container.instance_id
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: Container.layer
+            kg: Container.layer
+            onto: Container.layer
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: CreditCardApp.instance_id
+            kg: CreditCardApp.instance_id
+            onto: CreditCardApp.instance_id
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: CreditCardApp.layer
+            kg: CreditCardApp.layer
+            onto: CreditCardApp.layer
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: DatabaseSessionPool.instance_id
+            kg: DatabaseSessionPool.instance_id
+            onto: DatabaseSessionPool.instance_id
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: GaussDBCluster.instance_id
+            kg: GaussDBCluster.instance_id
+            onto: GaussDBCluster.instance_id
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: GaussDBInstance.instance_id
+            kg: GaussDBInstance.instance_id
+            onto: GaussDBInstance.instance_id
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: Host.instance_id
+            kg: Host.instance_id
+            onto: Host.instance_id
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: JdbcDataSource.instance_id
+            kg: JdbcDataSource.instance_id
+            onto: JdbcDataSource.instance_id
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: Query.instance_id
+            kg: Query.instance_id
+            onto: Query.instance_id
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: Session.instance_id
+            kg: Session.instance_id
+            onto: Session.instance_id
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: Table.instance_id
+            kg: Table.instance_id
+            onto: Table.instance_id
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: Table.layer
+            kg: Table.layer
+            onto: Table.layer
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+        carrier_specific_columns: []
+    - id: Q02
+      title: 症状 → 候选故障模式（判据结构化匹配，非关键词）
+      source: scheme1-kg/queries/q02-symptom-match.cypher
+      doc: docs/03-方案1设计（知识图谱+LLM）.md
+      graph: tbox
+      grep_scope: "FaultMode | Metric"
+      note: "KG 侧判据是**边**（(fm)-[j:CC_JUDGED_BY]->(m)），ONTO 侧判据是**个体**（ccf:Judgment，由 ccf:judgedBy 指向）。ONTO 有对象属性 ccf:jMetric（判据→ccm:Metric 个体），与 KG 的 `->(m:CC_Metric)` 同义，故 metricCode 取 `?m ccm:metricCode`（不是字面量 ccf:jMetricCode）—— 取证：jMetric→Metric 个体 23 条、KG 判定边 26 条（均 b4 档）。ccf:Judgment 已登记进 neutral_extension.onto_class ⇒ 不再需要 var_type_overrides 宽化。"
+      kg: |
+        MATCH (fm:CC_FaultMode)-[j:CC_JUDGED_BY]->(m:CC_Metric)
+        RETURN fm.fmCode AS fmCode, fm.fmLayer AS fmLayer, fm.fmComponentType AS fmComponentType,
+               fm.fmSeverity AS fmSeverity, fm.fmDetectionMode AS fmDetectionMode,
+               m.metricCode AS metricCode, j.role AS jRole, j.op AS jOp, j.operandKind AS jOperandKind
+      onto: |
+        SELECT ?fmCode ?fmLayer ?fmComponentType ?fmSeverity ?fmDetectionMode ?metricCode ?jRole ?jOp ?jOperandKind
+        WHERE {
+          GRAPH <{{TBOX}}> {
+            ?fm a ccf:FaultMode ; ccf:faultModeCode ?fmCode ; ccf:faultLayer ?fmLayer ;
+                ccf:fmComponentType ?fmComponentType ; ccf:severity ?fmSeverity ;
+                ccf:fmDetectionMode ?fmDetectionMode ; ccf:judgedBy ?j .
+            ?j a ccf:Judgment ; ccf:jMetric ?m .
+            ?m a ccm:Metric ; ccm:metricCode ?metricCode .
+            OPTIONAL { ?j ccf:jRole ?jRole }
+            OPTIONAL { ?j ccf:jOp ?jOp }
+            OPTIONAL { ?j ccf:jOperandKind ?jOperandKind }
+          }
+        }
+      declared_surface:
+        columns:
+          - canonical: FaultMode.component_type
+            kg: FaultMode.component_type
+            onto: FaultMode.component_type
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: FaultMode.detection_mode
+            kg: FaultMode.detection_mode
+            onto: FaultMode.detection_mode
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: FaultMode.fault_mode_code
+            kg: FaultMode.fault_mode_code
+            onto: FaultMode.fault_mode_code
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: FaultMode.layer
+            kg: FaultMode.layer
+            onto: FaultMode.layer
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: FaultMode.severity
+            kg: FaultMode.severity
+            onto: FaultMode.severity
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: JUDGED_BY.j_op
+            kg: JUDGED_BY.j_op
+            onto: JUDGED_BY.j_op
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: JUDGED_BY.j_operand_kind
+            kg: JUDGED_BY.j_operand_kind
+            onto: JUDGED_BY.j_operand_kind
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: JUDGED_BY.role
+            kg: JUDGED_BY.role
+            onto: JUDGED_BY.role
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: Metric.metricCode
+            kg: Metric.metricCode
+            onto: Metric.metricCode
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+        carrier_specific_columns: []
+    - id: Q03
+      title: 故障模式 → 下游传播（限深 4）
+      source: scheme1-kg/queries/q03-downstream.cypher
+      doc: docs/03-方案1设计（知识图谱+LLM）.md
+      graph: tbox
+      grep_scope: "FaultMode"
+      note: "口径对齐（逐条可复核）：① 关系型对齐 —— KG 用 reltype 区分 CC_CAUSES(16) / CC_RELATES_TO(2)，ONTO 用字面量 ccc:linkKind 区分 causes(12) / conditional_causes(4) / relates_to(2)；按边身份（cco:neutralCode ↔ r.contractId）逐条比对，16 条 CC_CAUSES 与 {causes+conditional_causes} 一一对应、2 条 CC_RELATES_TO 与 relates_to 一一对应 ⇒ 为对齐 KG 的 `:CC_CAUSES`，ONTO 侧排除 linkKind=\"relates_to\"。这是**关系型集合**的对齐（结构），不是取值过滤（内容）。② 计数语义对齐 —— Neo4j 单条变长模式内**关系不得重复**（关系同构），SPARQL 无此约束 ⇒ ONTO 侧加两两 `FILTER(?li != ?lj)`。对齐后两侧均为 59 行 / 43 个端点对（逐深度 16/17/15/11）；未加该 FILTER 时 ONTO 为 67 行（差 8 条为链接复用）。证据见 tmp/_g23_shape_probe.py 的 E/F/G/H/P/Q 段。"
+      kg: |
+        MATCH (start:CC_FaultMode)-[:CC_CAUSES*1..4]->(down:CC_FaultMode)
+        RETURN start.fmCode AS startFmCode, down.fmCode AS downFmCode,
+               down.fmLayer AS downFmLayer, down.fmSeverity AS downFmSeverity
+      onto: |
+        SELECT ?startFmCode ?downFmCode ?downFmLayer ?downFmSeverity
+        WHERE {
+          GRAPH <{{TBOX}}> {
+            { ?l1 ccc:linkKind ?k1 . FILTER(?k1 != "relates_to") .
+              ?l1 ccc:cause ?start ; ccc:effect ?down }
+            UNION { ?l1 ccc:linkKind ?k1 . FILTER(?k1 != "relates_to") .
+                    ?l1 ccc:cause ?start ; ccc:effect ?m1 .
+                    ?l2 ccc:linkKind ?k2 . FILTER(?k2 != "relates_to") .
+                    ?l2 ccc:cause ?m1 ; ccc:effect ?down .
+                    FILTER(?l1 != ?l2) }
+            UNION { ?l1 ccc:linkKind ?k1 . FILTER(?k1 != "relates_to") .
+                    ?l1 ccc:cause ?start ; ccc:effect ?m1 .
+                    ?l2 ccc:linkKind ?k2 . FILTER(?k2 != "relates_to") .
+                    ?l2 ccc:cause ?m1 ; ccc:effect ?m2 .
+                    ?l3 ccc:linkKind ?k3 . FILTER(?k3 != "relates_to") .
+                    ?l3 ccc:cause ?m2 ; ccc:effect ?down .
+                    FILTER(?l1 != ?l2) FILTER(?l1 != ?l3) FILTER(?l2 != ?l3) }
+            UNION { ?l1 ccc:linkKind ?k1 . FILTER(?k1 != "relates_to") .
+                    ?l1 ccc:cause ?start ; ccc:effect ?m1 .
+                    ?l2 ccc:linkKind ?k2 . FILTER(?k2 != "relates_to") .
+                    ?l2 ccc:cause ?m1 ; ccc:effect ?m2 .
+                    ?l3 ccc:linkKind ?k3 . FILTER(?k3 != "relates_to") .
+                    ?l3 ccc:cause ?m2 ; ccc:effect ?m3 .
+                    ?l4 ccc:linkKind ?k4 . FILTER(?k4 != "relates_to") .
+                    ?l4 ccc:cause ?m3 ; ccc:effect ?down .
+                    FILTER(?l1 != ?l2) FILTER(?l1 != ?l3) FILTER(?l1 != ?l4)
+                    FILTER(?l2 != ?l3) FILTER(?l2 != ?l4) FILTER(?l3 != ?l4) }
+            ?start a ccf:FaultMode ; ccf:faultModeCode ?startFmCode .
+            ?down a ccf:FaultMode ; ccf:faultModeCode ?downFmCode ;
+                  ccf:faultLayer ?downFmLayer ; ccf:severity ?downFmSeverity .
+          }
+        }
+      declared_surface:
+        columns:
+          - canonical: FaultMode.fault_mode_code
+            kg: FaultMode.fault_mode_code
+            onto: FaultMode.fault_mode_code
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: FaultMode.layer
+            kg: FaultMode.layer
+            onto: FaultMode.layer
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: FaultMode.severity
+            kg: FaultMode.severity
+            onto: FaultMode.severity
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+        carrier_specific_columns: []
+    - id: Q04
+      title: 故障模式 → 上游溯因（限深 4，含否定性证据）
+      source: scheme1-kg/queries/q04-upstream.cypher
+      doc: docs/03-方案1设计（知识图谱+LLM）.md
+      graph: tbox
+      grep_scope: "FaultMode"
+      note: "方向与 Q03 相反（溯因）：KG `<-[:CC_CAUSES*1..4]-`；ONTO 侧 `?l ccc:cause ?up ; ccc:effect ?start`（因在前、果在后）。口径对齐同 Q03（linkKind != relates_to + 链接两两互异）⇒ 两侧均 59 行 / 43 个端点对。"
+      kg: |
+        MATCH (start:CC_FaultMode)<-[:CC_CAUSES*1..4]-(up:CC_FaultMode)
+        RETURN start.fmCode AS startFmCode, up.fmCode AS upFmCode,
+               up.fmLayer AS upFmLayer, up.fmSeverity AS upFmSeverity
+      onto: |
+        SELECT ?startFmCode ?upFmCode ?upFmLayer ?upFmSeverity
+        WHERE {
+          GRAPH <{{TBOX}}> {
+            { ?l1 ccc:linkKind ?k1 . FILTER(?k1 != "relates_to") .
+              ?l1 ccc:cause ?up ; ccc:effect ?start }
+            UNION { ?l1 ccc:linkKind ?k1 . FILTER(?k1 != "relates_to") .
+                    ?l1 ccc:cause ?up ; ccc:effect ?m1 .
+                    ?l2 ccc:linkKind ?k2 . FILTER(?k2 != "relates_to") .
+                    ?l2 ccc:cause ?m1 ; ccc:effect ?start .
+                    FILTER(?l1 != ?l2) }
+            UNION { ?l1 ccc:linkKind ?k1 . FILTER(?k1 != "relates_to") .
+                    ?l1 ccc:cause ?up ; ccc:effect ?m1 .
+                    ?l2 ccc:linkKind ?k2 . FILTER(?k2 != "relates_to") .
+                    ?l2 ccc:cause ?m1 ; ccc:effect ?m2 .
+                    ?l3 ccc:linkKind ?k3 . FILTER(?k3 != "relates_to") .
+                    ?l3 ccc:cause ?m2 ; ccc:effect ?start .
+                    FILTER(?l1 != ?l2) FILTER(?l1 != ?l3) FILTER(?l2 != ?l3) }
+            UNION { ?l1 ccc:linkKind ?k1 . FILTER(?k1 != "relates_to") .
+                    ?l1 ccc:cause ?up ; ccc:effect ?m1 .
+                    ?l2 ccc:linkKind ?k2 . FILTER(?k2 != "relates_to") .
+                    ?l2 ccc:cause ?m1 ; ccc:effect ?m2 .
+                    ?l3 ccc:linkKind ?k3 . FILTER(?k3 != "relates_to") .
+                    ?l3 ccc:cause ?m2 ; ccc:effect ?m3 .
+                    ?l4 ccc:linkKind ?k4 . FILTER(?k4 != "relates_to") .
+                    ?l4 ccc:cause ?m3 ; ccc:effect ?start .
+                    FILTER(?l1 != ?l2) FILTER(?l1 != ?l3) FILTER(?l1 != ?l4)
+                    FILTER(?l2 != ?l3) FILTER(?l2 != ?l4) FILTER(?l3 != ?l4) }
+            ?start a ccf:FaultMode ; ccf:faultModeCode ?startFmCode .
+            ?up a ccf:FaultMode ; ccf:faultModeCode ?upFmCode ;
+                ccf:faultLayer ?upFmLayer ; ccf:severity ?upFmSeverity .
+          }
+        }
+      declared_surface:
+        columns:
+          - canonical: FaultMode.fault_mode_code
+            kg: FaultMode.fault_mode_code
+            onto: FaultMode.fault_mode_code
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: FaultMode.layer
+            kg: FaultMode.layer
+            onto: FaultMode.layer
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: FaultMode.severity
+            kg: FaultMode.severity
+            onto: FaultMode.severity
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+        carrier_specific_columns: []
+    - id: Q05
+      title: 故障模式 → 受影响对象
+      source: scheme1-kg/queries/q05-affected.cypher
+      doc: docs/03-方案1设计（知识图谱+LLM）.md
+      graph: tbox
+      grep_scope: "FaultMode | AnyObject"
+      var_type_overrides:
+        kg:
+          obj: AnyObject
+      kg: |
+        MATCH (fm:CC_FaultMode)-[a:CC_AFFECTS]->(obj)
+        RETURN DISTINCT fm.fmCode AS fmCode, fm.fmSeverity AS fmSeverity,
+               obj.ccfType AS affectsComponentType, a.severity AS affectsSeverity
+      onto: |
+        SELECT ?fmCode ?fmSeverity ?affectsComponentType ?affectsSeverity
+        WHERE {
+          GRAPH <{{TBOX}}> {
+            ?fm a ccf:FaultMode ; ccf:faultModeCode ?fmCode ; ccf:severity ?fmSeverity ;
+                ccf:affectsSeverity ?affectsSeverity ; ccf:fmComponentType ?affectsComponentType ;
+                ccf:affects ?obj .
+          }
+        }
+      declared_surface:
+        columns:
+          - canonical: FaultMode.fault_mode_code
+            kg: FaultMode.fault_mode_code
+            onto: FaultMode.fault_mode_code
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: FaultMode.severity
+            kg: FaultMode.severity
+            onto: FaultMode.severity
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: AFFECTS.component_type
+            kg: AnyObject.neutral_type
+            onto: FaultMode.component_type
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §4.3（AFFECTS 边；门禁断言 T3：目标类型 = 其 fmComponentType）；docs/00-总体设计与裁决记录.md §6.3"
+            reason: "「受影响的组件类型」两侧都答得出来，但**载体位置**不同：KG 只能从被影响**实例**的 ccfType 读（LPG 的类只是标签、不是节点），ONTO 只能从**故障模式**个体的 ccf:fmComponentType 读（宾语是类）。真机取证：每个故障模式被影响实例的中性类型集合唯一且等于其 fmComponentType ⇒ KG 侧按类型码 RETURN DISTINCT 归一到 14 行，与 ONTO 的 14 个类同粒度。"
+            carrier_position: CP-AFFECTS
+          - canonical: AFFECTS.affects_severity
+            kg: AFFECTS.affects_severity
+            onto: FaultMode.affects_severity
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §4.3（AFFECTS 边；门禁断言 T3：目标类型 = 其 fmComponentType）；docs/00-总体设计与裁决记录.md §6.3"
+            reason: "严重度是**边属性**：LPG 的边可直接带属性，RDF 三元组不可 ⇒ ONTO 侧物化成故障模式个体属性 ccf:affectsSeverity（同一取值、两种载体位置）。"
+            carrier_position: CP-AFFECTS-SEVERITY
+        carrier_specific_columns: []
+    - id: Q06
+      title: 故障模式 → 判据指标与阈值
+      source: scheme1-kg/queries/q06-criteria.cypher
+      doc: docs/03-方案1设计（知识图谱+LLM）.md
+      graph: tbox
+      grep_scope: "FaultMode | Metric | Threshold"
+      note: "ONTO 侧阈值面用对象属性 ccf:jThreshold（判据→档位个体 ccm:WarningThreshold/CriticalThreshold，7+3=10）经 ccm:warningTier/ccm:criticalTier 连到 ccm:Threshold，并用 ccm:thresholdMetric ?m **钉到同一度量**（否则档位个体会跨度量匹配、行数爆炸：未钉时 ONTO 177 行 vs 钉后 23 行，KG 26 行 —— 证据 tmp/_g23_shape_probe.py 的 E11/E12/E13）；**不能**用字面量 ccf:jThresholdReference 去连 ccm:Threshold（它是字符串，恒 0 行 —— 这是本契约首版的真实缺陷，已改正）。度量面用 ccf:jMetric→ccm:Metric。两侧行数 26(KG) / 23(ONTO) 同 b4 档；阈值面绑定 10(KG) / 10(ONTO，E12)。ccf:jOperandRef / ccf:jOperandEntityProperty 经普查**不存在**，已从 neutral_extension 删除（ONTO 的对应物是 ccf:jThresholdReference，中性名同为 j_operand_ref）。"
+      kg: |
+        MATCH (fm:CC_FaultMode)-[j:CC_JUDGED_BY]->(m:CC_Metric)
+        OPTIONAL MATCH (th:CC_Threshold)
+        WHERE j.operandKind = 'threshold'
+          AND th.thrCode = replace(split(j.operandRef, '#')[0], 'threshold:', '')
+        RETURN fm.fmCode AS fmCode, m.metricCode AS metricCode, m.metricObject AS metricObject,
+               m.metricLayer AS metricLayer, m.metricUnit AS metricUnit, j.role AS jRole, j.op AS jOp,
+               j.operandKind AS jOperandKind, j.operandValue AS jOperandValue, j.operandRef AS jOperandRef,
+               th.thrCode AS thrCode, th.thrWarning AS thrWarning, th.thrCritical AS thrCritical
+      onto: |
+        SELECT ?fmCode ?metricCode ?metricObject ?metricLayer ?metricUnit ?jRole ?jOp
+               ?jOperandKind ?jOperandValue ?jOperandRef ?thrCode ?thrWarning ?thrCritical
+        WHERE {
+          GRAPH <{{TBOX}}> {
+            ?fm a ccf:FaultMode ; ccf:faultModeCode ?fmCode ; ccf:judgedBy ?j .
+            ?j a ccf:Judgment ; ccf:jRole ?jRole ; ccf:jMetric ?m .
+            ?m a ccm:Metric ; ccm:metricCode ?metricCode .
+            OPTIONAL { ?j ccf:jOp ?jOp }
+            OPTIONAL { ?j ccf:jOperandKind ?jOperandKind }
+            OPTIONAL { ?j ccf:jOperandValue ?jOperandValue }
+            OPTIONAL { ?j ccf:jThresholdReference ?jOperandRef }
+            OPTIONAL { ?m ccm:metricObjectType ?metricObject }
+            OPTIONAL { ?m ccm:metricLayer ?metricLayer }
+            OPTIONAL { ?m ccm:metricUnit ?metricUnit }
+            OPTIONAL { ?j ccf:jThreshold ?tier .
+                       ?th a ccm:Threshold ; ccm:thresholdName ?thrCode ; ccm:thresholdMetric ?m .
+                       OPTIONAL { ?th ccm:warningTier ?thrWarning }
+                       OPTIONAL { ?th ccm:criticalTier ?thrCritical }
+                       { ?th ccm:warningTier ?tier } UNION { ?th ccm:criticalTier ?tier } }
+          }
+        }
+      declared_surface:
+        columns:
+          - canonical: FaultMode.fault_mode_code
+            kg: FaultMode.fault_mode_code
+            onto: FaultMode.fault_mode_code
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: JUDGED_BY.j_op
+            kg: JUDGED_BY.j_op
+            onto: JUDGED_BY.j_op
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: JUDGED_BY.j_operand_kind
+            kg: JUDGED_BY.j_operand_kind
+            onto: JUDGED_BY.j_operand_kind
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: JUDGED_BY.j_operand_ref
+            kg: JUDGED_BY.j_operand_ref
+            onto: JUDGED_BY.j_operand_ref
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: JUDGED_BY.j_operand_value
+            kg: JUDGED_BY.j_operand_value
+            onto: JUDGED_BY.j_operand_value
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: JUDGED_BY.role
+            kg: JUDGED_BY.role
+            onto: JUDGED_BY.role
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: Metric.layer
+            kg: Metric.layer
+            onto: Metric.layer
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: Metric.metricCode
+            kg: Metric.metricCode
+            onto: Metric.metricCode
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: Metric.metric_object
+            kg: Metric.metric_object
+            onto: Metric.metric_object
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: Metric.unit
+            kg: Metric.unit
+            onto: Metric.unit
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: Threshold.threshold_code
+            kg: Threshold.threshold_code
+            onto: Threshold.threshold_code
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: Threshold.threshold_critical
+            kg: Threshold.threshold_critical
+            onto: Threshold.threshold_critical
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: Threshold.threshold_warning
+            kg: Threshold.threshold_warning
+            onto: Threshold.threshold_warning
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+        carrier_specific_columns: []
+    - id: Q07
+      title: 因果边属性批量取（契约内属性；概率/权重不在契约内）
+      source: scheme1-kg/queries/q07-edge-props.cypher
+      doc: docs/03-方案1设计（知识图谱+LLM）.md
+      graph: tbox
+      grep_scope: "FaultMode"
+      var_type_overrides:
+        kg:
+          r: CausalLink
+        onto:
+          l: CausalLink
+      note: "docs/03 §8 表格写「概率/权重/delay」，但唯一权威 shared/model/causal-edges.yaml 每条边只有 id/from/relation/to/chain/evidence/provenance（E6/E7/E9/E12 另有 condition）⇒ 本契约不返回 probability/weight/delaySec/learnCount/chainPosition。文档表格与契约自相矛盾，已登记在报告。属性对应（值级取证）：KG r.contractId ↔ ONTO cco:neutralCode（同为 E##）、KG r.chain ↔ ccc:chainCode（同为 F#）、KG r.description ↔ ccc:evidenceText（同文）、KG r.provenance ↔ ccc:provenance（字面量 vs IRI，形同值不同，值不参与比对）。本契约首版用的 ccc:provenanceEdgeId / ccc:description **不存在**、ccc:linkKind 语义是 causes/relates_to（≠ chain），均已改正。"
+      kg: |
+        MATCH (a:CC_FaultMode)-[r:CC_CAUSES|CC_RELATES_TO]->(b:CC_FaultMode)
+        RETURN a.fmCode AS fromFmCode, b.fmCode AS toFmCode, r.contractId AS edgeId,
+               r.chain AS chain, r.description AS description, r.provenance AS provenance
+      onto: |
+        SELECT ?fromFmCode ?toFmCode ?edgeId ?chain ?description ?provenance
+        WHERE {
+          GRAPH <{{TBOX}}> {
+            ?l a ccc:CausalLink ; ccc:cause ?a ; ccc:effect ?b .
+            ?a a ccf:FaultMode ; ccf:faultModeCode ?fromFmCode .
+            ?b a ccf:FaultMode ; ccf:faultModeCode ?toFmCode .
+            OPTIONAL { ?l cco:neutralCode ?edgeId }
+            OPTIONAL { ?l ccc:chainCode ?chain }
+            OPTIONAL { ?l ccc:evidenceText ?description }
+            OPTIONAL { ?l ccc:provenance ?provenance }
+          }
+        }
+      declared_surface:
+        columns:
+          - canonical: CausalLink.chain
+            kg: CausalLink.chain
+            onto: CausalLink.chain
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: CausalLink.description
+            kg: CausalLink.description
+            onto: CausalLink.description
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: CausalLink.edge_contract_id
+            kg: CausalLink.edge_contract_id
+            onto: CausalLink.edge_contract_id
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: CausalLink.provenance
+            kg: CausalLink.provenance
+            onto: CausalLink.provenance
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: FaultMode.fault_mode_code
+            kg: FaultMode.fault_mode_code
+            onto: FaultMode.fault_mode_code
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+        carrier_specific_columns: []
+    - id: Q08
+      title: 事实溯源（结论 → Evidence → 事实 id）
+      source: scheme1-kg/queries/q08-provenance.cypher
+      doc: docs/03-方案1设计（知识图谱+LLM）.md
+      graph: snapshot
+      grep_scope: "AnyObject | Evidence"
+      var_type_overrides:
+        kg:
+          fact: AnyObject
+        onto:
+          fact: AnyObject
+      note: "source 的头注释称「本体侧不写实例」，但真机实测 ONTO 快照图有 191 个 cc:Evidence 个体（与 KG 的 191 个 CC_Evidence 一致）⇒ 该注释已过时，如实登记。"
+      kg: |
+        MATCH (fact)-[h:CC_HAS_EVIDENCE]->(ev:CC_Evidence)
+        RETURN fact.ccfId AS factId, fact.ccfLayer AS factLayer, h.ccfRelId AS evidenceRelId,
+               ev.recordId AS recordId, ev.metricCode AS metricCode, ev.rawValue AS rawValue,
+               ev.rawUnit AS rawUnit, ev.status AS status, ev.probe AS probe, ev.capturedAt AS capturedAt
+      onto: |
+        SELECT ?factId ?factLayer ?recordId ?metricCode ?rawValue ?rawUnit ?status ?probe ?capturedAt
+        WHERE {
+          GRAPH <{{GRAPH}}> {
+            ?fact cc:hasEvidence ?ev .
+            ?ev a cc:Evidence ; cc:recordId ?recordId ; cc:metricCode ?metricCode ;
+                cc:status ?status ; cc:probe ?probe ; cc:capturedAt ?capturedAt .
+            OPTIONAL { ?fact cc:ccfId ?factId }
+            OPTIONAL { ?fact cc:ccfLayer ?factLayer }
+            OPTIONAL { ?ev cc:rawValue ?rawValue }
+            OPTIONAL { ?ev cc:rawUnit ?rawUnit }
+          }
+        }
+
+      declared_surface:
+        columns:
+          - canonical: AnyObject.instance_id
+            kg: AnyObject.instance_id
+            onto: AnyObject.instance_id
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: AnyObject.layer
+            kg: AnyObject.layer
+            onto: AnyObject.layer
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: Evidence.capturedAt
+            kg: Evidence.capturedAt
+            onto: Evidence.capturedAt
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: Evidence.metricCode
+            kg: Evidence.metricCode
+            onto: Evidence.metricCode
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: Evidence.probe
+            kg: Evidence.probe
+            onto: Evidence.probe
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: Evidence.rawUnit
+            kg: Evidence.rawUnit
+            onto: Evidence.rawUnit
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: Evidence.rawValue
+            kg: Evidence.rawValue
+            onto: Evidence.rawValue
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: Evidence.recordId
+            kg: Evidence.recordId
+            onto: Evidence.recordId
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+          - canonical: Evidence.status
+            kg: Evidence.status
+            onto: Evidence.status
+            source: "docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）"
+        carrier_specific_columns:
+          - token: HAS_EVIDENCE.relation_id
+            side: kg
+            reason: "关系身份键 ccfRelId 是 LPG 边属性的直接产物（type-map#common_properties：kg 有 relation_id、onto 没有）⇒ KG 侧多一列；ONTO 侧该信息由**节点级** cc:Evidence.recordId 承担 ⇒ 本列声明为 KG 侧 carrier_specific，不计入声明面比对，但两侧行数仍须一致。"
+            source: "shared/mapping/type-map.yaml #common_properties（kg 有 relation_id、onto 无）；docs/03-方案1设计（知识图谱+LLM）.md §8（查询模式集）；docs/04-方案2设计（本体+LLM）.md §2（cc:Evidence.recordId = CCF 记录 id）"
+            carrier_position: CP-HAS-EVIDENCE
+# -----------------------------------------------------------------------------
+# 关系粒度层（G23-02）：不在此枚举，由 sources.rel_map#relations 的 asserted: true 驱动
+# -----------------------------------------------------------------------------
+relation_layer:
+  driven_by: shared/mapping/rel-map.yaml
+  filter: "relations[*].asserted == true"
+  expected_count: 14
+  boundary: "值等 → G22（shared/verify/abox_identity_gate.py 的 G22-07 / G22-08 已按 key_attrs 比对边身份集）；形等 → G23（本节）。G23 **不**比对端点身份键的取值。"
+  kg_query_template: "MATCH (a:<kg_from_label>)-[:<kg_reltype>]->(b:<kg_to_label>) RETURN a.<kg_instance_id> AS fromId, a.<kg_layer> AS fromLayer, b.<kg_instance_id> AS toId, b.<kg_layer> AS toLayer"
+  onto_query_template: "SELECT ?fromId ?fromLayer ?toId ?toLayer WHERE { GRAPH <{{GRAPH}}> { ?a <onto_property> ?b . OPTIONAL { ?a <onto_id> ?fromId } OPTIONAL { ?a <onto_layer> ?fromLayer } OPTIONAL { ?b <onto_id> ?toId } OPTIONAL { ?b <onto_layer> ?toLayer } } }"
+  star_type_note: "from == \"*\" 的关系型（rel-map 里 HAS_EVIDENCE 派生、asserted: false）不参与 G23-02。"
+
+# -----------------------------------------------------------------------------
+# 扩展位（B3）：M5 的 50 条正式评测用例集落地时的接入点（G23 不自己发明）
+# -----------------------------------------------------------------------------
+extensions:
+  fifty_case_slot:
+    status: "reserved"
+    reason: "M5 交付 50 条正式评测用例集（受 docs/06 §9 的 U-D 用例规模裁决阻塞）。G23 **不**自行发明。"
+    case_entry_keys: ["id", "title", "source", "doc", "graph", "grep_scope", "params", "var_type_overrides", "kg", "onto", "note", "declared_surface"]
+    case_entry_required: ["id", "kg", "onto", "declared_surface"]
+    graph_allowed_values: ["snapshot", "tbox"]
+    id_convention: "M5 用例沿用既有 Q* 命名空间时从 Q09 起顺序编号；若另立评测用例集，id 需唯一且不与 Q01–Q08 冲突。"
+    min_cases_interaction: "接入后应把 --min-cases 提到 ≥50（否则 G23-03 的反恒真下限失效）；提升是命令行参数，不需改本契约。"

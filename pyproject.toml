@@ -1,0 +1,136 @@
+# =============================================================================
+# pyproject.toml —— 项目元数据 + 离线档 pytest 配置
+#
+# 本文件是**开源导出树**的元数据载体，只做两件事：
+#   ① 声明依赖分组（全部落在 optional-dependencies，见文件末尾的分组说明）；
+#   ② 承载 pytest 配置（见 [tool.pytest.ini_options] 的注释，那里解释了为什么
+#      必须从默认收集里排除两个在线测试文件）。
+#
+# ★ 为什么依赖挂在 extras 而不是 [project].dependencies：
+#   本仓库没有可安装的包结构（顶层是 shared/ scheme1-kg/ scheme2-onto/ deploy/
+#   ci/ 这类目录，不是 importable package），CI 与使用者都是**按模块名**安装第三方库，
+#   从不 `pip install` 本仓库自身。因此 `dependencies = []`，真实依赖清单放在
+#   extras 里，与 .github/workflows/ci.yml 的安装行一一对应。
+# =============================================================================
+
+[project]
+name = "credit-card-sys-ops"
+version = "0.1.0"
+description = """
+信贷卡片运维知识系统（离线部分）：方案1（知识图谱 + LLM 工具面）与方案2（本体 +
+SHACL/CQ 探针）双载体，共享离线门禁注册表、证据文件校验与发布一致性自检。
+"""
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+requires-python = ">=3.12"
+keywords = [
+  "knowledge-graph", "ontology", "neo4j", "graphdb",
+  "root-cause-analysis", "offline-gates", "shacl", "cypher",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Database :: Database Engines/Servers",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+# 空：本仓库不作为可安装包使用；运行期依赖见下方 extras（见文件头 ★）。
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/songchunyao/credit-card-sys-ops"
+Repository = "https://github.com/songchunyao/credit-card-sys-ops.git"
+Issues = "https://github.com/songchunyao/credit-card-sys-ops/issues"
+Changelog = "https://github.com/songchunyao/credit-card-sys-ops/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+# -----------------------------------------------------------------------------
+# core —— 离线档（20 个 class: offline 门禁 + 服务 selftest + 单测）实测所需。
+#   清单由 import 扫描得出（对 gate_runner 声明的门禁脚本、9 个 --selftest 入口、
+#   以及被收集的测试文件做 import 提取），非推测。
+# -----------------------------------------------------------------------------
+core = [
+  "PyYAML>=6",        # 读 shared/model/*.yaml（门禁注册表、纯度契约、findings 等）
+  "rdflib>=7",        # 方案2：Turtle 解析、SHACL 与一致性检查
+  "fastapi>=0.110",   # 三个知识服务（cc_tools / cc_tools_kgt / cc_tools_onto）的工具面
+  "starlette>=0.36",  #   └ 其 TestClient 是 cc_tools* --selftest 的驱动方式
+  "pydantic>=2",
+  "uvicorn>=0.27",
+  "httpx>=0.27",
+  "requests>=2",
+  "paramiko>=3",      # m5_run / e2e_smoke 的 SSH 平面（离线档只用其 import）
+  "jsonschema>=4",    # 工具面契约的 JSON Schema 校验
+  "neo4j>=5",         # 方案1 只读 Bolt 驱动（离线门禁不连库，真机测试才用）
+]
+
+# 测试运行器单独一组，便于 `pip install ".[core,test]"` 一把装齐。
+test = ["pytest>=8"]
+
+# -----------------------------------------------------------------------------
+# gaussdb —— ★ bring your own（自备驱动）★
+#   采集层（shared/collect/）走的是内部异步驱动 `async_gaussdb`，它**不随本导出树
+#   发布**，PyPI 上也不存在同名公开包。这里只登记"需要它"这一事实：
+#   · 想跑 gaussdb 采集路径，请自备一个接口兼容的驱动，并让它以 `async_gaussdb`
+#     为模块名可被 import；
+#   · 未自备时，相关采集/门禁会判 **BLOCKED**（本项目的三态纪律：缺资产一律
+#     BLOCKED，绝不当 PASS）。
+#   因此**不要**在 CI 里无条件 `pip install ".[gaussdb]"`——它会因找不到分发而失败。
+# -----------------------------------------------------------------------------
+gaussdb = [
+  "async_gaussdb",  # not on PyPI —— bring your own implementation of this driver
+]
+
+# =============================================================================
+# pytest 配置
+# =============================================================================
+[tool.pytest.ini_options]
+minversion = "8.0"
+
+# 默认只收集离线可判定范围：通用静态测试 + 方案1/方案2 的服务级单测。
+# （名字显式列出，不靠 rootdir 递归 —— 顶层还有 fi-e2e/、deploy/、ci/ 等目录，
+#   它们里面的 *.py 不是单测。）
+testpaths = ["tests", "scheme1-kg/tests", "scheme2-onto/tests"]
+
+# ── ★ why each exclusion exists ★ ────────────────────────────────────────────
+# 下面两个文件是**在线**测试（要求活的 Neo4j / GraphDB），必须从默认收集里排除，
+# 否则新人第一次 `pytest` 会看到与"测试"无关的崩溃：
+#
+#  ① scheme1-kg/tests/test_integrity.py
+#     它在 **import 期**（文件第 36 行）就执行 fail-closed 断言：
+#       PWD = os.environ.get("CC_NEO4J_PASSWORD") or sys.exit("★ 缺少环境变量 …")
+#     没有口令时 `sys.exit` 在**收集阶段**抛出 SystemExit ⇒ pytest 直接
+#     INTERNALERROR，整轮收集连其它文件一起崩掉，退出码 3。
+#     实测（Python 3.14 + pytest 9.1.1，在本导出树根目录）：
+#       $ python -m pytest -q
+#       INTERNALERROR> SystemExit: ★ 缺少环境变量 CC_NEO4J_PASSWORD：fail-closed…
+#       no tests ran in 2.66s          → exit 3
+#     这是"缺真机凭据"，不是"测试写得不对"——对新人而言是纯噪音。
+#
+#  ② scheme2-onto/tests/test_integrity.py
+#     它是**脚本式**测试：0 个 `def test_`，末尾才是
+#       if __name__ == "__main__": sys.exit(main())
+#     被 pytest 收集时结果是退出码 5（no tests ran）；直接当脚本跑则要求活的
+#     GraphDB（CC_GRAPHDB_URL）与真机 ABox。与 ① 同类：在线档资产。
+#
+# ★ 为什么用 `--ignore` 而不是 marker（`-m "not live"`）或 `--deselect`：
+#   两者都在**收集之后**才生效，而 ① 的退出发生在**import 之时**——文件刚被导入
+#   进程就 SystemExit 了，pytest 还没来得及读取任何 marker/节点 id。
+#   只有 `--ignore`（收集前就整条路径跳过）能挡住它；`-k` 同理挡不住。
+#
+# ★ 在线档怎么跑（缺凭据时 fail-closed，不会静默通过）：
+#   CC_NEO4J_PASSWORD=...      python scheme1-kg/tests/test_integrity.py
+#   CC_GRAPHDB_URL=http://...  python scheme2-onto/tests/test_integrity.py
+#   （两者都是脚本式：退出码 0 = PASS / 1 = FAIL / 2 = BLOCKED，不经 pytest。）
+addopts = [
+  "-q",
+  "--ignore=scheme1-kg/tests/test_integrity.py",
+  "--ignore=scheme2-onto/tests/test_integrity.py",
+]
+
+# 为在线档留一个 marker 定义（文档用途；真正的排除靠上面的 --ignore）。
+markers = [
+  "live: 需要真机（Neo4j / GraphDB / Dify）与凭据；默认不收集",
+]

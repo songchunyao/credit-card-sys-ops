@@ -1,0 +1,955 @@
+# =============================================================================
+# shared/model/tools-setb.yaml
+#   「Set B」7 工具面契约 —— 硬约束 C3（信息可及性对齐）在**实现级**的机械依据
+#   门禁 G24：shared/verify/toolset_parity_gate.py
+# -----------------------------------------------------------------------------
+# 为什么需要这份契约
+#   硬约束 C3（docs/00-总体设计与裁决记录.md §3.1，★ v1.4 重述）要求：**同一对照对
+#   内部**的工具面（工具名 / 入参 / 出参 schema）必须**逐字一致**，否则「同一用例 +
+#   同一环境」的公平性不成立，L1/L2/L3 三条对比线的结论全部不可采信。
+#   此前 C3/P7 只有契约级检查（门禁 G8 读 shared/model/info-products.yaml 比对工具
+#   **名列表**），**没有实现级的执行点**：两侧服务各自实现这 7 个端点时，参数名差一个
+#   字符、必填性不同、返回字段名不同，都不会有任何门禁变红。本契约 + G24 补上这一点。
+#
+# 射程（★ 不得外扩）
+#   只覆盖**同一对照对内部**：KG-Q↔ONTO-Q、KG-R↔ONTO-R。
+#   跨组（KG-T / KG-T-dyn / KG-T-free / BASE）**不适用** —— 这是 C3 v1.4 重述的结果
+#   （KG-T 直读结构、没有查询工具，工具面必然不同），不是本契约的疏漏。
+#
+# 诚实边界（★ 逐条读；写报告时不许摘要掉）
+#   HB1  G24 只证明两侧**声明的**工具面一致；**不证明**行为/语义一致（行为一致性属 M4/M5
+#        的实测）。
+#   HB2  manifest 的 sourceSha256 只证明「该清单出自该实现文件的当前版本」；**不证明**
+#        该文件真的实现了清单内容（那需要 M3.2/M3.3 的自证，另议）。
+#   HB3  契约里 carrier_specific / c3_participation: excluded 的项越多，C3 的可比性越弱。
+#        本契约把每一项逐条列出并计数（见 g24.boundary_counts），由 G24 每次运行时打印。
+#   HB4  source_documents 只写**文档路径 + §号，不写行号**（行号是移动靶，本项目已因此
+#        连踩两次）。
+#   HB5  7 个工具中**只有 cc_query 的参数类型**在文档里逐字给出（docs/05 §2.1）；其余参数
+#        类型与**全部**返回字段名在文档中只有散文描述（docs/03 §7.1「返回」列）⇒ 本契约
+#        按 docs/05 §2.2 的写法纪律 + 同族先例（shared/model/kgt-tools.yaml 的
+#        request/response 体例；docs/09 §3 的 {nodes, edges, truncated, hopsUsed}）**自拟**，
+#        并逐项标注 basis 与 authored: true。自拟项一律登记在 conflicts_for_captain /
+#        open_questions，交队长裁决；不得当成「文档已规定」。
+#   HB6  本文件是**数据**，不是生成器（纪律同 docs/00 裁决 3）：门禁只读它，不在代码里写死
+#        任何载体专有词表（词表也住在本文件里）。
+#   HB7  比对只覆盖**顶层**返回字段名 + 参数 (name, type, required)；数组项内部的字段名
+#        （item_fields）是**参考性声明**，暂不参与 G24 比对（见 open_questions OQ-4）。
+#   HB8  本文件按**队长裁定**住在 shared/model/（与 shared/model/kgt-tools.yaml 同族体例）。
+#        ★ 代价：它因此会被 G18(contract_gates) 与 G20(ref_gate) 的**目录级**扫描摄入 ⇒
+#        交付前必须复跑这两道门禁，逐字 RESULT 行写进 tmp/_m31_report.md（见 CF-9）。
+# =============================================================================
+
+meta:
+  contract: tools-setb
+  version: "1.0.1"
+  date: "2026-09-29"
+  date_basis: "本机时钟（Get-Date → 2026-09-29 00:50 +08:00）"
+  owner_task: "M3.1"
+  artifact: "shared/model/tools-setb.yaml"
+  gate: "G24"
+  gate_impl: "shared/verify/toolset_parity_gate.py"
+  gate_number_note: "G1–G22 已注册；G23 由同期在途的 shared/verify/answer_shape_gate.py 占用（M2.22）⇒ 本任务取 G24。把 G24 与本文件登记进 docs/07-实施计划与验收.md §7 / §12 属队长活（本任务禁改 docs/）。"
+  owner_doc: "docs/05-编排层设计（Dify）.md"
+  related:
+    - "docs/00-总体设计与裁决记录.md §3.1 C3（信息可及性对齐，★ v1.4 重述）"
+    - "docs/00-总体设计与裁决记录.md §3.1 C5（事实有据）"
+    - "docs/00-总体设计与裁决记录.md §3.1 C6（载荷冻结）"
+    - "docs/00-总体设计与裁决记录.md §7.2 工具面（v1.4：按 C3 不再要求跨组逐字相同）"
+    - "docs/06-评测设计（A-B对照）.md §4 P7（同一对照对内部工具名/入参/出参 schema 逐字一致）"
+    - "docs/06-评测设计（A-B对照）.md §6 G8（信息可及性对齐，既有门禁）"
+    - "shared/model/info-products.yaml#access / #excluded_from_parity"
+    - "shared/model/kgt-tools.yaml 全文（机器可读工具契约的**体例先例**，只读，不得改）"
+  source_documents:
+    - doc: "docs/05-编排层设计（Dify）.md"
+      section: "§2 / §2.1 工具清单"
+      what: "7 个工具的 tool_name / method / path / request.properties / required 的**逐字**来源；★ §2.1 后注：入参名必须叫 query（不得叫 cypher / sparql）"
+    - doc: "docs/05-编排层设计（Dify）.md"
+      section: "§2.2 每个工具的 description 是主要提示面"
+      what: "description 写法纪律（说做什么不说怎么做 / 写边界 / 写失败提示）；两个实验组的 description 必须逐字相同（F0 检查项）"
+    - doc: "docs/05-编排层设计（Dify）.md"
+      section: "§2.3 / §2.4"
+      what: "★ FIX-1 更正：旧稿此处写『Dify 硬约束：properties 不能为空（无参工具注入 _unused 占位）』——该前提**已被证伪**（现网已有 6 个真零参工具，parameters==[]），且 _unused 系**本项目自造**、并非 Dify 侧注入，已于 FIX-1 从注册面移除；仍成立的部分：required 只保留存在于 properties 的键；credentials.auth_type 必须 none"
+    - doc: "docs/05-编排层设计（Dify）.md"
+      section: "§1.3 F0–F5 / §5.2 禁用词表"
+      what: "同对内部 description 逐字相同；禁用词正则（本契约把它用作契约自检 X-DESC-BANNED）"
+    - doc: "docs/05-编排层设计（Dify）.md"
+      section: "§6.4 失败模式与处理"
+      what: "契约门禁 C1（熔断指令不得泄漏进返回体）/ C4（空结果必须带 hint）/ C6（静默截断必须回传丢弃量）；有界返回 200 行 / 20000 B；TOKEN_BUDGET=20000；未识别参数一律显式报错不回落"
+    - doc: "docs/03-方案1设计（知识图谱+LLM）.md"
+      section: "§7.1 工具面"
+      what: "KG 侧每个工具的入参与返回物散文、maxHops 上限（cc_trace ≤ 9、cc_cause ≤ 4）、cc_propose 强制 dry_run"
+    - doc: "docs/03-方案1设计（知识图谱+LLM）.md"
+      section: "§7.2 只读守卫 G1–G10"
+      what: "KG 侧守卫词表与行为（G2 的 FORBIDDEN 正则逐字）、G3 单语句、G5/G6 上限、G7 强制 LIMIT、G8 CAUSES 深度 ≤ 4、G9 禁 apoc.load.*/apoc.import.*、G10 审计三字段"
+    - doc: "docs/03-方案1设计（知识图谱+LLM）.md"
+      section: "§7.3 超时修正"
+      what: "★ G4 的**权威值 = 4 s**（§7.2 表内的 8 s 已被 §7.3 正文修正：8 s 会被 Dify 的 ssrf 5 s 先掐断，掩盖真实原因）"
+    - doc: "docs/03-方案1设计（知识图谱+LLM）.md"
+      section: "§7.4 载荷爆炸实测"
+      what: "run_rules 5,307,133 B ≈ 1,516,323 tokens 等实测；超限记账并截断，回传 droppedRows / droppedBytes"
+    - doc: "docs/04-方案2设计（本体+LLM）.md"
+      section: "§7 / §7.1 SPARQL 版守卫表"
+      what: "ONTO 侧工具面与方案1 逐字相同（唯一差别是 cc_query 内部接收的语法族）；ONTO 侧守卫 G1–G10 与词表；★ 表下注：G4 是与方案1 最不对称的一条护栏"
+    - doc: "docs/00-总体设计与裁决记录.md"
+      section: "§3.1 C3 / C5 / C6"
+      what: "硬约束 C3（信息可及性对齐，v1.4 重述）、C5（事实有据：结论必须追溯到 CCF 记录 id）、C6（载荷冻结）"
+    - doc: "docs/06-评测设计（A-B对照）.md"
+      section: "§4 P7 / §6 G8"
+      what: "P7 = 同一对照对内部工具名/入参/出参 schema 逐字一致；G8 = 信息可及性对齐（现有实现 shared/verify/g8_info_parity.py 比对的是工具**名列表**）"
+    - doc: "shared/model/info-products.yaml"
+      section: "#access.<arm>.tools / #excluded_from_parity"
+      what: "KG-Q/ONTO-Q/KG-R/ONTO-R 四组的工具名集合（★ R-52：Q 两组逐字等于本契约工具集（8 个）；R 两组 = 该集合**去掉 cc_query**（7 个），并在 #access.<arm>.tools_removed_from_setb 逐条登记）；★ 既有裁决：载体原生查询语言（Cypher / SPARQL）本身**不参与对齐**，因为它正是被测变量"
+    - doc: "shared/model/kgt-tools.yaml"
+      section: "全文（体例先例，只读）"
+      what: "forbidden_implementations / 端点 / 冻结规格的写法；request{type,properties,required} 与 response{item_fields} 的体例"
+  honest_boundaries:
+    - "HB1 G24 只证明两侧**声明的**工具面一致，不证明行为/语义一致（行为一致性属 M4/M5 实测）。"
+    - "HB2 manifest 的 sourceSha256 只证明「清单出自该文件当前版本」，不证明该文件真的实现了清单（需 M3.2/M3.3 自证）。"
+    - "HB3 载体特有 / 排除项越多，C3 可比性越弱；本契约逐条列出并由 G24 每次打印计数。"
+    - "HB4 source_documents 只给文档路径 + §号，不给行号。"
+    - "HB5 6/7 个工具的返回字段名与 6/7 个工具的参数类型为**本契约自拟**（文档只有散文），逐项 authored: true。"
+    - "HB6 本文件是数据不是生成器；门禁不得在代码里写死载体专有词表。"
+    - "HB7 只比对顶层返回字段名；数组项内部字段名（item_fields）仅供参考，未纳入比对（OQ-4）。"
+    - "HB8 本文件按**队长裁定**住在 shared/model/ 下（与 shared/model/kgt-tools.yaml 同族体例）⇒ **会被** G18（contract_gates.py 对 os.listdir(MODEL) 每个 *.yaml 跑 FM- 正则）与 G20（ref_gate.py 无条件扫 shared/model/*.yaml 的路径引用）的**目录级扫描**摄入；代价与复跑结论见 CF-9 的 captain_ruling 与交付报告。"
+
+c3:
+  statement_v14: "逐字（docs/00-总体设计与裁决记录.md §3.1 C3）：『**信息可及性对齐**（★ v1.4 重述，原为「工具名逐字相同」）：各组必须能拿到**同一集合的信息产品**（对象拓扑 / 故障因果 / 指标读数 / 原始事实 / 用例查询），**差异只在封装与调用方式**』；同格补充：『「逐字相同」仍严格适用于**同一对照对内部**（如 KG-Q vs ONTO-Q）。机械依据 = shared/model/info-products.yaml，门禁 G8』"
+  what_g24_adds: "C3 在**实现级**的执行点：契约级 G8 只比对工具**名列表**（shared/verify/g8_info_parity.py 断言同对 tools 列表逐字相同），不覆盖「同一个工具名之下，两侧的参数名/类型/必填性与返回字段名是否真的逐字相同」。G24 补齐这一段，且数据源必须是**从实现生成的 manifest**（手写清单可伪造，一律不接受）。"
+  disambiguation: "★ 本节键名 `c3` 指**硬约束 C3（工具面同一性 / 信息可及性对齐）**，是本契约所服务的约束编号；它与门禁编号（G8/G24）、与 docs/05 §6.4 里那个自称『契约 C3』的**未识别参数不得回落**条目**均无关**。三者同字不同物，禁止互相引用为同一件事（CF-6）。"
+  scope_pairs:
+    - ["KG-Q", "ONTO-Q"]
+    - ["KG-R", "ONTO-R"]
+  scope_excluded_arms: ["KG-T", "KG-T-dyn", "KG-T-free", "BASE"]
+  scope_excluded_reason: "C3 v1.4 重述后跨组只要求「信息可及性对齐」（由 G8 管）；KG-T 直读结构、没有查询工具，工具面必然不同；BASE 只有 read_facts。"
+  what_is_compared: "工具名集合、每个工具的参数 (name, type, required) 三元组、每个工具的**顶层**返回字段名集合；取值/行为/语义**不在**比对范围。"
+  what_is_not_compared: "工具返回的**取值**与**语义**（正是被测变量：载体原生查询语言与表达力差异，shared/model/info-products.yaml#excluded_from_parity 已裁决不参与对齐）；服务端口与 URL（由共享注册表的 server_url 承担）。★ FIX-1 更正：旧稿此处还列有『Dify 侧注入的 _unused 占位符』——该占位符**系本项目自造**（并非 Dify 注入），已于 FIX-1 移除，故现无任何需要排除的占位符。"
+  upstream_gate: "G8"
+  upstream_gate_impl: "shared/verify/g8_info_parity.py"
+  division_of_labour: "G8 = 契约级（info-products.yaml 的工具名列表 + 可达路径）；G24 = 实现级（两侧 manifest 的参数/返回面逐字比对）。两者不得互相替代，也不得重复计分：G24 不重复声明工具集来源之外的列表比对。"
+  tool_name_set_authority: "★ R-52（2026-10-07）口径：本契约 tools 的键集合（8 个）必须逐字等于 shared/model/info-products.yaml#access 中 **KG-Q / ONTO-Q** 两组的 tools 列表；**KG-R / ONTO-R** 两组必须逐字等于「该集合 − access.<arm>.tools_removed_from_setb」（当前 = 去掉 cc_query，7 个）。三条断言缺一不可（fail-closed）：① Q 两组 == 本契约全集；② R 两组 == 全集 − 各自声明的移除集；③ `tools ∪ tools_removed_from_setb` 恰等于本契约全集。未声明 `tools_removed_from_setb` 时按空集处理 ⇒ ② 会以「R 组 != 全集」失败，不会静默放行。G24 在契约自检里按此三条核对（读的是同一份 info-products.yaml）。"
+  # ★ R-52：允许「规则臂」从 Set B 全集中移除的工具**白名单**（声明驱动，门禁不得硬编码工具名 —— HB6）。
+  #   语义：只有「查询语言专用」的工具可以被规则臂移除，因为 R 臂的定义就是「不写查询」。
+  #   门禁行为：R 臂声明的 tools_removed_from_setb 必须 ⊆ 本键；本键缺失 ⇒ ERROR（fail-closed），
+  #   不得回落成「任意移除都放行」。
+  rule_arm_removable_tools: [cc_query]
+  rule_arm_removable_reason: "★ R-52：R 臂（KG-R/ONTO-R）= 「LLM 不写查询、由确定性组件收敛」⇒ 唯一应当移除的能力是查询语言入口 cc_query。移除它是**结构性强制**（模型物理上拿不到该工具），而不是靠提示词自觉；防的是「R 臂模型自行写查询 ⇒ 静默退化成 KG-Q」。任何**其他**工具的移除都必须先回到本键显式登记 + 一条裁决，否则 G24-10 判 ERROR。"
+
+return_envelope:
+  rationale: "契约门禁 C4/C6（docs/05-编排层设计（Dify）.md §6.4）要求**所有**工具返回有界、空结果必须可判、截断必须回传丢弃量 ⇒ 这 4 个字段对 8 个工具**一律适用**，与载体无关，因此抽成公共信封，避免在每个工具里重复声明（也避免两侧各写一套而漂移）。"
+  applies_to: "all_tools"
+  manifest_rule: "★ G24 口径：manifest 的**每一条** tools[] 项的 returns 必须包含下面这 4 个信封字段名（信封对 8 个工具一律适用）；缺任一 ⇒ G24-05 ERROR。契约侧由 G24 自动把这 4 个字段并入**每个**工具的比对面，manifest 侧必须**显式**逐一声明（否则两侧声明面不可比）。"
+  fields:
+    - name: hint
+      type: string
+      semantics: "无结果或无法作答时的提示文本（说明可能原因），用于避免模型把空结果误判为正常"
+      c3_participation: compared
+      basis: "docs/05-编排层设计（Dify）.md §2.2「写失败时的提示：写『无结果时返回 hint 字段说明可能原因』（对应契约门禁 C4）」+ §6.4「空结果误判为正常」行"
+      authored: false
+    - name: truncated
+      type: boolean
+      semantics: "本次返回是否发生了截断（行数或字节数任一超限即为 true）"
+      c3_participation: compared
+      basis: "docs/03-方案1设计（知识图谱+LLM）.md §7.1 cc_query 返回列逐字 {rows, truncated, rowCount}；docs/05 §2.2「最多返回 200 行，超出会被截断」"
+      authored: false
+    - name: droppedRows
+      type: integer
+      semantics: "因行上限被丢弃的行数（未截断时 0）"
+      c3_participation: compared
+      basis: "docs/05-编排层设计（Dify）.md §6.4「载荷爆炸」行（契约 C6：超限截断并回传 droppedRows/droppedBytes）+ §2.2"
+      authored: false
+    - name: droppedBytes
+      type: integer
+      semantics: "因字节上限被丢弃的字节数（未截断时 0）"
+      c3_participation: compared
+      basis: "docs/05-编排层设计（Dify）.md §6.4「载荷爆炸」行（契约 C6）"
+      authored: false
+
+bounds:
+  row_cap: 200
+  byte_cap: 20000
+  token_budget: 20000
+  # ────────────────────────────────────────────────────────────────────────
+  # ★ P1（2026-10-14）：**元数据端点独立字节上限**。
+  #   背景（实测）：`cc_guide` 原始载荷 22,920 B > byte_cap 20,000 ⇒ 截断丢掉 11 个条目，
+  #   **恰好是全部 `host.*` 指标**（字典序最后）。Agent 因此不知道 Host 承载哪些指标，
+  #   无法聚焦主机层，只能退化为逐个对象类型穷举 `cc_facts`（17 类 ≈ 31,938 tokens/趟），
+  #   最终撞满 max_iteration（实测 7–10/50 例因预算耗尽返回 500、无最终答案）。
+  #   口径：**元数据是「能做聚焦」的前提，体积小、缺了代价极大** ⇒ 与数据面分离预算；
+  #   数据面（cc_facts / cc_query / cc_cause / …）维持 byte_cap=20000 的载荷纪律**不变**。
+  #   注意：上限只负责「给足空间」；**完整性由门禁断言**（服务返回的目录必须等于图里的实体数）。
+  # ────────────────────────────────────────────────────────────────────────
+  metadata_byte_cap: 65536
+  #: ★ /schema 实测被 ROW_CAP=200 砍掉 57 行 attributes ⇒ 目录不完整；
+  #:   与字节上限同理，元数据的完整性优先于行数纪律。
+  metadata_row_cap: 600
+  metadata_tools: [cc_guide, cc_schema]
+  metadata_basis: >-
+    ★ P1（2026-10-14）新增。依据：① docs/05 §6.4 的载荷纪律针对的是**数据面**（「载荷爆炸」），
+    元数据目录与之不同源；② 参考实现的分层职责是「数据面收口为有界端点、元数据不设严苛上限」；
+    ③ 实测证据见上（guide 22,920 B 被截断丢掉全部 host.* 指标 ⇒ Agent 失去聚焦能力 ⇒
+    逐对象穷举 17 类）。两侧实现必须以同一常量落地（`byte_cap_for(tool)`），
+    并在 `/health` 如实回传 metadataByteCap / metadataTools（可观测、不静默）。
+  metadata_completeness_gate: >-
+    上限不是完整性保障：另需门禁断言「/guide 返回的 metricCode 集合 == 图中 CC_Metric 全集」
+    与「/schema 返回的 objectType 集合 == 图中实际对象类型全集」，任一缺项即 FAIL。
+  # ────────────────────────────────────────────────────────────────────────
+  # ★ P2c（2026-10-14）：**`cc_cause` 单列字节预算**。
+  #   契约本文件 `rankBasis` ⑥ 明写「**并列全部返回**，不合并为单一分数」
+  #   —— 候选集必须完整。但 `bounds.byte_cap=20000` 与它**直接冲突**：
+  #   `Ledger.cap_bytes()` 是**从列表尾部 pop**，于是实测（`FM-APP-POOL-EXHAUSTED`，
+  #   maxHops=4）原始 31,913 B 被砍到 20,000 B ⇒ **丢 9 个候选**；
+  #   `FM-APP-ENDPOINT-SLOW` 丢 10 个。**完整候选集是 22 个，此前只返回 13/12 个。**
+  #   ★ 更严重的是：`droppedRows` 仍为 0 ⇒ **残缺在账上看不出来**（违反契约 C6
+  #   「不得静默截断」），且 KG/ONTO 丢弃量不同（载荷大小不同）⇒ A/B 的候选集差异
+  #   被污染成「载荷大小差异」，而非图覆盖或推理差异。
+  #   注意：上限只负责「给足空间」；**残缺可见性**由 `droppedCandidates` /
+  #   `droppedCandidateCount` / `candidatesTruncated` 三个显式字段保证（两侧同形）。
+  # ────────────────────────────────────────────────────────────────────────
+  cause_byte_cap: 49152
+  cause_basis: >-
+    ★ P2c（2026-10-14）新增。取值依据：实测全部 23 个症状码在 maxHops=4 下的
+    「截断前原始载荷」最大值为 31,913 B（仅 FM-APP-POOL-EXHAUSTED / FM-APP-ENDPOINT-SLOW
+    两例触发截断）⇒ 49152 B = 实测最大值的 1.54 倍，并覆盖「23 个候选全为冗长候选」的
+    理论上限。两侧实现必须以同一常量落地（`byte_cap_for(tool)`），并在 Ledger 与
+    出口预算**两层**同时生效（只改出口层会让 Ledger 构建期就把候选截掉 —— P1 已踩过）。
+  cause_completeness_gate: >-
+    上限不是完整性保障：另需门禁断言「同症状码下两侧候选集**逐字相同**」
+    与「`droppedCandidateCount` 存在时必为 0 或显式给出缺失名单」，任一不满足即 FAIL。
+  # ────────────────────────────────────────────────────────────────────────
+  # ★ A″（2026-10-15）：症状码**自身即根因**的情形必须作为候选返回
+  #   实测动机（m6 A-05/A-06，四组同时发生）：agent 把「题面描述的故障」当作症状码
+  #   传入 `/cause`，而该码在因果图上**没有上游成因**（无 CAUSES / CONDITIONAL_CAUSES
+  #   入边 = 因果图源点）⇒ 原实现返回**空候选 + 一句 hint**（约 2.8 KB 空载荷）
+  #   ⇒ agent 无判据可用 ⇒ 转为反向工程数据模型（`MATCH (n) RETURN DISTINCT labels(n)`）
+  #   ⇒ 15–21 轮、撞顶、Dify 500。50 条用例中 **22 条（44%）** 的期望根因落在源点集内。
+  #   工具级核验 23/23、两载体一致：`/cause` 返回 0 候选 ⟺ 无因果入边。
+  #   （粗看「入度」会把 RELATES_TO 共现边算进来；按 rankBasis ④ 共现边不参与根因收敛。）
+  #   ⇒ 规则：入参症状码中**每个源点**都必须作为 `hops=0` 的候选返回，走与其它候选
+  #     **完全相同**的条款求值 / 实例选择 / 焦点回传管线（不得写成特例壳）。
+  #   ⇒ 留痕字段（两侧同名同文案，载体中立措辞）：`selfRootCauseCodes` 与
+  #     `selfRootCauseBasis`。
+  #   ⇒ 两侧必须以**同一判据**计算源点（`code not in upstream`，且 upstream 只装
+  #     CAUSES / CONDITIONAL_CAUSES 型边），否则会重新引入候选集分歧。
+  cause_self_root_rule: >-
+    ★ A″（2026-10-15）新增。入参症状码中，凡在因果图上**没有上游成因**者
+    （即不存在以它为终点的 CAUSES / CONDITIONAL_CAUSES 边 = 因果图源点），
+    必须作为 `hops=0` 的候选一并返回，并携带与其它候选逐字相同的字段集
+    （条款求值、实例选择、焦点证据均同法求值，不得写成特例壳）。依据：源点被观测到
+    ⇒ 它自身就是根因，而非「找不到根因」。留痕：`selfRootCauseCodes` /
+    `selfRootCauseBasis`（两侧同名同文案、载体中立措辞）。实测依据（m6 A-05/A-06）：
+    四组同时出现 `/cause` 0 候选 ⇒ agent 反向工程数据模型 ⇒ 15–21 轮、撞顶、Dify 500；
+    50 条用例中 22 条（44%）的期望根因落在源点集内。图论核验：23/23、两载体一致。
+  basis: "docs/05-编排层设计（Dify）.md §6.4「载荷爆炸」行：①所有工具返回有界（200 行 / 20000 B）②TOKEN_BUDGET = 20000（contract_audit.py:20 口径，tokens ≈ 字数/3.5）③超限截断并回传 droppedRows/droppedBytes；docs/03 §7.4 实测（run_rules 5,307,133 B ≈ 1,516,323 tokens）"
+  violation_behavior: "截断 + 回传 droppedRows/droppedBytes + truncated=true；**不得**静默截断（契约 C6）"
+
+error_codes:
+  note: "★ 文档给出的是**行为**，不是码名；下列码名由本契约自拟（authored_name: true），行为逐条给出出处。两侧实现必须使用同名码（这正是 C3 要比的部分）。"
+  list:
+    - code: INVALID_PARAM
+      authored_name: true
+      when: "出现未识别/非法的参数名或取值"
+      violation_behavior: "显式报错，**不得**静默回落到默认值"
+      basis: "docs/05-编排层设计（Dify）.md §6.4「静默回落」行（该行称『契约 C3：未识别参数一律显式报错，不回落』）"
+      applies_to: "all_tools"
+    - code: FORBIDDEN_TOKEN
+      authored_name: true
+      when: "cc_query 的 query 命中禁用词表（写操作/外部 IO）"
+      violation_behavior: "拒绝执行，返回该码与命中的 token"
+      basis: "docs/03-方案1设计（知识图谱+LLM）.md §7.2 G2；docs/04-方案2设计（本体+LLM）.md §7.1 G2"
+      applies_to: ["cc_query"]
+    - code: QUERY_FORM_REJECTED
+      authored_name: true
+      when: "cc_query 的 query 不满足起始形式白名单"
+      violation_behavior: "拒绝执行，返回该码"
+      basis: "docs/03-方案1设计（知识图谱+LLM）.md §7.2 G1；docs/04-方案2设计（本体+LLM）.md §7.1 G1"
+      applies_to: ["cc_query"]
+    - code: MULTI_STATEMENT_REJECTED
+      authored_name: true
+      when: "cc_query 的 query 含多于一条语句（KG 侧：分号计数 > 1）"
+      violation_behavior: "拒绝执行，返回该码"
+      basis: "docs/03-方案1设计（知识图谱+LLM）.md §7.2 G3"
+      applies_to: ["cc_query"]
+      note: "ONTO 侧无对应编号（SPARQL 侧由形式白名单 + 禁用词覆盖）——见 guards.roles.R-SINGLE-STATEMENT"
+    - code: QUERY_TIMEOUT
+      authored_name: true
+      when: "cc_query 执行超时（4 s）"
+      violation_behavior: "中止查询并返回该码；**不得**让 Dify 的 ssrf 超时（5 s）先掐断（否则报错会指向 Dify 而非查询本身）"
+      basis: "docs/03-方案1设计（知识图谱+LLM）.md §7.3 修正（权威值 4 s）；docs/04-方案2设计（本体+LLM）.md §7.1 G5"
+      applies_to: ["cc_query"]
+    - code: EXTERNAL_IO_FORBIDDEN
+      authored_name: true
+      when: "cc_query 试图读外部资源或跨命名图（KG：apoc.load.* / apoc.import.*；ONTO：SERVICE / GRAPH）"
+      violation_behavior: "拒绝执行，返回该码"
+      basis: "docs/03-方案1设计（知识图谱+LLM）.md §7.2 G9；docs/04-方案2设计（本体+LLM）.md §7.1 G3 与 G9"
+      applies_to: ["cc_query"]
+    - code: DEPTH_LIMIT_EXCEEDED
+      authored_name: true
+      when: "因果链枚举深度超过 4"
+      violation_behavior: "拒绝或按上界截断（两侧必须同选一种；本契约要求**拒绝**，因为截断会让两侧结果不可比）"
+      basis: "docs/03-方案1设计（知识图谱+LLM）.md §7.2 G8 与 §7.1 cc_cause maxHops ≤ 4；docs/04-方案2设计（本体+LLM）.md §7.1 G8"
+      applies_to: ["cc_query", "cc_cause"]
+    - code: DRY_RUN_ONLY
+      authored_name: true
+      when: "cc_propose 被要求执行真实变更"
+      violation_behavior: "拒绝执行，返回 executed=false / dry_run=true"
+      basis: "docs/00-总体设计与裁决记录.md §3.1 与 §7.1（所有动作 executed=false、dry_run=true）；docs/03-方案1设计（知识图谱+LLM）.md §7.1 cc_propose 强制 dry_run"
+      applies_to: ["cc_propose"]
+
+tools:
+  cc_guide:
+    name: cc_guide
+    method: post
+    path: /guide
+    description: "列出本环境可用的指标目录、对象类型与规则清单，用于规划后续调用（不含实例数据）。最多返回 200 行，超出会被截断并回传 droppedRows。无结果时返回 hint 字段说明可能原因。取值一律使用响应条目中的 nativeRef（原样照抄），不要凭名称经验猜测或改写；返回 0 行或 hint 指出作用域/名称不符时，不得据此断言对象不存在。"
+    description_basis: "docs/05-编排层设计（Dify）.md §2.2 写法纪律（说做什么不说怎么做 / 写边界 / 写失败提示）；边界句与失败提示句逐字取自该节。★ 文档**未**逐字给出本工具的 description 文本（它引用的 tools_registry_onto.json 不在本工作区）"
+    description_authored: true
+    params: []
+    params_basis: "docs/05-编排层设计（Dify）.md §2.1 逐字：properties = {}、required = []"
+    # ★ FIX-1（2026-10-07）：此处原有 `dify_placeholder` 块（name=_unused / type=string /
+    #   description=本工具无需参数，请传空字符串 / c3_participation=excluded），由
+    #   register_tools.py 在提交给 Dify 的 OpenAPI 里注入为一个 property。该占位符**是本项目自造**，
+    #   并非 Dify 的硬约束；真零参合法（现网已有 6 例，parameters==[]）。保留它会让模型按声明传
+    #   _unused，而两载体 body 模型 extra=forbid ⇒ 必然 HTTP 400。FIX-1 已移除该机制，
+    #   注册面为 properties={} / required=[]。历史块原文见 shared/deploy/dify/README.md 的 ★ FIX-1 更新节。
+    returns:
+      - name: metrics
+        type: array
+        semantics: "可用指标目录（指标码 + 单位 + 所属对象类型）"
+        item_fields: [metricCode, unit, objectType]
+        c3_participation: compared
+        basis: "docs/03-方案1设计（知识图谱+LLM）.md §7.1「返回」列（可用指标目录、对象类型、规则清单）"
+        authored: true
+      - name: objectTypes
+        type: array
+        semantics: "可查询的对象类型清单"
+        item_fields: [objectType, layer, keyAttrs]
+        c3_participation: compared
+        basis: "docs/03-方案1设计（知识图谱+LLM）.md §7.1「返回」列"
+        authored: true
+      - name: rules
+        type: array
+        semantics: "可用规则/判据清单（只给清单，不给数据）"
+        item_fields: [ruleCode, description]
+        c3_participation: compared
+        basis: "docs/03-方案1设计（知识图谱+LLM）.md §7.1「返回」列"
+        authored: true
+    error_codes: [INVALID_PARAM]
+    carrier_specific: []
+    provenance: "docs/05-编排层设计（Dify）.md §2.1（第 1 行）"
+
+  cc_schema:
+    name: cc_schema
+    method: post
+    path: /schema
+    description: "返回本环境的对象类型、关系类型与属性清单（只读，不含数据）。最多返回 200 行，超出会被截断并回传 droppedRows。无结果时返回 hint 字段说明可能原因。取值一律使用响应条目中的 nativeRef（原样照抄），不要凭名称经验猜测或改写；返回 0 行或 hint 指出作用域/名称不符时，不得据此断言对象不存在。"
+    description_basis: "docs/05 §2.2 写法纪律；docs/03-方案1设计（知识图谱+LLM）.md §7.1「返回」列（标签/关系/属性清单，只读，不含数据）"
+    description_authored: true
+    params: []
+    params_basis: "docs/05-编排层设计（Dify）.md §2.1 逐字：properties = {}、required = []"
+    # ★ FIX-1（2026-10-07）：此处原有 `dify_placeholder` 块（name=_unused / type=string /
+    #   description=本工具无需参数，请传空字符串 / c3_participation=excluded /
+    #   excluded_reason=同 cc_guide：共享注册表注入的同一占位符），已移除。
+    #   理由同 cc_guide：占位符系本项目自造，真零参合法（现网 6 例），保留它必然 400。
+    #   注册面为 properties={} / required=[]。历史块原文见 README.md 的 ★ FIX-1 更新节。
+    returns:
+      - name: objectTypes
+        type: array
+        semantics: "对象类型（节点类型）名清单"
+        item_fields: [objectType, keyAttrs]
+        c3_participation: compared
+        basis: "docs/03-方案1设计（知识图谱+LLM）.md §7.1「返回」列（标签清单）"
+        authored: true
+      - name: relationTypes
+        type: array
+        semantics: "关系（边）类型名清单"
+        item_fields: [relationType, from, to, cardinality]
+        c3_participation: compared
+        basis: "docs/03-方案1设计（知识图谱+LLM）.md §7.1「返回」列（关系清单）"
+        authored: true
+      - name: attributes
+        type: array
+        semantics: "属性名清单（含所属类型与类型）"
+        item_fields: [owner, attribute, valueType]
+        c3_participation: compared
+        basis: "docs/03-方案1设计（知识图谱+LLM）.md §7.1「返回」列（属性清单）"
+        authored: true
+      - name: naming_discipline
+        type: string
+        semantics: "★ 供队长裁决用：本契约**故意不使用**载体词汇作字段名（不叫 labels / relations / properties），因为字段名会随工具返回进模型上下文，而 docs/05 §1.3 F1 与 §5.2 禁止载体词汇泄漏（『图』『本体』等）。文档 §7.1 用「标签/关系/属性」描述返回物**内容**，本契约取载体中性名（objectTypes / relationTypes / attributes）"
+        c3_participation: compared
+        basis: "docs/05-编排层设计（Dify）.md §1.3 F1 与 §5.2 禁用词表；docs/03-方案1设计（知识图谱+LLM）.md §7.1"
+        authored: true
+        see_also: "conflicts_for_captain CF-4"
+    error_codes: [INVALID_PARAM]
+    carrier_specific: []
+    provenance: "docs/05-编排层设计（Dify）.md §2.1（第 2 行）"
+
+  cc_query:
+    name: cc_query
+    method: post
+    path: /query
+    description: "提交一个只读知识查询，返回匹配的对象与属性。最多返回 200 行，超出会被截断并回传 droppedRows。无结果时返回 hint 字段说明可能原因。返回 0 行或 hint 指出作用域/名称不符时，不得据此断言对象不存在。"
+    description_basis: "docs/05-编排层设计（Dify）.md §2.2 逐字给出该描述的首句（『提交一个只读知识查询，返回匹配的对象与属性』）与另两句纪律句；★ 描述文本**不得**泄漏接收的语法族（不写 Cypher / SPARQL）"
+    description_authored: false
+    params:
+      - name: query
+        type: string
+        required: true
+        constraints: "只读查询语句；受 guards 约束（起始形式白名单 + 禁用词 + 单语句 + 深度 ≤ 4 + 不得外部 IO + 强制 LIMIT 注入）"
+        description: "只读知识查询语句"
+        c3_participation: compared
+        basis: "docs/05-编排层设计（Dify）.md §2.1 逐字：{\"query\": {\"type\":\"string\", \"description\":\"只读知识查询语句\"}}、required = [\"query\"]；§2.1 后注：入参名必须是 query，**不能**叫 cypher（方案1）或 sparql（方案2）"
+        authored: false
+        carrier_specific_value_semantics:
+          kg: "Cypher 只读查询串"
+          onto: "SPARQL 只读查询串"
+          invariant: "★ 参数**名**与**类型**两侧逐字相同（query: string）；差异只在被接受的**语法族**。依据 shared/model/info-products.yaml#excluded_from_parity（载体原生查询语言正是被测变量，要求它对齐等于取消实验）"
+    guards:
+      model: "KG 侧与 ONTO 侧共用 11 个**角色**（护栏要达到的性质），但两侧的**词表与编号不同**（docs/03 §7.2 的 G3/G4/G9 与 docs/04 §7.1 的 G3/G4/G9 语义互不相等）⇒ 本契约按**角色**对齐，不按 G 编号对齐。这是 CF-2。★ 队长裁定（CF-2 批准按角色对齐）：『两侧守卫按**角色**对齐；编号 G3/G4/G9 在不同载体上语义不等价，**禁止跨载体直接比编号**』—— 任何门禁、报告或评审都不得用「两侧 G 编号相同」当作 C3 成立的证据；跨载体可比的只有本节的 `invariant` 与 `violation_behavior` 两栏。"
+      role_alignment: "same_roles_different_numbering"
+      roles:
+        R-READONLY-FORM:
+          invariant: "语句的**起始形式**必须落在白名单内（白名单是唯一防线，黑名单只作补充）"
+          kg:
+            source_g: G1
+            whitelist: ["MATCH", "OPTIONAL MATCH", "WITH", "UNWIND", "RETURN"]
+          onto:
+            source_g: G1
+            whitelist: ["SELECT", "ASK", "CONSTRUCT", "DESCRIBE"]
+          violation_behavior: "拒绝执行（QUERY_FORM_REJECTED）"
+          basis: "docs/03-方案1设计（知识图谱+LLM）.md §7.2 G1；docs/04-方案2设计（本体+LLM）.md §7.1 G1"
+        R-READONLY-TOKENS:
+          invariant: "写操作 token 一律拒绝（含子查询/嵌套内的写操作）"
+          kg:
+            source_g: G2
+            forbidden_regex: "\\b(CREATE|MERGE|DELETE|DETACH|SET|REMOVE|DROP|CALL\\s+apoc\\.(create|merge|delete|refactor|periodic)|LOAD\\s+CSV|FOREACH)\\b"
+            regex_flags: ignorecase
+            note: "★ 逐字取自 docs/03-方案1设计（知识图谱+LLM）.md §7.2 的源码级 FORBIDDEN 正则"
+          onto:
+            source_g: G2
+            forbidden_tokens: ["INSERT", "DELETE", "LOAD", "CLEAR", "DROP", "CREATE", "WITH", "MOVE", "COPY", "ADD"]
+          violation_behavior: "命中即拒（FORBIDDEN_TOKEN）"
+          basis: "docs/03-方案1设计（知识图谱+LLM）.md §7.2 G2；docs/04-方案2设计（本体+LLM）.md §7.1 G2"
+        R-SINGLE-STATEMENT:
+          invariant: "一次调用只执行一条语句"
+          kg:
+            source_g: G3
+            rule: "分号计数 ≤ 1"
+          onto:
+            source_g: null
+            rule: "SPARQL 侧无对应条目（由 R-READONLY-FORM 与 R-READONLY-TOKENS 覆盖）；★ 两侧行为上等价：多语句请求必须被拒绝"
+          violation_behavior: "拒绝执行（MULTI_STATEMENT_REJECTED）"
+          basis: "docs/03-方案1设计（知识图谱+LLM）.md §7.2 G3"
+        R-TIMEOUT:
+          invariant: "服务端查询超时必须**小于** Dify ssrf 的 5 s，否则外层先掐断、报错指向 Dify 而非查询本身"
+          kg:
+            source_g: G4
+            timeout_s: 4
+            supersedes: "docs/03-方案1设计（知识图谱+LLM）.md §7.2 表内写的 8 s 已被 §7.3 正文修正 ⇒ **权威值 4 s**"
+            captain_ruling: 4
+            captain_ruling_note: "★ CF-1 已由队长裁定 = **4 s**（本行即裁定值，kg/onto 两侧一致）。依据：docs/03-方案1设计（知识图谱+LLM）.md §7.3 修正块『修正：G4 定 4s』、docs/04-方案2设计（本体+LLM）.md §7.1 G5、docs/05-编排层设计（Dify）.md §3.3、docs/08-报告模板与结论骨架.md §4。**冲突记录保留**：docs/03-方案1设计（知识图谱+LLM）.md §7.2 表格单元格写的 8 s 是**未同步的陈旧单元格**（同节修正块已改为 4 s），docs/00-总体设计与裁决记录.md §风险 R17 的『G4（8s 超时）』同属陈旧，三处已列入队长的文档回写清单 ⇒ 属**文档缺陷**，非护栏分歧。上游历史锚点（他人实现的查询服务里 timeout=8 的读数 —— 该仓库外路径已在 CF-8 处引用过一处，此处**不再重复引用**以免给 G20 添第二条同类 ⑦ 告警）是既有实现的读数，**不是本契约的护栏值**，保留原样不构成反例。"
+          onto:
+            source_g: G5
+            timeout_s: 4
+          violation_behavior: "中止并返回 QUERY_TIMEOUT"
+          basis: "docs/03-方案1设计（知识图谱+LLM）.md §7.3 修正；docs/04-方案2设计（本体+LLM）.md §7.1 G5；Dify 侧 SSRF_DEFAULT_READ_TIME_OUT=5"
+        R-ROW-CAP:
+          invariant: "返回行数上限 200"
+          kg: {source_g: G5, rows: 200}
+          onto: {source_g: G6, rows: 200}
+          violation_behavior: "截断 + truncated=true + droppedRows"
+          basis: "docs/05-编排层设计（Dify）.md §6.4；docs/03 §7.2 G5；docs/04 §7.1 G6"
+        R-BYTE-CAP:
+          invariant: "返回字节上限 20000"
+          kg: {source_g: G6, bytes: 20000}
+          onto: {source_g: G6, bytes: 20000}
+          violation_behavior: "截断 + truncated=true + droppedBytes"
+          basis: "docs/03-方案1设计（知识图谱+LLM）.md §7.4；docs/04-方案2设计（本体+LLM）.md §7.1 G6"
+        R-FORCE-LIMIT:
+          invariant: "无 LIMIT 且无聚合时，服务端必须自动包一层 LIMIT（等效动作；语种各自实现）"
+          kg: {source_g: G7}
+          onto: {source_g: G7}
+          violation_behavior: "自动注入（**不是**拒绝）"
+          basis: "docs/03-方案1设计（知识图谱+LLM）.md §7.2 G7；docs/04-方案2设计（本体+LLM）.md §7.1 G7"
+        R-DEPTH-CAP:
+          invariant: "因果链枚举深度 ≤ 4"
+          kg:
+            source_g: G8
+            rule: "沿 CAUSES 的枚举深度 ≤ 4"
+          onto:
+            source_g: G8
+            rule: "因果路径深度 ≤ 4"
+          violation_behavior: "拒绝（DEPTH_LIMIT_EXCEEDED；★ 不用截断——截断会让两侧结果不可比）"
+          basis: "docs/03-方案1设计（知识图谱+LLM）.md §7.2 G8；docs/04-方案2设计（本体+LLM）.md §7.1 G8"
+        R-BOUNDED-PATH:
+          invariant: "禁止**无上界**的路径枚举（成环图会爆炸）"
+          kg:
+            source_g: "G2 / G8 的合成效果"
+            forbidden: ["变长路径 `*` / `*..` 等无上界形式", "MATCH p=(a)-[:CAUSES*1..n]->(b) 形态的任意枚举"]
+            precedent: "shared/model/kgt-tools.yaml 的 get_fault_topology.algorithm.forbidden_implementations（同类护栏的体例先例）"
+          onto:
+            source_g: G4
+            forbidden: ["属性路径的 `*` 与 `+`（无上界）"]
+            allowed: ["`{n}`", "`{n,m}` 定界形式"]
+            asymmetry_note: "★ 逐字（docs/04 §7.1 表下注）：『G4 是与方案1 最不对称的一条护栏』——SPARQL 的属性路径语法更隐蔽（可写在谓词位置），必须写进 R4 不对称风险的实测证据"
+          violation_behavior: "拒绝执行"
+          basis: "docs/04-方案2设计（本体+LLM）.md §7.1 G4 与其表下注；docs/03-方案1设计（知识图谱+LLM）.md §7.2 G2/G8"
+        R-NO-EXTERNAL-IO:
+          invariant: "禁止读外部资源、禁止跨命名图逃逸（同一角色的两种载体表现）"
+          kg:
+            source_g: G9
+            forbidden: ["apoc.load.*", "apoc.import.*"]
+          onto:
+            source_g: "G3 / G9"
+            forbidden: ["SERVICE", "GRAPH（跨命名图访问，除显式白名单）"]
+          violation_behavior: "拒绝执行（EXTERNAL_IO_FORBIDDEN）"
+          basis: "docs/03-方案1设计（知识图谱+LLM）.md §7.2 G9；docs/04-方案2设计（本体+LLM）.md §7.1 G3、G9"
+        R-AUDIT:
+          invariant: "每次调用记录 queryText / elapsedMs / rowCount（硬约束 C5 事实有据的前提）"
+          kg: {source_g: G10}
+          onto: {source_g: G10}
+          violation_behavior: "缺失即视为实现缺陷（G24 不检查审计写入位置，只冻结字段名；写入位置见 OQ-3）"
+          basis: "docs/03-方案1设计（知识图谱+LLM）.md §7.2 G10；docs/04-方案2设计（本体+LLM）.md §7.1 G10；docs/00-总体设计与裁决记录.md §3.1 C5"
+    carrier_specific:
+      - aspect: "query 参数接受的语法族"
+        kg: "Cypher 子集（起始形式白名单 MATCH/OPTIONAL MATCH/WITH/UNWIND/RETURN）"
+        onto: "SPARQL 子集（起始形式白名单 SELECT/ASK/CONSTRUCT/DESCRIBE）"
+        invariant: "参数名 `query`、类型 string、必填性 true 两侧逐字相同；被接受的语言族不同"
+        c3_participation: excluded
+        excluded_reason: "载体原生查询语言正是被测变量（线 1：KG-Q vs ONTO-Q）；要求它对齐等于取消实验。依据 shared/model/info-products.yaml#excluded_from_parity 的既有裁决"
+    returns:
+      - name: rows
+        type: array
+        semantics: "匹配到的记录集合（每项是键值对映射；键名与取值由被查询环境决定，**不在**本契约比对范围）"
+        item_fields: []
+        c3_participation: compared
+        basis: "docs/03-方案1设计（知识图谱+LLM）.md §7.1 cc_query 返回列逐字 {rows, truncated, rowCount}"
+        authored: false
+      - name: rowCount
+        type: integer
+        semantics: "本次返回的行数（截断前/后以 truncated 与 droppedRows 说明）"
+        c3_participation: compared
+        basis: "docs/03-方案1设计（知识图谱+LLM）.md §7.1 逐字"
+        authored: false
+    error_codes: [INVALID_PARAM, FORBIDDEN_TOKEN, QUERY_FORM_REJECTED, MULTI_STATEMENT_REJECTED, QUERY_TIMEOUT, EXTERNAL_IO_FORBIDDEN, DEPTH_LIMIT_EXCEEDED]
+    provenance: "docs/05-编排层设计（Dify）.md §2.1（第 3 行）；docs/03 §7.1/§7.2/§7.3；docs/04 §7.1"
+
+  cc_facts:
+    name: cc_facts
+    method: post
+    path: /facts
+    description: "取指定对象类型（可限定某个对象与若干指标码）的事实记录。最多返回 200 行，超出会被截断并回传 droppedRows。无结果时返回 hint 字段说明可能原因。返回 0 行或 hint 指出作用域/名称不符时，不得据此断言对象不存在。"
+    description_basis: "docs/05 §2.2 写法纪律；docs/03-方案1设计（知识图谱+LLM）.md §7.1（事实子图、结果上限）"
+    description_authored: true
+    params:
+      - name: objectType
+        type: string
+        required: true
+        constraints: "必须是本环境已声明的对象类型（未知类型 ⇒ INVALID_PARAM，不得回落）"
+        c3_participation: compared
+        basis: "docs/05-编排层设计（Dify）.md §2.1 逐字：properties = {\"objectType\":…, \"objectId\":…, \"metricCodes\":…}、required = [\"objectType\"]；类型为自拟（同族先例 shared/model/kgt-tools.yaml get_facts 的 request.properties）"
+        authored: "type"
+      - name: objectId
+        type: string
+        required: false
+        constraints: "可选；限定到单个对象"
+        c3_participation: compared
+        basis: "docs/03-方案1设计（知识图谱+LLM）.md §7.1 逐字 {objectType, objectId?, metricCodes?}（`?` = 可选）；类型自拟"
+        authored: "type"
+      - name: metricCodes
+        type: array
+        required: false
+        constraints: "可选；元素为字符串指标码"
+        c3_participation: compared
+        basis: "docs/03-方案1设计（知识图谱+LLM）.md §7.1；类型自拟"
+        authored: "type"
+    uses_common_error_codes: [INVALID_PARAM]
+    error_codes: [INVALID_PARAM]
+    returns:
+      - name: objects
+        type: array
+        semantics: "匹配到的对象（含对象 id、类型与属性）"
+        item_fields: [objectId, objectType, attributes]
+        c3_participation: compared
+        basis: "docs/03-方案1设计（知识图谱+LLM）.md §7.1「返回」列（事实子图）"
+        authored: true
+      - name: relations
+        type: array
+        semantics: "对象之间的关联记录（关系类型 + 两端 objectId）"
+        item_fields: [relationType, from, to]
+        c3_participation: compared
+        basis: "docs/03-方案1设计（知识图谱+LLM）.md §7.1「返回」列（事实子图）"
+        authored: true
+      - name: observations
+        type: array
+        semantics: "观测记录（含 CCF recordId 以便溯源，满足硬约束 C5）"
+        item_fields: [recordId, metricCode, value, unit, ts]
+        c3_participation: compared
+        basis: "docs/00-总体设计与裁决记录.md §3.1 C5（事实有据）+ shared/model/info-products.yaml#info_products IP-METRIC / IP-FACT"
+        authored: true
+    carrier_specific: []
+    provenance: "docs/05-编排层设计（Dify）.md §2.1（第 4 行）；docs/03 §7.1"
+
+  cc_trace:
+    name: cc_trace
+    method: post
+    path: /trace
+    description: "沿指定起始对象返回有界跳数的拓扑链路。最多返回 200 行，超出会被截断并回传 droppedRows。无结果时返回 hint 字段说明可能原因。返回 0 行或 hint 指出作用域/名称不符时，不得据此断言对象不存在。"
+    description_basis: "docs/05 §2.2 写法纪律；docs/03-方案1设计（知识图谱+LLM）.md §7.1（拓扑链路；maxHops ≤ 9）"
+    description_authored: true
+    params:
+      - name: startId
+        type: string
+        required: true
+        constraints: "起始对象 id"
+        c3_participation: compared
+        basis: "docs/05-编排层设计（Dify）.md §2.1 逐字：properties = {\"startId\":…, \"direction\":…, \"maxHops\":…}、required = [\"startId\"]；类型自拟"
+        authored: "type"
+      - name: direction
+        type: string
+        required: false
+        constraints: "遍历方向；取值域文档未逐字规定 ⇒ 本契约只冻结**类型**与**必填性**，取值域登记为 OQ-1（两侧必须一致，取同一组枚举）"
+        c3_participation: compared
+        basis: "docs/05-编排层设计（Dify）.md §2.1"
+        authored: "type"
+      - name: maxHops
+        type: integer
+        required: false
+        constraints: "≤ 9（超出 ⇒ INVALID_PARAM）"
+        c3_participation: compared
+        basis: "docs/03-方案1设计（知识图谱+LLM）.md §7.1 逐字 maxHops ≤ 9；docs/00 §7.2 工具面同"
+        authored: false
+    error_codes: [INVALID_PARAM]
+    returns:
+      - name: nodes
+        type: array
+        semantics: "链路中的对象节点"
+        item_fields: [objectId, objectType, layer]
+        c3_participation: compared
+        basis: "docs/09-方案3设计（知识图谱直引+LLM）.md §3（同类拓扑返回物 ObjectSubgraph 的 {nodes, edges, truncated, hopsUsed} 逐字体例）+ docs/03 §7.1"
+        authored: true
+      - name: edges
+        type: array
+        semantics: "链路中的关系边"
+        item_fields: [relationType, from, to]
+        c3_participation: compared
+        basis: "docs/09-方案3设计（知识图谱直引+LLM）.md §3 体例 + docs/03 §7.1"
+        authored: true
+      - name: hopsUsed
+        type: integer
+        semantics: "实际使用的跳数"
+        c3_participation: compared
+        basis: "docs/09-方案3设计（知识图谱直引+LLM）.md §3 体例"
+        authored: true
+    carrier_specific: []
+    provenance: "docs/05-编排层设计（Dify）.md §2.1（第 5 行）；docs/03 §7.1"
+
+  cc_cause:
+    name: cc_cause
+    method: post
+    path: /cause
+    description: "根据症状码返回候选根因及其路径，并给出排序依据（确定性口径，不给概率）。最多返回 200 行，超出会被截断并回传 droppedRows。无结果时返回 hint 字段说明可能原因。返回 0 行或 hint 指出作用域/名称不符时，不得据此断言对象不存在。"
+    description_basis: "docs/05 §2.2 写法纪律；docs/03-方案1设计（知识图谱+LLM）.md §7.1（候选根因 + 路径 + 排序依据（§5.8 确定性口径，不给概率））"
+    description_authored: true
+    params:
+      - name: symptomCodes
+        type: array
+        required: true
+        constraints: "元素为症状/故障码字符串；未知码 ⇒ INVALID_PARAM（不得回落）"
+        c3_participation: compared
+        basis: "docs/05-编排层设计（Dify）.md §2.1 逐字：properties = {\"symptomCodes\":…, \"maxHops\":…}、required = [\"symptomCodes\"]；类型自拟"
+        authored: "type"
+      - name: maxHops
+        type: integer
+        required: false
+        constraints: "≤ 4（§5.6；超出 ⇒ DEPTH_LIMIT_EXCEEDED）"
+        c3_participation: compared
+        basis: "docs/03-方案1设计（知识图谱+LLM）.md §7.1 逐字 maxHops ≤ 4（§5.6）"
+        authored: false
+    error_codes: [INVALID_PARAM, DEPTH_LIMIT_EXCEEDED]
+    returns:
+      - name: candidates
+        type: array
+        semantics: "候选根因（每项含故障码、路径与条件）"
+        item_fields: [faultCode, path, condition]
+        c3_participation: compared
+        basis: "docs/03-方案1设计（知识图谱+LLM）.md §7.1「返回」列（候选根因 + 路径 + 排序依据）"
+        authored: true
+      - name: rankBasis
+        type: string
+        semantics: "排序依据的说明文本（确定性口径，**不给概率**）"
+        c3_participation: compared
+        basis: "docs/03-方案1设计（知识图谱+LLM）.md §7.1 逐字（排序依据（§5.8 确定性口径，不给概率））"
+        authored: true
+    carrier_specific: []
+    provenance: "docs/05-编排层设计（Dify）.md §2.1（第 6 行）；docs/03 §7.1"
+
+  cc_propose:
+    name: cc_propose
+    method: post
+    path: /propose
+    description: "基于根因与证据路径给出建议动作（仅建议，不执行）。最多返回 200 行，超出会被截断并回传 droppedRows。无结果时返回 hint 字段说明可能原因。返回 0 行或 hint 指出作用域/名称不符时，不得据此断言对象不存在。"
+    description_basis: "docs/05 §2.2 写法纪律；docs/03-方案1设计（知识图谱+LLM）.md §7.1（建议动作（executed=false）、强制 dry_run）"
+    description_authored: true
+    params:
+      - name: rootCause
+        type: string
+        required: true
+        constraints: "根因标识"
+        c3_participation: compared
+        basis: "docs/05-编排层设计（Dify）.md §2.1 逐字：properties = {\"rootCause\":…, \"evidencePath\":…}、required = [\"rootCause\"]；类型自拟"
+        authored: "type"
+      - name: evidencePath
+        type: array
+        required: false
+        constraints: "证据路径；★ 文档未给出类型与元素形态（OQ-2），本契约冻结为 array（元素 = 证据/记录 id 字符串），两侧必须一致"
+        c3_participation: compared
+        basis: "docs/05-编排层设计（Dify）.md §2.1；docs/03 §7.1"
+        authored: "type"
+    error_codes: [INVALID_PARAM, DRY_RUN_ONLY]
+    returns:
+      - name: actions
+        type: array
+        semantics: "建议动作清单（每项含动作码、目标对象与理由）"
+        item_fields: [actionCode, target, reason]
+        c3_participation: compared
+        basis: "docs/03-方案1设计（知识图谱+LLM）.md §7.1「返回」列（建议动作）"
+        authored: true
+      - name: executed
+        type: boolean
+        semantics: "是否已执行；恒为 false"
+        c3_participation: compared
+        basis: "docs/03-方案1设计（知识图谱+LLM）.md §7.1 逐字（executed=false）；docs/00 §3.1（所有动作 executed=false）"
+        authored: false
+      - name: dryRun
+        type: boolean
+        semantics: "是否 dry-run 模式；恒为 true"
+        c3_participation: compared
+        basis: "docs/03-方案1设计（知识图谱+LLM）.md §7.1 逐字（强制 dry_run）"
+        authored: false
+    carrier_specific: []
+    provenance: "docs/05-编排层设计（Dify）.md §2.1（第 7 行）；docs/03 §7.1"
+
+  read_facts:
+    name: read_facts
+    description: "只读取数：按本进程固定的用例确定性重建（判决模式），或在未固定用例时向采集面真采一次（运行模式），返回有界的当前读数三段与公共信封。无结果时返回 hint 说明可能原因；返回 0 行或 hint 指出作用域不符时，不得据此断言对象或读数不存在。"
+    description_basis: "docs/05-编排层设计（Dify）.md §2.3（中性取数能力的措辞纪律）；docs/03 §7.1 的返回纪律（hint/truncated 与空结果两种含义）"
+    description_authored: true
+    neutral_tool_ref: "live-facts-tools.yaml#read_facts"
+    why_ref: "★ 单一定义源（队长裁定 D47）：本工具的 params/returns **正文不在本文件复制**；权威形状声明在 shared/model/live-facts-tools.yaml#read_facts，字节级形状由 shared/collect/live_facts_service.py --emit-schema 产出。本文件只登记「它在 Set B 工具面上的存在与键序」。解析实现见 S2c 的 shared/deploy/dify/register_tools.py。"
+    shape_authority: "shared/model/live-facts-tools.yaml#read_facts（声明）→ shared/collect/live_facts_service.py --emit-schema（字节级形状）"
+    params: []
+    returns: []
+    carrier_specific: []
+    provenance: "shared/model/live-facts-tools.yaml#read_facts；docs/05 §2.3；队长裁定 D47/D48（S2b）"
+
+manifest_contract:
+  why: "门禁的数据源必须是**从实现生成的清单**。手写清单可以被伪造成「两侧一致」，因此本契约要求两侧服务各自以 --emit-manifest 产出清单，并要求清单携带其来源实现文件的路径与 sha256 —— G24 校验「清单与实现同源」。"
+  produced_by: "两侧服务的实现（M3.2 / M3.3）；★ G24 **不**产出 manifest（门禁自产清单等于自证）"
+  interface: "服务 CLI 增加 --emit-manifest <path>；产出 JSON（UTF-8 无 BOM），只描述**该侧工具面**，不含任何密钥/端点凭据"
+  format:
+    schema: "dsh-toolface-manifest/1"
+    required_keys: [schema, carrier, tools]
+    keys:
+      schema: "字面量 dsh-toolface-manifest/1"
+      carrier: "kg | onto（与传入的 --kg-manifest/--onto-manifest 槽位必须一致，否则 ERROR）"
+      arm: "实验组标识，取值应在本契约 c3.scope_pairs 内（KG-Q / KG-R / ONTO-Q / ONTO-R）；两侧都声明时必须构成一个已声明的对照对，否则 ERROR（跨线混比）"
+      tool: "产出该清单的服务实现文件（仓库相对路径，正斜杠）——可选，信息性"
+      source: "实现文件仓库相对路径（单文件形态）"
+      sourceSha256: "该文件内容的 sha256（小写 hex）；G24 与该文件**当前**内容比对，不一致 ⇒ ERROR"
+      sources: "多文件形态： [{path, sha256}, …]；与 source/sourceSha256 二者至少给一组（都不给 ⇒ BLOCKED，理由：清单未声明来源 = 无法验证同源）"
+      tools: "列表，每项 {name, params:[{name,type,required}], returns:[{name,type?}], source?, sourceSha256?}"
+      emittedAt: "可选 ISO-8601 时间戳"
+  comparison_keys: "G24 只读 tools[].name / tools[].params[].{name,type,required} / tools[].returns[].name；其余键是溯源与可读性信息"
+  fail_closed:
+    - "manifest 缺失 / 不可解析 / 无 tools[] / tools 为空 ⇒ RESULT: BLOCKED，exit 2（绝不打印 PASS）"
+    - "manifest 未声明任何 (source, sourceSha256) 或声明的实现文件在 repo-root 下不存在 ⇒ RESULT: BLOCKED，exit 2"
+    - "任一 (source, sourceSha256) 与文件当前 sha256 不一致 ⇒ ERROR（『清单与实现不同源 = 可伪造』），exit 1"
+
+g24:
+  id: G24
+  name: "Set B 8 工具面实现级一致性（C3/P7）"
+  impl: "shared/verify/toolset_parity_gate.py"
+  contract_snapshot: "shared/model/tools-setb.yaml"
+  exit_codes:
+    "0": "PASS"
+    "1": "FAIL（两侧**声明的**工具面真实分歧，或契约自检失败）"
+    "2": "BLOCKED（前置条件不满足，本门禁未执行）或 PARAM_ERROR（命令行参数非法）"
+  criteria:
+    - id: G24-00
+      name: "前置条件（fail-closed）"
+      rule: "契约缺失/空/不可解析、任一 manifest 缺失、任一 manifest 声明的实现文件缺失、repo-root 不存在 ⇒ `RESULT: BLOCKED`，exit 2；措辞照抄 shared/verify/parity.py 的 M2.18 先例（『★ 前置条件不满足：… ⇒ 本门禁未执行；既非 PASS 亦非 FAIL，exit=2』+『★ BLOCKED ≠ FAIL』对照段）。**绝不在缺输入时打印 PASS**。"
+      basis: "任务书 M3.1；shared/verify/parity.py 的 BLOCKED 先例（M2.18）"
+    - id: G24-01
+      name: "输入溯源显式打印"
+      rule: "运行时必须打印**用到的**契约路径 + 两份 manifest 路径 + repo-root + 每个 (source → 实际 sha256 vs 声明 sha256)，以消除『省略参数仍 BLOCKED 而计数被误读』的歧义。"
+      basis: "shared/verify/t10_native_parity.py:1026 与 :356 的 argparse 默认值陷阱先例"
+    - id: G24-02
+      name: "同源校验"
+      rule: "每个 manifest 声明的 (source, sourceSha256) 必须与 repo-root 下该文件当前 sha256 逐字一致；不一致 ⇒ ERROR（『清单与实现不同源 = 可伪造』）。"
+      basis: "任务书 M3.1；诚实边界 HB2"
+    - id: G24-03
+      name: "工具名集合"
+      rule: "两侧各自的工具名集合必须**逐字等于**契约 tools 的键集合（不是子集、不是超集）；同时契约自检要求该集合等于 shared/model/info-products.yaml#access 中四个 Set B 组的 tools 列表。"
+      basis: "docs/06 §4 P7；docs/06 §6 G8；shared/model/info-products.yaml#access"
+    - id: G24-04
+      name: "参数三元组逐字比对"
+      rule: "对每个参与比对的工具，两侧参数的 (name, type, required) 集合必须逐字相同；契约外参数、缺失参数、类型不同、必填性不同 ⇒ 各自一条 ERROR（给出 diff）。"
+      basis: "docs/05 §2.1（入参名必须一致）；docs/06 §4 P7"
+    - id: G24-05
+      name: "返回字段名集合逐字比对"
+      rule: "每个参与比对的工具的**顶层**返回字段名集合（工具特有字段 ∪ 公共信封）两侧必须逐字相同；契约外字段或缺失字段 ⇒ ERROR。"
+      basis: "docs/06 §4 P7；本契约 return_envelope"
+    - id: G24-06
+      name: "排除必须由契约标志驱动"
+      rule: "只有 c3_participation: excluded 的项（且带 excluded_reason）可以被排除；**不得**按侧写白名单排除；报告必须逐项给出 compared / excluded 计数。"
+      basis: "任务书 M3.1；T10 排除清单的同一思想"
+    - id: G24-07
+      name: "反恒真下限"
+      rule: "--min-tools 默认 = 契约声明的工具数（当前 8）；非法值（非整数 / < 1）⇒ PARAM_ERROR，exit 2；实际参与比对的工具数 < --min-tools ⇒ ERROR；工具集为空 ⇒ ERROR。"
+      basis: "任务书 M3.1；同类先例 shared/verify/answer_shape_gate.py 的 G23-03"
+    - id: G24-08
+      name: "契约自检（不依赖 manifest 也能跑）"
+      rule: "契约自身的自洽性：每个 returns 项必须有 c3_participation；excluded 项必须有 excluded_reason；info-products.yaml 的四组工具集必须等于契约工具集；每个工具的 description 必须不命中禁用词正则（docs/05 §5.2）；工具名必须等于键名。违约 ⇒ ERROR（G24-C0x）。"
+      basis: "docs/05 §5.2（必须机器检查）；docs/03 §7.2 的词表纪律"
+    - id: G24-09
+      name: "只读与幂等"
+      rule: "本门禁只读：不写任何文件、不改契约、不产出 manifest；重复运行结果相同。"
+      basis: "全项目门禁纪律"
+    - id: G24-10
+      name: "三源交叉一致（契约 / info-products.yaml / kgt-tools.yaml）"
+      rule: >
+        ① 契约 tools 的键集合（含顺序）必须**逐字等于** shared/model/info-products.yaml#access.<arm>.tools，
+        对四个 Set B 组（KG-Q / ONTO-Q / KG-R / ONTO-R）逐组比对；
+        ② shared/model/kgt-tools.yaml 的 allowed_tools_kgt_free 与契约工具集必须**无交集**；
+        ③ forbidden_tools_kgt_free 必须**包含**契约工具集（方案3 的插件组不得拿到 Set B 任何工具）；
+        ④ forbidden_tools_main_arm / forbidden_tools_all_arms ∩ 契约工具集、以及
+        attribution_axis_forbidden.tool(=cc_cause) 与 applies_to_arms(=方案3 三组) 作为**信息性记录**打印
+        —— 它们描述的是方案3 的禁令（方案3 与 Set B 的差异正是被测变量），**不是**冲突，不得据此放宽①②③。
+        任一条 ①②③ 不成立 ⇒ ERROR。★ 本判据**今天就有真机判别力**（三个文件都已存在），不依赖任何 manifest。
+      basis: "shared/model/info-products.yaml（C3 的机械依据，其头部注释给出 C3 的重述）；shared/model/kgt-tools.yaml §三 禁令（forbidden_tools_main_arm / forbidden_tools_all_arms / forbidden_tools_kgt_free / allowed_tools_kgt_free / attribution_axis_forbidden）；队长 M3.1 追加约束 ①"
+    - id: G24-11
+      name: "契约静态计数自洽（boundary_counts ↔ 运行时重算）"
+      rule: >
+        契约 g24.boundary_counts 必须齐备下列键，且逐键等于本门禁**从契约现场重算**的值：
+        tools / compared_tools / compared_params / excluded_params / tool_level_return_fields /
+        envelope_fields / compared_return_fields / excluded_return_fields / carrier_specific_divergences。
+        任一不符或缺键 ⇒ ERROR（G24-11）。★ 本判据只依赖契约自身，**不依赖 manifest**，
+        因此 --contract-only 也具备完整判别力。计数口径见 boundary_counts 的注释（消除歧义）：
+        compared_return_fields = tool_level_return_fields + envelope_fields × tools，
+        因为公共信封 fields 对每个工具都适用。manifest 侧的实际参与计数（compared_tools 等）
+        由 G24 在比对时另行打印，**不属于**本声明。
+      basis: "本契约 g24.boundary_counts.note（自述『二者不一致即表示契约被改过』）；门禁体系的一般纪律：数量声明必须可由机器重算"
+  boundary_counts:
+    # ★ 计数口径（G24-11 现场重算并逐键比对；下列键必须齐备且相等）
+    #   tools                        = len(tools)
+    #   compared_tools               = 参与 C3 比对的工具数（= len(tools)）
+    #   compared_params              = Σ 各工具 c3_participation != excluded 的参数
+    #   excluded_params              = Σ 各工具 c3_participation == excluded 的参数
+    #   tool_level_return_fields     = Σ 各工具 c3_participation != excluded 的 returns
+    #   envelope_fields              = |return_envelope.fields 中 c3_participation != excluded 的项|
+    #   compared_return_fields       = tool_level_return_fields + envelope_fields × tools
+    #                                  （公共信封对每个工具都适用，故按工具数展开）
+    #   excluded_return_fields       = Σ 各工具被排除的 returns + 被排除的 envelope_fields × tools
+    #   carrier_specific_divergences = Σ 各工具 carrier_specific 条目数（载体特有、不参与比对）
+    tools: 8
+    compared_tools: 8
+    compared_params: 11
+    excluded_params: 0
+    tool_level_return_fields: 20
+    envelope_fields: 4
+    compared_return_fields: 52
+    excluded_return_fields: 0
+    carrier_specific_divergences: 1
+    note: "★ 由 G24 每次运行时**从契约现场重算**并与本声明逐键比对（判据 G24-11，不一致 ⇒ ERROR，说明契约被改过而计数未同步）。excluded_return_fields = 0 是**最好**的情形（C3 可比性最强）；唯一的载体特有项是 cc_query 的语法族（HB3 / CF-3）。manifest 侧的实际参与计数（compared_tools / compared_params / compared_return_fields）由 G24 在比对时另行打印，不属于本声明。"
+
+conflicts_for_captain:
+  note: "★ 逐条交队长裁决。本契约已按下方『本契约取』一列落笔，但每一项都是**可推翻**的裁决点。"
+  items:
+    - id: CF-1
+      subject: "cc_query 超时值：4 s 还是 8 s"
+      evidence: "docs/03-方案1设计（知识图谱+LLM）.md §7.2 守卫表 G4 写 **8 s**（依据 tianshu_v3 实测 8.03 s 撞满 service/main.py 的 timeout=8）；同文件 §7.3 正文与表下修正块明文改定 **4 s**（『8s 会超，因此取 4s』『原写 8s 会被 Dify 的 5s 先掐断，报错信息会指向 Dify 而非查询本身』）；docs/04 §7.1 G5 写 **4 s**；★ docs/00 §风险 R17 仍写 **8 s**；任务书亦写 8 s。"
+      decision_taken: "本契约取 **4 s**（两侧一致），并把 §7.2 表内 8 s 标为 superseded。"
+      why_needs_captain: "docs/00 的内部不一致未修，且任务书写 8 s；若队长裁定 8 s，G4 会在 Dify 的 5 s 之前先被外层掐断，属已知缺陷。"
+    - id: CF-2
+      subject: "两侧守卫编号 G1–G10 语义不等价"
+      evidence: "docs/03 §7.2：G3 = 单语句（分号 ≤ 1）、G4 = 超时、G9 = 禁 apoc.load.*/apoc.import.*；docs/04 §7.1：G3 = 禁 SERVICE、G4 = 禁属性路径 `*`/`+`、G9 = 禁 GRAPH。同一编号在两侧指不同护栏。"
+      decision_taken: "本契约按**角色**（11 个 R-*）对齐，编号仅作注释保留。"
+      why_needs_captain: "若有人按编号做机械校验（例如『两侧都要有 G4』），会得到错误结论；需要在 docs 侧声明本契约的编号→角色映射为准。"
+    - id: CF-3
+      subject: "cc_query 的语法族在语言上不可能一致"
+      evidence: "docs/03 §7.1 的 query 是 Cypher；docs/04 §7 明言唯一差别是『cc_query 内部接收 SPARQL 而非 Cypher』；docs/05 §2.1 后注禁止把参数名写成 cypher/sparql。"
+      decision_taken: "参数名/类型/必填性参与 C3 比对；语法族写入 carrier_specific（c3_participation: excluded），依据 shared/model/info-products.yaml#excluded_from_parity（载体原生查询语言正是被测变量）。"
+      why_needs_captain: "排除项直接削弱 C3 可比性（HB3），必须由队长确认这个排除的口径。"
+    - id: CF-4
+      subject: "契约字段命名 vs 禁用词纪律（载体词汇泄漏）"
+      evidence: "docs/03 §7.1 用 LPG 词汇描述 cc_schema 的返回物（『标签/关系/属性清单』）；docs/05 §1.3 F1 与 §5.2 禁止载体词汇进入模型可见文本（含『图』『本体』）。字段名会随返回进模型上下文。"
+      decision_taken: "本契约取载体中性名（objectTypes / relationTypes / attributes），不使用 labels/relations/properties。"
+      why_needs_captain: "这是契约第一次『命名权』落到中性词上；另一种可选口径是直接沿用文档措辞（LPG 词汇）并接受泄漏。"
+    - id: CF-5
+      subject: "C3 射程：跨组全同（旧口径） vs 同对内部逐字（v1.4 现行）"
+      evidence: "docs/00 §3.1 C3（v1.4 重述）= 信息可及性对齐 + 『逐字相同』仅严格适用于同一对照对内部；docs/06 §4 P7 同；而任务书表述为『同一工具在两载体上工具名/参数/返回必须逐字节相同』（旧口径）。"
+      decision_taken: "G24 射程 = 同一对照对内部（KG-Q↔ONTO-Q、KG-R↔ONTO-R）。"
+      why_needs_captain: "报告与门禁的适用范围必须与 docs 对齐，避免把 KG-T/KG-T-free 误纳入 C3 比对。"
+    - id: CF-6
+      subject: "『C3』编号撞车：硬约束 C3（信息可及性对齐） vs 契约审计项 C3（未识别参数显式报错）"
+      evidence: "docs/00 §3.1 的 C1–C6 是架构硬约束（C3 = 信息可及性对齐）；docs/05 §6.4 与 §7 的 C1/C3/C4/C6/C7–C9 是 contract_audit.py 的契约门禁项（C3 = 未识别参数不得静默回落）。"
+      decision_taken: "本契约引用时一律写明出处节号，并在 error_codes 里标注属哪一族。"
+      why_needs_captain: "两族编号同名不同义，后续 M4.6（契约门禁 C1–C9）时极易误引。"
+    - id: CF-7
+      subject: "7 工具的返回字段名与多数参数类型在文档中没有逐字规格"
+      evidence: "docs/05 §2.1 的 properties 只给 cc_query 的类型（string），其余写省略号；docs/03 §7.1 的返回列是散文；docs/05:87 引用的 tools_registry_onto.json 不在本工作区（全仓 glob `**/tools_registry*.json` 无命中）；env/ 下只有 CreditCardApp.java 与 k8s manifest。"
+      decision_taken: "按 docs/05 §2.2 纪律 + 同族先例（shared/model/kgt-tools.yaml 的 request/response 体例、docs/09 §3 的 {nodes, edges, truncated, hopsUsed}）自拟，逐项 authored: true 标注。"
+      why_needs_captain: "这些字段名一旦冻结就是两侧必须实现的接口；须确认自拟命名（尤其 cc_facts 的 observations、cc_cause 的 rankBasis）。"
+    - id: CF-8
+      subject: "G24 与既有 G8 的分工，以及 docs/06 §6 提到的 toolface_diff.py 不存在"
+      evidence: "shared/verify/g8_info_parity.py 已断言同一对照对内部 tools **列表**逐字相同；docs/06 §6 G8 行提到 `toolface_diff.py`，但全仓无此文件。"
+      decision_taken: "G8 管契约级列表；G24 管实现级参数/返回面；G24 不重复列表比对以外的内容，也不声称取代 G8。"
+      why_needs_captain: "需要在 docs/06 §6 / docs/07 §7 明确 toolface_diff.py 是『已被 G24 覆盖、不再新建』还是仍要单独落地。"
+    - id: CF-9
+      subject: "契约落点（★ 已定，见下 captain_ruling；初版曾落在 shared/verify 目录下）"
+      evidence: "①四处门禁都没有『shared/model 下的 yaml 必须登记进某清单』的机制：shared/verify/contract_gates.py:36-43 只按固定 8 个文件名读契约，mapping_gate.py:99-104 与 kg_tbox_check.py:314-319 同；shared/model 下已存在不在这份名单里的 yaml（findings.yaml / zero-instance-ledger.yaml / v3-ccf-map.yaml / answer-shape.yaml）⇒ 它不是封闭登记表。②shared/model/*.yaml 会被**目录级自动摄入**：contract_gates.py:578-601 对 os.listdir(MODEL) 的每个 *.yaml 原文跑 FM- 正则（G18_MIN_REFS=10），ref_gate.py:16/218-222 无条件扫 shared/model/*.yaml 的路径引用且 :307 目标不存在即 ERROR ⇒ 把新文件放进 shared/model 会**改变另一名并发施工者**正在运行的门禁输入集。③shared/verify/ 无任何目录级扫描。"
+      decision_taken: "初版落在 shared/verify 目录下（零爆炸半径假设）；后按队长裁定改为落 shared/model 目录（见 captain_ruling）。"
+      counter_evidence: "同类『机器可读工具契约』的体例先例 shared/model/kgt-tools.yaml 就住在 shared/model；ref_gate.py:16 明文写『shared/model/*.yaml（必扫：契约与台账都住在这里）』。"
+      why_needs_captain: "若队长裁定契约应住 shared/model，只需移动文件 + 改 G24 的默认 --contract 参数（一行），并接受 G18/G20 对本文件的扫描。"
+      captain_ruling: "★ 队长已裁定（M3.1 追加约束 ③）：契约落 shared/model/tools-setb.yaml，理由是『shared/model 不被任何门禁按**文件名**枚举』（contract_gates.py:40 是按名显式取 y(\"info-products.yaml\")）。本契约已照此落位；★ 但本条的反证②（**目录级**摄入：contract_gates.py:578-601 对 os.listdir(MODEL) 的每个 *.yaml 跑 FM- 正则；ref_gate.py 无条件扫 shared/model/*.yaml）**并未因此消失** ⇒ 交付前已按队长要求复跑 G18 与 G20，逐字 RESULT 行见 tmp/_m31_report.md。若这两道门禁因本文件变红，则本条反证成立、需队长二次裁决（改文件名 / 加白名单例外 / 或移回 shared/verify/）。"
+    - id: CF-10
+      subject: "返回值的形态（rows 内层键名）不参与比对 —— 是不是把 C3 做浅了"
+      evidence: "本契约只冻结顶层字段名（HB7）；cc_query 的 rows 每项键名由被查询环境决定，两侧必然不同（Cypher 记录 vs SPARQL 绑定）。"
+      decision_taken: "顶层字段名参与比对；嵌套键名不参与（登记 OQ-4）。"
+      why_needs_captain: "若要求嵌套键名也逐字相同，则 cc_query 的 rows 只能约定为『行对象的键 = 查询投影变量名』，这会把载体差异重新引入比对 ⇒ 可能反而破坏实验。"
+
+open_questions:
+  list:
+    - id: OQ-1
+      question: "cc_trace 的 direction 取值域（双向/出/入）是什么？"
+      current_state: "本契约只冻结类型 string 与必填性 false；取值域未冻结。两侧必须取同一组枚举（否则模型侧行为不可比）。"
+    - id: OQ-2
+      question: "cc_propose 的 evidencePath 元素形态（记录 id？对象 id？路径数组？）"
+      current_state: "本契约冻结为 array（元素 = 字符串 id）；元素语义待定。"
+    - id: OQ-3
+      question: "G10 审计三字段（queryText/elapsedMs/rowCount）写到哪里？"
+      current_state: "docs/03 §7.2 G10 只说『记录到审计（满足 C5）』，未指定落点（服务日志？CCF 的 audit.ttl？）。本契约只冻结字段名。"
+    - id: OQ-4
+      question: "是否把比对延伸到数组项内部字段名（item_fields）？"
+      current_state: "当前不比对（HB7）；本契约已逐工具声明 item_fields 作为参考。"
+    - id: OQ-5
+      question: "参数默认值是否冻结？"
+      current_state: "文档未规定任何默认值（maxHops / direction 等）⇒ 本契约不冻结默认值，只冻结类型、必填性与上界。"
+    - id: OQ-6
+      question: "--min-tools 的默认值是否应上调（防『两侧都只实现 1 个工具』的合谋式通过）？"
+      current_state: "默认 = 契约工具数（7）；契约工具集固定为 7，故两侧少实现任何一个工具都会被 G24-03 抓住。"
+
+provenance:
+  author: "M3.1 施工者（受队长委派）"
+  created: "2026-09-29"
+  read_documents_with_sha256:
+    - doc: "docs/05-编排层设计（Dify）.md"
+      sha256: "6472adbea7af34efe4f634d717091016ceeef991c0fe6506df703148ff6bd5c0"
+    - doc: "docs/03-方案1设计（知识图谱+LLM）.md"
+      sha256: "312c55b4b66f8da1ddc20e38ecd81eff932a20533783af3ecec7fcf2eb2747dd"
+    - doc: "docs/04-方案2设计（本体+LLM）.md"
+      sha256: "4acd19d37c890f0a31bf6ea7287296ed32cb30db11fd0bb3e41dd3fa56175972"
+  note: "docs/00 与 docs/07 在读取时点由另一名施工者并发修改，故此处**不记录**它们的 sha256（读数不可作为冻结依据）；引用它们时只写 §号。"
+  revision_note: "v1.0.1（本次）：新增判据 G24-11『契约静态计数自洽』，并据『按 G24 运行时口径现场重算』修正 g24.boundary_counts 的计数口径与数值（原声明 excluded_params=2 / compared_return_fields=23 与本契约的实际内容（excluded_params=0 / tool_level 20 + 信封 4×7 = 48）不符，属初版计数口径未写清导致的**自相矛盾**，已改为逐键注释口径 + 机器重算校验，杜绝再次漂移）。v1.0.0：初版先落盘于 shared/verify 目录下的同名文件，同日按队长裁定（M3.1 追加约束 ③）**移动到 shared/model/tools-setb.yaml**（体例与 shared/model/kgt-tools.yaml 同族）；并据队长追加约束 ① 新增 G24-10 三源交叉一致判据。移动与改动均为文本编辑，未改任何既有文件。"

@@ -1,0 +1,374 @@
+# ============================================================================
+# kgt-prompt-variants.yaml · v1.3
+# 方案3（KG-T 家族）提示词变体冻结表 —— R-38「提示词单一事实源」
+#
+# 单一事实源关系（唯一权威链，顺序即引用方向）：
+#   基准全文        shared/deploy/prompts/agent_system.md          ← 主对比组唯一正文
+#   KG-T 全文       shared/deploy/prompts/kgt_agent_system.md      = 基准 + 恰 4 条冻结差异
+#   KG-T-free 全文  shared/deploy/prompts/kgt_free_agent_system.md = 基准 + 恰 7 条冻结差异（D-5…D-9 + D-11 + D-12；与 meta.frozen_diff_count_kgt_free = 7 一致）
+#   本表            只登记「文件引用 + 字节级指纹 + 机械差异清单」，不再内嵌任何提示词正文
+#   门禁            shared/verify/f5_kgt_gate.py 从文件复算行级差异，断言差异集合 == 本表清单
+#
+# 行级差异约定（与门禁实现一致；一个连续 hunk == 一条冻结差异）：
+#   kind=add     baseline_line = 插入点之前的基准行数（1-based，即新行插入在某行「之后」的行号；
+#                               0 表示插在文件头），variant_line = [新行 1-based 行号, 同行号]
+#   kind=replace baseline_line = [起始行, 结束行]（1-based，含两端）
+#                variant_line  = [起始行, 结束行]（1-based，含两端）
+#   ※ 多一行 / 少一行 / 改一字 / 换行号 ⇒ 门禁失败（差异集合必须逐条相等）。
+#   ※ 新增行均为「插在某个段落标题行之后」的单行，故每条 add 恰为 1 行 1 个 hunk。
+#
+# v1.2 相对 v1.1 的变化（R-38 六条裁定）：
+#   (1) baseline 由内嵌 lines 改为文件引用（path + bytes + lf_count + sha256）；
+#   (2) variants.<arm> 由内嵌 lines 改为 prompt_file 引用 + expected_tool_count/expected_tools
+#       + frozen_diff 清单（id/kind/baseline_line/variant_line/variant_text/why）；
+#   (3) 删除 identical_parts 散文（改由门禁的机械行级差异承担，散文无法被机器校验）；
+#   (4) KG-T-dyn 本轮不落文件（worklist §E.2 队长终裁），改以 derived_from + 恰 1 条派生差异
+#       机械定义，v1 对该组的全部断言改在「派生文本」上执行，断言条数不减；
+#   (5) 全角引号规范为 ASCII 引号，与 docs/05 §5.1 与 docs/03 §7.5 的原文一致（v1.1 属既有漂移）；
+#   (6) gate 段保留并同步新断言；KG-T-free 的 banned_words_policy: exempt 保留，并新增
+#       「豁免组命中集合必须恰等于声明集合」的更强断言（v1 只做跳过）。
+#
+# v1.4 相对 v1.3 的变化（R-55：BASE 臂落地）：
+#   (1) 新增 variants.BASE（dify_app=cc-base-agent）：基线组/无知识库提示词的落盘引用 + 指纹
+#       + 恰 3 条冻结差异（D-B1…D-B3）；meta.frozen_diff_count_base = 3；
+#   (2) `variant_text` 允许为**行列表**（表达多行替换）；方案3 家族的既有单行字符串约定不变；
+#   (3) BASE 不是方案3 家族成员，但其 prompt 必须与「项目级单一事实源」同处一表 —— 本表的
+#       baseline 本就是主对比组的正文，故 BASE 登记在此不改变该表的性质。
+#
+# v1.3 相对 v1.2 的变化（S2b：中性取数能力的契约同步，D47/D48）：
+#   (1) 基准文件新增 1 行「中性取数能力」宣告（read_facts），三份提示词同位置同步插入；
+#   (2) 工具计数同步：基准 5→6、KG-T 4→5、KG-T-free 1→2、KG-T-dyn 派生 5→6；
+#   (3) KG-T-free 新增第 7 条冻结差异 D-12（基准宣告行被 read_live_facts 别名行整行替换），
+#       meta.frozen_diff_count_kgt_free 6→7；KG-T 侧冻结差异仍恰为 4 条（该行与基准逐字相同）；
+#   (4) 既有冻结差异的 baseline_line / variant_line 因基准插入 1 行而整体后移，逐条同步；
+#   (5) KG-T-dyn 派生差异 D-dyn-1 的 parent_line 50→51、variant_line [51,51]→[52,52]。
+# ============================================================================
+meta:
+  version: "1.4.0"
+  date: "2026-10-08"
+  owner_doc: docs/09
+  supersedes: "1.3.0"
+  frozen_at: "2026-10-05"
+  frozen_diff_count: 5
+  frozen_at_kgt_free: "2026-10-05"
+  frozen_diff_count_kgt_free: 8
+  frozen_diff_count_kgt_dyn_derived: 1
+  # ★ R-55（v1.4，2026-10-08）：新增 BASE 变体（基线组/无知识库）。它是**非方案3家族**的变体；
+  #   登记进本表是因为本表已是**全项目提示词的单一事实源**（其 baseline 本就是主对比组的正文）。
+  frozen_at_base: "2026-10-08"
+  frozen_diff_count_base: 4
+  line_count_convention: "行数一律以字节级 LF 计数（LF = bytes.count(0x0A)），UTF-8 无 BOM、LF-only；不得用 Get-Content .Count（对中文 UTF-8 给伪值）"
+  change_note: >-
+    R-38（提示词单一事实源）：基准与两份变体改为独立落盘文件，本表只登记文件引用、字节级指纹与
+    机械可复算的行级差异清单；删除 v1.1 的内嵌 baseline.lines、variants.*.lines 与 identical_parts
+    散文；引号规范为 ASCII；KG-T-dyn 改为派生式声明（不落文件）。
+    S2b（v1.3）：基准新增 1 行中性取数能力宣告（read_facts，D47/D48），三份提示词同位置逐字同步；
+    工具计数 6（基准）/5（KG-T）/6（KG-T-dyn 派生）/2（KG-T-free）；KG-T-free 新增冻结差异
+    D-12（read_live_facts 声明式别名整行替换基准宣告行）⇒ frozen_diff_count_kgt_free 6→7。
+    R-55（v1.4，2026-10-08）：新增 BASE 变体（基线组 = 无知识库、只读 CCF 原始事实），冻结差异恰 3 条
+    （D-B1…D-B3，均为**等长 replace**：2↔2 / 3↔3 / 3↔3）；§1–§5 与基准**逐字相同**（公平性关键面）。
+    ★ 约定泛化（向后兼容）：`variant_text` 允许为**行列表**以表达多行替换；方案3 家族既有条目仍为
+    单行字符串，F5 对它们的断言（`text: [d["variant_text"]]`）**完全不变**。
+    BASE 的差异由 `shared/deploy/dify/deploy_agents.py --selftest` 的机械复核承担（见该脚本 R-55 段）。
+    ★ R-63（2026-10-16）：基准提示词追加 §6「最终答复的排版」（禁止前置散文、禁止 JSON 信封包裹）
+    ⇒ baseline 指纹 6461 B/91 LF/60fab0b5… → **7710 B/105 LF/5941c0f9…**；§1–§5 与 required_block 未动。
+    ★ R-63 二次修订：首版 §6 写成「立刻输出最终答复、不再调用任何工具」⇒ 真机 16 次调用全部退化为
+    1 轮 0 次工具调用（模型直接编造结论）；已改写为「本节只约束排版、不豁免 §1–§3 取证要求」。
+    ★ R-63 三次修订（定型）：§6 的取证句**去掉工具名**（改为「工具选择遵循 §2」），并把该节**逐字相同**
+    地追加到 `base_agent_system.md`、`kgt_agent_system.md`、`kgt_free_agent_system.md`（派生 KG-T-dyn 随之改变）。
+    理由：① KG-T 变体有一票否决断言「不含 cc_cause」，工具名版 §6 会命中 ⇒ 必须中性化；
+    ② 只有**逐字相同**的追加才不会产生新 hunk ⇒ 冻结差异条数维持 KG-T 5 / KG-T-free 8 / BASE 4 不变，
+    `f5_kgt_gate.py` B2/B3-a/B4 与 `contract_gates.py` X18 只需重登记指纹。受影响的登记值：
+    KG-T 5571→**6820** B（82→**96** LF，b1ac7d85→**c2dcb7d4**）、KG-T-free 6268→**7517** B（84→**98** LF，
+    bf6e3329→**a703556b**）、KG-T-dyn 派生 5678→**6927** B（83→**97** LF，27afad02→**2a49e9a2**）、
+    BASE 5922→**7171** B（82→**96** LF，01afcd7f→**142007a3**）。
+
+baseline:
+  source: docs/05-编排层设计（Dify）.md §5.1（主对比组提示词模板，落盘路径 §5）
+  also_at: docs/03-方案1设计（知识图谱+LLM）.md §7.5（**历史薄版**三行摘要，仅存沿革；正文权威 = 本块 `prompt_file` 指向的文件，该节现已自述「以文件为准」）
+  prompt_file: shared/deploy/prompts/agent_system.md
+  bytes: 7982
+  lf_count: 106
+  sha256: 8943ee034201ab43b0df025415eab74df14b3cf6daaeb46363a882daa10d6f7f
+  required_block: docs/05 §5.1 围栏块（15 行）逐字进正文
+  tool_count: 3
+  expected_tools: [cc_cause, cc_trace, read_facts]
+  banned_words_policy: zero_hits
+
+variants:
+
+  KG-T:
+    arm_role: 主实验组（预置接口 + LLM）
+    dify_app: cc-kgt-agent
+    prompt_file: shared/deploy/prompts/kgt_agent_system.md
+    bytes: 7092
+    lf_count: 97
+    sha256: 226336af0be02ab5a5fdd0717c35a685e28d649c1861be57c50a3d93a156b4d0
+    expected_tool_count: 5
+    expected_tools: [get_object_topology, get_fault_topology, get_metrics, get_facts, read_facts]
+    banned_words_policy: zero_hits
+    # ★ R-55：本变体的冻结差异由 F5 门禁机械复核（f5_kgt_gate.py，CI 离线档）。
+    diff_verified_by: f5_kgt_gate
+    frozen_diff:
+      - id: D-1
+        kind: replace
+        baseline_line: [6, 17]
+        variant_line: [6, 7]
+        variant_text:
+          - "【第一步 · 理解与取证】"
+          - "调 get_object_topology 拿到相关对象及其连接关系；对范围内的对象调 get_metrics 取指标读数。"
+        why: "★ A′（2026-10-15）：基准改为「首选 cc_cause 一次拿全 + 预算纪律」；本变体按自身工具面重写同区域并补预算纪律。该 hunk 由实算得出。"
+      - id: D-2
+        kind: replace
+        baseline_line: [19, 22]
+        variant_line: [9, 10]
+        variant_text:
+          - "【第二步 · 收敛与建议】"
+          - "调 get_fault_topology 拿到候选故障的传播结构；调 get_facts 把结论落到具体的事实 id 上。"
+        why: "★ A′（2026-10-15）：基准改为「首选 cc_cause 一次拿全 + 预算纪律」；本变体按自身工具面重写同区域并补预算纪律。该 hunk 由实算得出。"
+      - id: D-3
+        kind: replace
+        baseline_line: [25, 27]
+        variant_line: [13, 16]
+        variant_text:
+          - "工具调用轮次有硬上限。**目标是在 6 轮以内完成**：get_object_topology / get_fault_topology"
+          - "与 get_metrics / get_facts 的返回已覆盖绝大部分证据需求，不要为“再多查一点”而反复取数。"
+          - "若确实无法在预算内收敛，按 §3.3 明确写“不足以判定”并列出缺口"
+          - "—— 这**优于**耗尽预算以致没有任何输出。"
+        why: "★ A′（2026-10-15）：基准改为「首选 cc_cause 一次拿全 + 预算纪律」；本变体按自身工具面重写同区域并补预算纪律。该 hunk 由实算得出。"
+      - id: D-4
+        kind: add
+        baseline_line: 43
+        variant_line: [33, 33]
+        variant_text: "拓扑已直接给你：只描述\"同时出现\"的关系不构成因果链，不得据此继续传播。"
+        why: "★ A′（2026-10-15）：基准改为「首选 cc_cause 一次拿全 + 预算纪律」；本变体按自身工具面重写同区域并补预算纪律。该 hunk 由实算得出。"
+      - id: D-5
+        kind: add
+        baseline_line: 61
+        variant_line: [52, 52]
+        variant_text: "因果结构最多 4 跳，未返回的部分不代表\"不存在\"。"
+        why: "★ A′（2026-10-15）：基准改为「首选 cc_cause 一次拿全 + 预算纪律」；本变体按自身工具面重写同区域并补预算纪律。该 hunk 由实算得出。"
+  KG-T-dyn:
+    arm_role: 补充扫掠组（预置接口 + LLM + 动态再采集）；本轮不落文件
+    dify_app: cc-kgt-dyn-agent
+    derived_from: KG-T
+    derived_note: >-
+      worklist §E.2 队长终裁：本批不为 KG-T-dyn 落独立提示词文件。为避免断言退化，本表以
+      derived_from + 恰 1 条派生差异机械定义其全文 = KG-T 文件正文 + 该条插入；门禁据此在
+      派生文本上执行 v1 对该组的全部断言（禁用词零命中 / 工具数与禁令 / info-products 一致 /
+      基准硬性要求逐字保留 / 不含 cc_cause）。
+    # ★ U-N 裁定 = A（2026-10-08）：登记**派生正文的指纹**（不落文件 —— F5 的 E 段断言
+    #   「无独立文件」；这三个值是 `derive_variant_text()` 在内存里算出的结果的指纹，
+    #   用于钉住「父正文 + 恰 1 条派生差异」这一组合，改父正文或改派生行都会被抓到）。
+    bytes: 7199
+    lf_count: 98
+    sha256: 0c401bffdfb7efbda41579ac508eaf859dc12a49ee408c361fcdbcad2c4b4b5a
+    expected_tool_count: 6
+    expected_tools: [get_object_topology, get_fault_topology, get_metrics, get_facts, read_facts, collect_now]
+    # ★ 与 BASE 同一模式：声明「谁机械复核本变体的差异/指纹」。
+    diff_verified_by: contract_gates
+    banned_words_policy: zero_hits
+    derived_diff:
+      - id: D-dyn-1
+        kind: add
+        parent_file: shared/deploy/prompts/kgt_agent_system.md
+        parent_line: 57
+        variant_line: [58, 58]
+        variant_text: '当现有事实不足以支撑判断时，可以调 collect_now 重新采集指定对象的当前状态。'
+        why: '唯一自变量：动态再采集能力（collect_now）；其余与 KG-T 逐字相同。'
+
+  KG-T-free:
+    arm_role: 访问方式对照/插件直连组（plugin-direct + LLM）
+    dify_app: cc-kgt-free-agent
+    prompt_file: shared/deploy/prompts/kgt_free_agent_system.md
+    bytes: 7789
+    lf_count: 99
+    sha256: d16b4e1491f32945ccb9287e4c2cc2deeb0cc55651c22c26fb0ccfe050626543
+    dify_plugin:
+      # ★ R-50：身份面**显式偏离**官方（fork cc-ops/neo4j_cypher_query），已登记于
+      #   kgt-tools.yaml#arms.KG-T-free.dify_plugin.fork_provenance.deviations_from_official。
+      #   官方基线 = nikola_milosevic/neo4j_query:0.2.0（OFFICIAL_PLUGIN，冻结于 f5_kgt_gate.py:100-113）。
+      #   工具名 neo4j_query（插件腿）不变（check_fairness.py:1227-1253 按 tool_name 集合判等）；
+      #   S2b 后 expected_tool_count 含 api provider 腿的 read_live_facts（D47）⇒ 由 1 变 2。
+      provider_id: cc-ops/neo4j_cypher_query/neo4j_query
+      provider_type: plugin
+      version: "0.1.0"
+      plugin_verified: false
+      read_only_role_required: true
+    expected_tool_count: 2
+    expected_tools: [neo4j_query, read_live_facts]
+    banned_words_policy: exempt
+    # ★ R-55：本变体的冻结差异由 F5 门禁机械复核（f5_kgt_gate.py，CI 离线档）。
+    diff_verified_by: f5_kgt_gate
+    banned_words_policy_reason: >-
+      裁决 12 取代裁决 10 对本组的适用：本组必须书写 Cypher 与 schema 才能直连查询，禁用词政策为
+      exempt；豁免不外溢到 KG-T / KG-T-dyn。豁免不等于不检查：门禁断言本组的两张禁用词表命中集合
+      恰等于下方声明集合（多一个词就失败）。
+    banned_words_declared_hits:
+      gate_list: [Cypher, 图, schema]
+      docs05_regex: [cypher, neo4j, 知识图谱]
+    frozen_diff:
+      - id: D-1
+        kind: replace
+        baseline_line: [4, 4]
+        variant_line: [4, 4]
+        variant_text: "需要对象的当前状态读数时，可调用 read_live_facts 读取指定范围内的最新读数；它只读且有界。"
+        why: "★ A′（2026-10-15）：基准改为「首选 cc_cause 一次拿全 + 预算纪律」；本变体按自身工具面重写同区域并补预算纪律。该 hunk 由实算得出。"
+      - id: D-2
+        kind: replace
+        baseline_line: [6, 17]
+        variant_line: [6, 7]
+        variant_text:
+          - "【第一步 · 理解与取证】"
+          - "第一步：调 neo4j_query 直接查询知识图谱，自行确定相关对象与指标读数；可先用只读的 schema 查询了解标签与关系类型。"
+        why: "★ A′（2026-10-15）：基准改为「首选 cc_cause 一次拿全 + 预算纪律」；本变体按自身工具面重写同区域并补预算纪律。该 hunk 由实算得出。"
+      - id: D-3
+        kind: replace
+        baseline_line: [19, 22]
+        variant_line: [9, 10]
+        variant_text:
+          - "【第二步 · 收敛与建议】"
+          - "第二步：由你自己根据查询到的因果结构与指标读数判断根因并按可能性排序；对候选根因沿因果关系逐跳核对，最多 4 跳。"
+        why: "★ A′（2026-10-15）：基准改为「首选 cc_cause 一次拿全 + 预算纪律」；本变体按自身工具面重写同区域并补预算纪律。该 hunk 由实算得出。"
+      - id: D-4
+        kind: replace
+        baseline_line: [25, 27]
+        variant_line: [13, 16]
+        variant_text:
+          - "工具调用轮次有硬上限。**目标是在 6 轮以内完成**：用尽量少的结构化查询把对象、连接关系与"
+          - "指标读数一次取回，不要为“再多查一点”而反复发起查询。"
+          - "若确实无法在预算内收敛，按 §3.3 明确写“不足以判定”并列出缺口"
+          - "—— 这**优于**耗尽预算以致没有任何输出。"
+        why: "★ A′（2026-10-15）：基准改为「首选 cc_cause 一次拿全 + 预算纪律」；本变体按自身工具面重写同区域并补预算纪律。该 hunk 由实算得出。"
+      - id: D-5
+        kind: add
+        baseline_line: 43
+        variant_line: [33, 33]
+        variant_text: "只描述\"同时出现\"的关系（共现）不构成因果链，不得据此继续传播。"
+        why: "★ A′（2026-10-15）：基准改为「首选 cc_cause 一次拿全 + 预算纪律」；本变体按自身工具面重写同区域并补预算纪律。该 hunk 由实算得出。"
+      - id: D-6
+        kind: add
+        baseline_line: 61
+        variant_line: [52, 52]
+        variant_text: "因果结构成环，逐跳展开时不得使用变长路径遍历（`*1..n`）；最多 4 跳，未返回的部分不代表\"不存在\"。"
+        why: "★ A′（2026-10-15）：基准改为「首选 cc_cause 一次拿全 + 预算纪律」；本变体按自身工具面重写同区域并补预算纪律。该 hunk 由实算得出。"
+      - id: D-7
+        kind: add
+        baseline_line: 71
+        variant_line: [63, 63]
+        variant_text: "查询语言为 Cypher，只读：禁止 CREATE / DELETE / SET / MERGE / REMOVE；单条语句不超过 2000 字符。"
+        why: "★ A′（2026-10-15）：基准改为「首选 cc_cause 一次拿全 + 预算纪律」；本变体按自身工具面重写同区域并补预算纪律。该 hunk 由实算得出。"
+      - id: D-8
+        kind: add
+        baseline_line: 91
+        variant_line: [84, 84]
+        variant_text: "【动作格式契约】需要调用工具时必须严格按 ReAct 动作格式输出：先写一行 `Thought:`，再写一行 `Action:`，紧接其后用代码块给出唯一的 JSON 动作对象 `{\"action\": \"neo4j_query\", \"action_input\": {...}}`，然后立即停止输出、等待 `Observation:`；不得用叙述代替 Action，在真正收到 `Observation:` 之前不得输出结论，也不得声称已调用过工具或已取到数据。"
+        why: "★ A′（2026-10-15）：基准改为「首选 cc_cause 一次拿全 + 预算纪律」；本变体按自身工具面重写同区域并补预算纪律。该 hunk 由实算得出。"
+  BASE:
+    arm_role: 基线组（**无知识库** · 只读 CCF 原始事实；提升幅度的**分母**）
+    dify_app: cc-base-agent
+    prompt_file: shared/deploy/prompts/base_agent_system.md
+    bytes: 7443
+    lf_count: 97
+    sha256: 8bac65af129f674c356734f591171c8d18477e90aee5c7228c9180c395190c85
+    expected_tool_count: 1
+    expected_tools: [read_facts]
+    banned_words_policy: zero_hits
+    # ★ R-55（2026-10-08 修正）：BASE 不属方案3 家族 ⇒ F5 不覆盖它。其冻结差异改由
+    #   **阻塞档**的 `shared/verify/contract_gates.py`（G18 的 X18 区块）逐条复算 ——
+    #   原先只落在 `deploy_agents.py --selftest`，而该脚本需要可达 Dify
+    #   （缺 DIFY_BASE_URL 即 fail-closed）⇒ 只能在 **online 档（手动、非阻塞）** 跑，
+    #   等于「提示词被静默改写」在阻塞档无人拦。X18 已补上（含正控与两个负控实测）。
+    #   ★ `deploy_agents --selftest` 仍在 online 档用同一套约定再复核一遍（交叉验证）。
+    diff_verified_by: contract_gates
+    note: >
+      ★ 与基准的差异**恰 3 条、且全为等长 replace**（2↔2 / 3↔3 / 3↔3）⇒ 总 LF 与基准相同（76）。
+      ★ §1–§5（第 20 行起）与基准**逐字相同**：证据纪律/空结果语义/截断记账/只读干跑/输出格式
+        这五节是**公平性关键面**，跨臂必须一致；只有「角色 + 第一步 + 第二步」按工具面改写。
+    frozen_diff:
+      - id: D-1
+        kind: replace
+        baseline_line: [3, 4]
+        variant_line: [3, 4]
+        variant_text:
+          - "你是信用卡系统跨层运维诊断助手。你只有**一个**只读取数工具 `read_facts`，**没有任何知识库**可查：没有目录、没有规则清单、也没有查询语言。"
+          - "`read_facts` 按范围返回**原始读数三段** —— `objects`（对象）/ `relations`（关系）/ `observations`（指标读数），外加 `source` 与公共信封；它只读且有界。"
+        why: "★ A′（2026-10-15）：基准改为「首选 cc_cause 一次拿全 + 预算纪律」；本变体按自身工具面重写同区域并补预算纪律。该 hunk 由实算得出。"
+      - id: D-2
+        kind: replace
+        baseline_line: [6, 17]
+        variant_line: [6, 8]
+        variant_text:
+          - "【第一步 · 只靠原始事实取证】"
+          - "用 `read_facts` 分范围、逐次收窄，把与问题相关的 `objects` / `relations` / `observations` 取回来。"
+          - "没有 `cc_guide` 这类目录：对象类型、指标码与关系名的含义，**都要从取回的事实里自己归纳**，不得凭常识假设。"
+        why: "★ A′（2026-10-15）：基准改为「首选 cc_cause 一次拿全 + 预算纪律」；本变体按自身工具面重写同区域并补预算纪律。该 hunk 由实算得出。"
+      - id: D-3
+        kind: replace
+        baseline_line: [19, 22]
+        variant_line: [10, 12]
+        variant_text:
+          - "【第二步 · 自己重建结构并收敛】"
+          - "**拓扑与因果必须由你从原始事实自行重建**：用 `relations` 拼出对象之间的连接，再结合 `observations` 的变化推断传播路径与根因候选。"
+          - "没有确定性归因组件可依赖：根因收敛、路径排序与置信度**全部由你完成**，并在「证据」节写清是哪几条事实支撑的。"
+        why: "★ A′（2026-10-15）：基准改为「首选 cc_cause 一次拿全 + 预算纪律」；本变体按自身工具面重写同区域并补预算纪律。该 hunk 由实算得出。"
+      - id: D-4
+        kind: replace
+        baseline_line: [25, 27]
+        variant_line: [15, 18]
+        variant_text:
+          - "工具调用轮次有硬上限。**目标是在 6 轮以内完成**：`read_facts` 分范围取数时一次性把范围定准，"
+          - "不要为“再多查一点”而反复取数。"
+          - "若确实无法在预算内收敛，按 §3.3 明确写“不足以判定”并列出缺口"
+          - "—— 这**优于**耗尽预算以致没有任何输出。"
+        why: "★ A′（2026-10-15）：基准改为「首选 cc_cause 一次拿全 + 预算纪律」；本变体按自身工具面重写同区域并补预算纪律。该 hunk 由实算得出。"
+gate:
+  id: F5
+  name: KG-T 提示词变体与工具面
+  script: shared/verify/f5_kgt_gate.py
+  version: "2.0"
+  banned_words: [Cypher, SPARQL, 图, 本体, 三元组, schema, 查询语句, property graph, RDF, OWL]
+  banned_word_matching: case-insensitive
+  banned_words_scope:
+    applies_to: [KG-T, KG-T-dyn]
+    exempt: [KG-T-free]
+    reason: >-
+      裁决 12 取代裁决 10 对本组的适用：KG-T-free 必须书写 Cypher 与 schema 才能直连查询，
+      禁用词政策为 exempt；豁免不外溢到 KG-T / KG-T-dyn。
+  docs05_banned_regex: '(cypher|sparql|rdf|owl|三元组|属性图|property\s*graph|知识图谱|本体|neo4j|graphdb|turtle|ttl|shacl|推理机|reasoner)'
+  docs05_banned_regex_scope: 只适用于 baseline / KG-T / KG-T-dyn（KG-T-free 按 exempt 处理并做集合相等断言）
+  baseline_required_lines_source: docs/05 §5.1 围栏块（15 行）+ §5.3 六个锚点
+  assertions:
+    - A1 基准文件存在、UTF-8 无 BOM、LF-only、以 LF 结尾
+    - A2 基准文件 bytes / lf_count / sha256 == 本表 baseline 登记值
+    - A3 基准文件逐字含 docs/05 §5.1 围栏块的 15 行（逐行断言）
+    - A4 基准文件含 6 个工具名 cc_guide / cc_facts / cc_cause / cc_trace / cc_propose / read_facts
+    - A5 基准文件 §5.3 六个锚点齐备（工具调用指引 / 证据要求 / 无法定位要求 / 多根因要求 / 不执行要求 / 输出格式）
+    - A6 基准文件禁用词零命中（gate.banned_words 与 docs05_banned_regex 两张表，均大小写不敏感）
+    - B1 每份变体文件的 bytes / lf_count / sha256 == 本表登记值；文件无 BOM、LF-only、以 LF 结尾
+    - B2 每份变体文件与基准文件的行级差异（difflib，autojunk=False）恰为 4 条（KG-T）/ 7 条（KG-T-free）
+    - B3 差异集合与本表 frozen_diff 清单逐条相等：kind / baseline_line / variant_line / variant_text 全部一致
+    - B4 用基准 + 本表冻结差异重建的文本与变体文件逐字节相同（未声明处不得有任何改动）
+    - B5 每份变体文件不得含被替换掉的基准行（cc_guide / cc_facts / cc_cause / cc_trace / cc_propose 相关 4 行）
+    - B6 每份变体文件的工具名集合恰等于 expected_tools（KG-T 5 个 / KG-T-free 2 个）
+    - B7 KG-T 文件不得出现 cc_query / run_rules / validate / cc_propose / collect_now 及任何 cc_* 工具
+    - B8 KG-T-free 文件不得出现任何 cc_* / get_* / run_rules / validate / collect_now 工具（:8303 端点工具）
+    - B9 KG-T 文件禁用词零命中；KG-T-free 两张禁用词表的命中集合恰等于本表声明集合（多一词即失败）
+    - B10 基准 §5.1【硬性要求】1（证据要求）与 2（无法定位要求）两行在所有变体中逐字保留（false_claim 锚点）
+    - B11 §5.3 其余五个锚点在所有变体中齐备；工具调用指引按本臂工具名判定（基准句点名 cc_* 工具，被 D-1/D-5 取代，故锚点须按臂判定）
+    - C1 KG-T-dyn 由 KG-T 文件 + 恰 1 条派生差异机械定义；派生文本禁用词零命中、工具集恰为 6 且相比 KG-T 恰多 collect_now
+    - C2 三臂工具集与 info-products.yaml#access.<arm>.tools 逐字一致
+    - C3 kgt-tools.yaml 的 KG-T 工具定义集 == info-products.yaml 的 KG-T 工具集
+    - C4 归因主体轴：attribution_axis_forbidden.tool == cc_cause，适用范围恰为方案3 三臂，三臂均不含 cc_cause
+    - C5 KG-T-free 插件身份（★ R-50 后**声明驱动**）：provider_id / plugin_version **显式偏离**官方并登记于 kgt-tools.yaml#arms.KG-T-free.dify_plugin.fork_provenance（无声漂移由 E13-i 必 FAIL）/ plugin_verified=false / service_port 为空 / 工具名与五个入参(name,type,required)逐字对齐官方 / parameters 为 string / allow_write_queries 默认 false
+    - C6 KG-T-free 只读角色必填，且变体文件含只读纪律句（D-7）
+    - C7 KG-T-free 与本表 dify_plugin 及 kgt-tools.yaml 的插件声明一致，且 carrier 声明与 KG-Q 共用同一 Neo4j 实例
+    - C8 payload_policy 上限由插件自带已显式记账（query_max_chars 2000 / max_records_default 1000 / not_aligned_with_project_caps 非空）
+    - C9 负控自检（--selftest）全部必须 FAIL：改变体一行 / 删一条冻结差异 / 基准注入禁用词 / 基准或变体 sha256 失效 / 基准多一行
+    - C10 E13-i 声明驱动身份面（★ 无声漂移必 FAIL）：声明的 provider_id / plugin_version 必须 == 官方基线（f5_kgt_gate.py:100-113 OFFICIAL_PLUGIN），或已在 fork_provenance.deviations_from_official 里逐条登记 official/declared/reason；**显式偏离只允许身份面这两项**，且必须带 installation_status 与恰四条登记；实现腿（shared/deploy/plugins/neo4j_cypher_query/src/{provider,tools}/neo4j_query.yaml）与真机回读腿（dify_plugin.machine_readback，及 --dify-readback 现场回读）必须与声明一致
+    - C11 E13-j param_form 逐参：五个参数的 form 逐参等于声明——query 必须 llm，database / max_records / allow_write_queries 必须 form，query 仍必须 required；实现腿与回读腿同断言
+    - C12 S7 声明面负控（--selftest）：静默改掉 provider_id 但不加偏离声明 ⇒ 必 FAIL；同一改动带完整偏离声明与一致的实现/回读 ⇒ 必 PASS（两条分别单独判定）
+  selftest:
+    entry: "python shared/verify/f5_kgt_gate.py --selftest"
+    sandbox: 临时目录（tmp/ 下，tempfile.mkdtemp），不修改任何交付文件
+  on_violation: 拒绝跑评测；若评测中途发现，全部结果作废（docs/09 §9 第 5/6 条）

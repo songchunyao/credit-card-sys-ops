@@ -1,0 +1,72 @@
+# ============================================================================
+# scheme2-onto/rules/r01.rq —— 方案2 原生 SPARQL CONSTRUCT 规则
+# ----------------------------------------------------------------------------
+#   规则执行口径: 见本文件头 + docs/04-appendix-ORSD.md「规则口径」一节
+#   契约: shared/model/fault-modes.yaml#FM-APP-POOL-EXHAUSTED
+#   detect(all_of):
+#     1) app.datasource.pending_threads  predicate=non_zero
+#     2) app.datasource.active_connections  op=">="  operand=entity_property:JdbcDataSource.maxPoolSize
+#     3) app.datasource.acquire_wait_ms     op=">"   operand=threshold:acquire_wait_ms_light#warning
+#   产出: F-001；关键否定性证据（docs/04 §6）: Data 层 session_used_ratio 正常
+#   ★ 2026-10-12 已闭合: acquire_wait_ms_light 已标定 warning=520 / critical=1560
+#     ⇒ ccm:t_acquire_wait_ms_light_warning 带 ccm:thresholdValue 520 ⇒ 本规则在契约下**可满足**。
+#     标定依据见 shared/model/fault-modes.yaml#thresholds[acquire_wait_ms_light].rationale。
+#     ★ 仍不可判的一项: 判据 1（pending_threads）在本部署**无采集通道**（HikariCP 池内计数器）
+#       ⇒ 本规则整体仍无法产出 Finding；这是**采集缺口**，不是阈值缺口。
+#     TBox 用 ccm:uncalibrated true 显式登记该缺口（方案1 的 LPG 侧只能靠注释表达）。
+PREFIX cc:    <https://credit-card-ops.ai/onto/topology#>
+PREFIX cco:   <https://credit-card-ops.ai/onto/core#>
+PREFIX ccm:   <https://credit-card-ops.ai/onto/metric#>
+PREFIX ccf:   <https://credit-card-ops.ai/onto/fault#>
+PREFIX ccc:   <https://credit-card-ops.ai/onto/causal#>
+PREFIX cca:   <https://credit-card-ops.ai/onto/action#>
+PREFIX ccp:   <https://credit-card-ops.ai/onto/prov#>
+PREFIX prov:  <http://www.w3.org/ns/prov#>
+PREFIX xsd:   <http://www.w3.org/2001/XMLSchema#>
+PREFIX rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs:  <http://www.w3.org/2000/01/rdf-schema#>
+
+CONSTRUCT {
+  ?finding a ccf:Finding ;
+      ccf:findingCode "F-001" ;
+      ccp:findingSeverity "critical" ;
+      ccp:findingFaultMode ccf:FM-APP-POOL-EXHAUSTED ;
+      ccp:findingFor ?target ;
+      ccp:associatedRule ccp:Rule-r01 ;
+      prov:wasDerivedFrom ?ev .
+}
+WHERE {
+  ?target a cc:JdbcDataSource ;
+      ccm:pendingThreads ?pending ;
+      ccm:activeConnections ?active ;
+      cc:maxPoolSize ?maxPool ;
+      ccm:acquireWaitMs ?wait .
+
+  # 判据 1: non_zero
+  ?nzBase ccm:tierReference "baseline:counter_non_zero" ;
+          ccm:baselineValue ?zero .
+  FILTER(?pending > ?zero)
+
+  # 判据 2: entity_property 型绑定（值只从实体自身属性取）
+  FILTER(?active >= ?maxPool)
+
+  # 判据 3: 阈值引用（档位必填）—— 未标定时 ?waitLimit 无绑定 ⇒ 规则不产结论（不猜值）
+  ?tier a ccm:WarningThreshold ;
+        ccm:tierReference "threshold:acquire_wait_ms_light#warning" ;
+        ccm:thresholdValue ?waitLimit .
+  FILTER(?wait > ?waitLimit)
+
+  # 关键否定性证据: 数据库侧会话池未贴顶 ⇒ 排除 FM-DB-SESSION-POOL-FULL
+  FILTER NOT EXISTS {
+      ?sp a cc:DatabaseSessionPool ; ccm:sessionUsedRatio ?used .
+      ?severe ccm:tierReference "threshold:session_used_ratio_severe#critical" ;
+              ccm:thresholdValue ?severeLimit .
+      FILTER(?used > ?severeLimit)
+  }
+
+  ?target cc:hasEvidence ?ev .
+  ?ev cc:metricCode "app.datasource.acquire_wait_ms"^^xsd:string .
+  BIND(IRI(CONCAT("https://credit-card-ops.ai/onto/inst/finding/",
+                  "F-001/",
+                  ENCODE_FOR_URI(STRAFTER(STR(?target), "/inst/")))) AS ?finding)
+}

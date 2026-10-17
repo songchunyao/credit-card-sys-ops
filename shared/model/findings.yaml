@@ -1,0 +1,61 @@
+# ============================================================================
+# shared/model/findings.yaml —— 中立结论面词表（故障链 → 结论码）
+# ----------------------------------------------------------------------------
+# 作用（两条，缺一不可）：
+#   (a) T10 原生实现覆盖自检的**中性键**：门禁需要一份"应当有哪 7 条规则"的中立来源，
+#       否则只能把某一侧的规则 id 当权威 ⇒ 违反「契约是唯一权威」。
+#   (b) 两侧答案可比性：同一结论码在 KG 侧与 ONTO 侧必须指同一件事，否则
+#       root_cause_accuracy 的两个分母不可比（评测设计 docs/06 §2）。
+#
+# ★ 本表**只**固定「链 → 结论码 → 链名」，不规定任何一侧的规则 id 命名：
+#   方案1 的规则 id 形如 `R-Fn`、方案2 的形如 `rNN`，**逐字不同是设计意图**
+#   （原生命中实现正是被计成本的那部分），故 T10 不得比较两侧规则 id。
+#
+# 取证口径（T10 用）：载体上须有**可机读的产出声明**，门禁只读取其中的结论码集合；
+#   声明形态由各方案自定（注释行即可），不要求两侧写法一致。
+#
+# 权威来源（逐字，不外推）：
+#   - docs/03-方案1设计（知识图谱+LLM）.md:380-388  「规则清单」表（规则名 / 链 / 输出 Finding / 关键否定性证据）
+#   - docs/04-方案2设计（本体+LLM）.md:379-387      「规则清单」表（规则文件 / 链 / 输出 Finding / 关键否定性证据）
+#   - 链 id 的机读来源：shared/model/causal-edges.yaml#edges[].chain（本表与其并集一致）
+# ============================================================================
+meta:
+  version: 1.0.0
+  kind: neutral-finding-registry
+  authority:
+    - docs/03-方案1设计（知识图谱+LLM）.md:380-388
+    - docs/04-方案2设计（本体+LLM）.md:379-387
+  chain_source: shared/model/causal-edges.yaml#edges[].chain
+  consumers:
+    - shared/verify/equivalence.py --t10   # M2.8 等价性自检 ④ 的规则维度
+    - docs/06-评测设计（A-B对照）.md        # root_cause_accuracy 的结论码取值域
+
+findings:
+  - code: F-001
+    chain: F1
+    title: 应用侧连接池耗尽
+    negation_evidence: 数据库侧 session_used_ratio 正常
+  - code: F-002
+    chain: F2
+    title: 数据库慢查询跨层传导
+    negation_evidence: —（无可判否定性证据）
+  - code: F-003
+    chain: F3
+    title: 容器 CPU 限流
+    negation_evidence: 容器 cpu_usage_ratio 可能不高（关键：只看容器会误判）
+  - code: F-004
+    chain: F4
+    title: 容器 OOM（双路径）
+    negation_evidence: 宿主机 mem_available_ratio 正常 ⇒ 走 E12（容器 limit 小）路径
+  - code: F-005
+    chain: F5
+    title: JDBC 驱动/认证不兼容
+    negation_evidence: 排除法：DB 在线 ∧ 网络可达 ∧ 立即失败（非超时）
+  - code: F-006
+    chain: F6
+    title: 容器网络不可达
+    negation_evidence: connect_latency_ms 达 connectionTimeoutMs（超时 ≠ 立即失败）
+  - code: F-007
+    chain: F7
+    title: DB 实例故障/切换
+    negation_evidence: switchover_total 有增量 ∧ up=false

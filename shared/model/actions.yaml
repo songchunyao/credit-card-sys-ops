@@ -1,0 +1,122 @@
+# =============================================================================
+# actions.yaml —— 建议动作目录（**共享契约**，两载体同源）
+# -----------------------------------------------------------------------------
+# 为什么要有这个文件（2026-10-15，用户裁定按序推进时暴露）：
+#   实测发现两个载体的 `cc_propose` 输出**严重不对称**：
+#     · 一侧载体：7 条建议动作
+#     · 另一侧载体：**0 条** —— `/propose` 自述「环境动作目录为空：
+#       快照里没有带 actionId 的动作对象」
+#   而 `scheme2-onto/ontology/该侧的动作模块文件` 自己的头部**诚实声明**写着（逐字）：
+#     「docs/04 对 cc-action **没有给出任何契约**（模块职责表该行「契约」列为「—」，
+#       全文只有 docs/04:112 这一行提到本模块；形状清单与规则表都没有
+#       动作词表）。因此本模块是方案2 侧**自定的最小封闭集**，不是从契约推导的…
+#       **动作名与代码由我命名**」
+#   ⇒ 所以这不是「KG 投影漏了」，而是**动作目录从来没有契约**：一侧自造、一侧空白。
+#   ⇒ 把 ONTO 自造的目录**抄给** KG 会是「造数据让两侧看起来一致」，违反本项目的诚实纪律。
+#   ⇒ 正确形态 = **把动作目录升格为共享契约**，两载体从同一份声明投影。
+#
+# ★ 本文件的两条诚实边界
+#   1. `provenance` 一律记 `carrier_authored_promoted`：这些动作**原本是方案2 自造的**，
+#      本文件只把它**升格并共享**，不主张它来自 docs/03 / docs/04 —— 那两份文档都没有动作词表。
+#   2. `cc_propose` 的输出**形状**由 shared/model/tools-setb.yaml#tools.cc_propose 声明
+#      （`item_fields: [actionCode, target, reason]`）；本文件补的是**动作目录本身**，
+#      即「有哪些动作可选」，此前那是空缺。
+#
+# ★ 一处悬空指向的更正（必须留痕）
+#   原 `该侧的动作模块文件` 的 `ACT-FIX-JDBC-AUTH` 指向 `ccf:FM-APP-AUTH-INCOMPATIBLE`，
+#   而**该故障码不在本契约的 23 个故障模式之内**（它是参考项目的码）。
+#   据其自身 rationale「只有在『DB 在线 ∧ 网络可达 ∧ 立即失败』全部成立时才收敛到此根因」，
+#   本契约把目标更正为 `FM-APP-DS-CONNECT-FAIL`（本契约中语义最贴的连接失败模式）。
+#   见 `corrections` 段。
+# =============================================================================
+
+meta:
+  version: "1.0.0"
+  date: "2026-10-15"
+  provenance: carrier_authored_promoted
+  provenance_note: >-
+    动作目录原本由方案2 侧自造（该侧的动作模块文件 自述「自定」「动作名与代码由我命名」）。
+    本文件把它升格为**两载体共享**的契约，使 `cc_propose` 在两侧都有可投影的目录。
+    不主张它来自 docs/03 或 docs/04 —— 那两份文档均无动作词表。
+  semantics: >-
+    动作**只提议、不执行**：所有提案 executed=false、dryRun=true（docs/00 裁决 5）。
+    目录里**不写命令模板**（避免把「建议」写成「操作规程」）。
+  risk_levels: [low, medium, high]
+
+actions:
+  - actionCode: ACT-EXPAND-APP-POOL
+    displayName: 扩大应用侧连接池上限
+    onFault: FM-APP-POOL-EXHAUSTED
+    riskLevel: medium
+    rationale: "对症 app.datasource.active_connections 已达 JdbcDataSource.maxPoolSize；扩上限前须先确认数据库侧未贴顶。"
+    expectedEffect: "acquire_wait_ms 回落、pending_threads 归零。"
+    preconditionNote: "connectsTo 的下游 DatabaseSessionPool 未达 session_used_ratio_severe#critical；否则扩池只是把压力推给数据库。"
+    sideEffectNote: "数据库侧连接数同步上升，可能触发 FM-DB-SESSION-POOL-FULL。"
+
+  - actionCode: ACT-OPTIMIZE-SLOW-QUERY
+    displayName: 优化慢查询（改写/加索引/终止长事务）
+    onFault: FM-DB-SLOW-QUERY
+    riskLevel: medium
+    rationale: "对症 db.query.mean_exec_ms 超过 mean_exec_ms_light#warning。"
+    expectedEffect: "db.query.mean_exec_ms 回落；会话堆积缓解。"
+    preconditionNote: "需先用 Query/Table 链路定位具体 SQL（runsQuery + Table）。"
+    sideEffectNote: "终止长事务可能中断未提交业务。"
+
+  - actionCode: ACT-RAISE-CPU-LIMIT
+    displayName: 提高容器 CPU 配额（或降低同宿主机争抢）
+    onFault: FM-CTR-CPU-THROTTLED
+    riskLevel: medium
+    rationale: "对症 container.cpu_throttled_periods 增长，且条件边（host.cpu_usage_ratio > cpu_usage_ratio_severe#critical）成立。"
+    expectedEffect: "限流周期停止增长，app.endpoint.p99_ms 回落。"
+    preconditionNote: "必须同时看宿主机（hosts/runsIn 链路）—— 只看容器会误判为应用自身慢。"
+    sideEffectNote: "抬高配额会加剧同宿主机其他实例的争抢。"
+
+  - actionCode: ACT-RAISE-MEM-LIMIT
+    displayName: 提高容器内存 limit（或排查堆泄漏）
+    onFault: FM-CTR-OOM-KILLED
+    riskLevel: medium
+    rationale: "对症 container.oom_kill_total 增长；F4 的两条路径须先用区分器判别（宿主机内存紧张 vs 容器 limit 过小）。"
+    expectedEffect: "OOM 计数停止增长，实例重启随之消失。"
+    preconditionNote: "路径甲（宿主机紧张）时提高单容器 limit 无效，须先在宿主机侧处置。"
+    sideEffectNote: "加大 limit 可能诱发宿主机级 OOM。"
+
+  - actionCode: ACT-FIX-JDBC-AUTH
+    displayName: 修正 JDBC 连接串/驱动版本/认证方式
+    onFault: FM-APP-DS-CONNECT-FAIL
+    riskLevel: high
+    rationale: "对症连接失败：只有在「DB 在线 ∧ 网络可达 ∧ 立即失败」全部成立时才收敛到认证/配置类根因（区别于超时类）。"
+    expectedEffect: "app.datasource.connect_fail_total 停止增长。"
+    preconditionNote: "★ 必须先排除「超时而非立即失败」与「切换事件」，否则会把网络问题当成认证问题。"
+    sideEffectNote: "改认证方式需与应用发布同步，避免滚动重启期间大面积连接失败。"
+
+  - actionCode: ACT-CHECK-NETWORK-PATH
+    displayName: 排查容器到数据库的网络路径
+    onFault: FM-CTR-NET-UNREACHABLE
+    riskLevel: low
+    rationale: "对症 app.datasource.connect_latency_ms 达到 JdbcDataSource.connectionTimeoutMs（超时而非立即失败）。"
+    expectedEffect: "定位丢包/ACL/路由问题，恢复连接建立。"
+    preconditionNote: "与区分器配合：超时 → 网络；立即失败 → 认证。"
+    sideEffectNote: "只读排查，无副作用。"
+
+  - actionCode: ACT-FAILOVER-DB
+    displayName: 数据库实例主备切换/拉起
+    onFault: FM-DB-INSTANCE-DOWN
+    riskLevel: high
+    rationale: "对症 db.instance.up 为 false 或 db.cluster.switchover_total 增长。"
+    expectedEffect: "实例恢复在线，连接瞬时中断结束。"
+    preconditionNote: "需确认备库状态与复制延迟；切换有中断窗口。"
+    sideEffectNote: "切换瞬间会话全部断开，会叠加 FM-APP-DS-CONNECT-FAIL。"
+
+corrections:
+  - id: FIX-DANGLING-1
+    date: "2026-10-15"
+    field: onFault
+    actionCode: ACT-FIX-JDBC-AUTH
+    was: FM-APP-AUTH-INCOMPATIBLE
+    now: FM-APP-DS-CONNECT-FAIL
+    why: >-
+      原值 `FM-APP-AUTH-INCOMPATIBLE` 不在本契约 23 个故障模式之内（参考项目的码），
+      投影进本环境后成为**悬空引用**（动作挂在了一个不存在的故障模式上）。
+      据其自身 rationale 的判据（「DB 在线 ∧ 网络可达 ∧ 立即失败」），
+      本契约中语义最贴的是 `FM-APP-DS-CONNECT-FAIL`。
+    verified_by: "本文件 actions[].onFault 必须全部 ∈ fault-modes.yaml 的 23 个 code（门禁）"

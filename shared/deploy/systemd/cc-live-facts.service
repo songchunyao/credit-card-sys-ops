@@ -1,0 +1,20 @@
+[Unit]
+Description=cc-live-facts 中性取数服务 (:8304, 判决模式 case=A-01)
+After=network-online.target docker.service
+Wants=network-online.target
+StartLimitIntervalSec=600
+StartLimitBurst=30
+
+[Service]
+Type=forking
+Environment=M5_CASE_ID=A-01
+PIDFile=/opt/cc-live-facts/cc_live_facts.pid
+WorkingDirectory=/opt/cc-live-facts
+
+ExecStart=/bin/bash -c 'cd /opt/cc-live-facts && exec bash shared/collect/start_cc_live_facts.sh'
+Restart=on-failure
+RestartSec=15
+TimeoutStartSec=360
+
+[Install]
+WantedBy=multi-user.target

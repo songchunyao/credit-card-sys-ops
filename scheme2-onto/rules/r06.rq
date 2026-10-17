@@ -1,0 +1,123 @@
+# ============================================================================
+# scheme2-onto/rules/r06.rq —— 方案2 原生 SPARQL CONSTRUCT 规则
+# ----------------------------------------------------------------------------
+#   规则执行口径: 见本文件头 + docs/04-appendix-ORSD.md「规则口径」一节
+#   契约: shared/model/fault-modes.yaml#FM-CTR-NET-UNREACHABLE
+#   detect(any_of): app.datasource.connect_latency_ms op=">" operand=entity_property:JdbcDataSource.connectionTimeoutMs
+#   detect(all_of): app.datasource.connect_fail_total  predicate=increased
+#   产出: F-006；关键证据（docs/04 §6）: connect_latency_ms 达 connectionTimeoutMs
+#   ★ 目标对象: 契约 component_type=Container，但容器侧没有 connect_latency_ms /
+#     connectionTimeoutMs 证据（这两项在 JdbcDataSource 上）⇒ finding 挂在数据源本身，
+#     并如实记录「未做容器级重定向」这一取舍（进诚实清单）。
+#   ★ 组语义 v1.0.3（X-5）：组内 any_of=OR、all_of=AND；**组间 AND**（all_of 组成立 ∧
+#     any_of 组成立；缺省组中性成立；禁止组间 OR）。故本规则 = any_of 前置块（隐式 JOIN）
+#     连接 all_of 的三值分支；all_of 基线不可得 ⇒ 整条 detect 不可判 ⇒ 只登记不产 Finding。
+#   ★ 口径 v1.0.3（X-7）：increased 落在 cc:delta；旧「累计计数非零」降级路径已删除。
+PREFIX cc:    <https://credit-card-ops.ai/onto/topology#>
+PREFIX cco:   <https://credit-card-ops.ai/onto/core#>
+PREFIX ccm:   <https://credit-card-ops.ai/onto/metric#>
+PREFIX ccf:   <https://credit-card-ops.ai/onto/fault#>
+PREFIX ccc:   <https://credit-card-ops.ai/onto/causal#>
+PREFIX cca:   <https://credit-card-ops.ai/onto/action#>
+PREFIX ccp:   <https://credit-card-ops.ai/onto/prov#>
+PREFIX prov:  <http://www.w3.org/ns/prov#>
+PREFIX xsd:   <http://www.w3.org/2001/XMLSchema#>
+PREFIX rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs:  <http://www.w3.org/2000/01/rdf-schema#>
+
+CONSTRUCT {
+  ?finding a ccf:Finding ;
+      ccf:findingCode "F-006" ;
+      ccp:findingSeverity ?sev ;
+      ccp:findingFaultMode ?fm ;
+      ccp:findingFor ?target ;
+      ccp:associatedRule ccp:Rule-r06 ;
+      prov:wasDerivedFrom ?ev .
+  # ★ v1.0.3（X-7）不可判登记：?uj 只在不可判分支绑定 ⇒ 成立分支不生成这几条三元组；
+  #    反之 ?finding 只在成立分支绑定 ⇒ 不可判分支不产 Finding（既不成立也不证伪）。
+  ?uj a cco:InformationEntity ;
+      ccp:unjudgeableJudgment ccf:J-net-b1 ;
+      ccp:unjudgeableFor ?target ;
+      ccp:unjudgeableRule ccp:Rule-r06 ;
+      ccp:unjudgeableReason ?ujReason ;
+      prov:wasDerivedFrom ?ev .
+}
+WHERE {
+  # --- any_of 组（组内 OR，仅一条）：连接延迟达连接超时 ---
+  #     ★ v1.0.3（X-5）：组间为 **AND** ⇒ 本块与下面的 all_of 分支是**隐式 AND 串联**，
+  #     不再是与 all_of 的 UNION 并列（旧写法让 all_of 的「必需条件」被 OR 掉）。
+  ?target a cc:JdbcDataSource ;
+      ccm:connectLatencyMs ?latency ;
+      cc:connectionTimeoutMs ?timeout .
+  FILTER(?latency >= ?timeout)
+
+  {
+    BIND(ccf:FM-CTR-NET-UNREACHABLE AS ?fm)  BIND("critical" AS ?sev)
+    # --- A) 基线路径（v1.0.3 X-7）：cc:delta 存在且为正 ---
+    ?target ccm:connectFailTotal ?now .
+    ?target cc:hasEvidence ?ev .
+    ?ev cc:metricCode "app.datasource.connect_fail_total"^^xsd:string ;
+        cc:delta ?delta ; cc:deltaWindowS ?window .
+    ?zeroBase ccm:tierReference "baseline:counter_non_zero" ;
+              ccm:baselineValue ?zero .
+    FILTER(xsd:decimal(?delta) > ?zero)
+    FILTER NOT EXISTS { ?ev cc:counterReset true }
+    BIND(IRI(CONCAT("https://credit-card-ops.ai/onto/inst/finding/",
+                    "F-006/",
+                    ENCODE_FOR_URI(STRAFTER(STR(?target), "/inst/")))) AS ?finding)
+  }
+  UNION
+  {
+    BIND(ccf:FM-CTR-NET-UNREACHABLE AS ?fm)  BIND("critical" AS ?sev)
+    # --- B) 等效推导路径：两条可比观测（capturedAt 更早 / rawValue 更小）推得 delta ---
+    ?target ccm:connectFailTotal ?now .
+    ?target cc:hasEvidence ?late , ?earlier .
+    ?late    cc:metricCode "app.datasource.connect_fail_total"^^xsd:string ; cc:rawValue ?vLate    ; cc:capturedAt ?tLate .
+    ?earlier cc:metricCode "app.datasource.connect_fail_total"^^xsd:string ; cc:rawValue ?vEarlier ; cc:capturedAt ?tEarlier .
+    FILTER(str(?tEarlier) < str(?tLate))
+    FILTER(xsd:decimal(?vEarlier) < xsd:decimal(?vLate))
+    FILTER NOT EXISTS { ?late cc:counterReset true }
+    FILTER NOT EXISTS { ?earlier cc:counterReset true }
+    BIND(?late AS ?ev)
+    BIND(IRI(CONCAT("https://credit-card-ops.ai/onto/inst/finding/",
+                    "F-006/",
+                    ENCODE_FOR_URI(STRAFTER(STR(?target), "/inst/")))) AS ?finding)
+  }
+  UNION
+  {
+    BIND(ccf:FM-CTR-NET-UNREACHABLE AS ?fm)  BIND("critical" AS ?sev)
+    # --- U) 不可判（X-7）：基线不可得 ⇒ 只登记 ccp:unjudgeable*，不产 Finding ---
+    ?target ccm:connectFailTotal ?now .
+    ?target cc:hasEvidence ?ev .
+    ?ev cc:metricCode "app.datasource.connect_fail_total"^^xsd:string .
+    FILTER NOT EXISTS {
+      ?target cc:hasEvidence ?evB .
+      ?evB cc:metricCode "app.datasource.connect_fail_total"^^xsd:string ; cc:delta ?dAny ; cc:deltaWindowS ?wAny .
+      FILTER NOT EXISTS { ?evB cc:counterReset true }
+    }
+    FILTER NOT EXISTS {
+      ?target cc:hasEvidence ?l2 , ?e2 .
+      ?l2 cc:metricCode "app.datasource.connect_fail_total"^^xsd:string ; cc:capturedAt ?tl2 .
+      ?e2 cc:metricCode "app.datasource.connect_fail_total"^^xsd:string ; cc:capturedAt ?te2 .
+      FILTER(str(?te2) < str(?tl2))
+    }
+    BIND(IRI(CONCAT("https://credit-card-ops.ai/onto/inst/unjudgeable/",
+                    "F-006/",
+                    ENCODE_FOR_URI(STRAFTER(STR(?target), "/inst/")))) AS ?uj)
+    BIND("基线不可用（cc:delta / cc:deltaWindowS 缺失，或 cc:counterReset=true）⇒ 该判据 unjudgeable：既不成立也不证伪；不产 Finding，按 WARN『待标定/不可机判』登记 zero-instance-ledger.yaml" AS ?ujReason)
+  }
+  UNION
+  {
+    # --- FM-HOST-NET-IFACE-DOWN（P0.9 新增）---
+    BIND(ccf:FM-HOST-NET-IFACE-DOWN AS ?fm)  BIND("critical" AS ?sev)
+    ?target a cc:Host ; ccm:netIfaceDownCount ?v .
+    ?nzBase ccm:tierReference "baseline:counter_non_zero" ;
+            ccm:baselineValue ?zero .
+    FILTER(?v > ?zero)
+    ?target cc:hasEvidence ?ev .
+    ?ev cc:metricCode "host.net_iface_down_count"^^xsd:string .
+    BIND(IRI(CONCAT("https://credit-card-ops.ai/onto/inst/finding/",
+                    "F-006/",
+                    ENCODE_FOR_URI(STRAFTER(STR(?target), "/inst/")))) AS ?finding)
+  }
+}

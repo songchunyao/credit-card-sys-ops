@@ -1,0 +1,31 @@
+schema: m6-carrier-metrics/1
+meta:
+  role: "M6.3 **容器侧**效率指标的采集口径（审计链 → 判据器字段）"
+  spec: "docs/06-评测设计（A-B对照）.md §2.2（:182-196）；运行台立场见 shared/deploy/smoke/m5_run.py:1516-1522"
+  why: "docs/06 §2.2 要求 query_latency_p50/p95 **与 elapsed_s 分开报**（前者是载体能力，后者混入 LLM 随机性）；而运行台明确声明它**不产**这两个容器侧字段、表 6 按「宁缺勿造」显示 BLOCKED ⇒ 必须有本采集器把审计链读数接上。"
+  percentile: "nearest-rank（index = ceil(p/100 * n) - 1，越界截断）—— 与 docs/06 §2.2 的表 6 口径一致"
+  gate: "shared/verify/m6/carrier_efficiency.py（--selftest 为离线门禁；真读审计链需 --audit-map 或默认路径在场）"
+  self_sha_policy: "本文件不列自身滚动 sha256：标记用、不得 pin。"
+sources:
+  cc-kg-agent:       {audit_file: "/opt/cc-tools-kg/cc_tools_audit.jsonl",              latency_key: queryLatencyMs, rows_key: rowCount, ok_key: status, ok_value: ok, time_key: startedAt}
+  cc-kg-r-agent:     {audit_file: "/opt/cc-tools-kg/cc_tools_audit.jsonl",              latency_key: queryLatencyMs, rows_key: rowCount, ok_key: status, ok_value: ok, time_key: startedAt}
+  cc-kgt-agent:      {audit_file: "/opt/cc-tools-kg/kgt/cc_tools_kgt_audit.jsonl",       latency_key: queryLatencyMs, rows_key: rowCount, ok_key: status, ok_value: ok, time_key: startedAt}
+  cc-kgt-dyn-agent:  {audit_file: "/opt/cc-tools-kg/kgt/cc_tools_kgt_dyn_audit.jsonl",   latency_key: queryLatencyMs, rows_key: rowCount, ok_key: status, ok_value: ok, time_key: startedAt}
+  cc-onto-agent:     {audit_file: "/opt/cc-tools-onto/cc_tools_onto_audit.jsonl",       latency_key: elapsedMs,      rows_key: rowCount, ok_key: status, ok_value: ok, time_key: startedAt}
+  cc-onto-r-agent:   {audit_file: "/opt/cc-tools-onto/cc_tools_onto_audit.jsonl",       latency_key: elapsedMs,      rows_key: rowCount, ok_key: status, ok_value: ok, time_key: startedAt}
+  cc-kgt-free-agent: {audit_file: null, reason: "免费臂走插件面（库内直查），无本项目的审计链 ⇒ 表 6 该列应为 BLOCKED（宁缺勿造），不得填 0"}
+  cc-base-agent:     {audit_file: null, reason: ":8304 中性取数服务**刻意不写审计链**（避免污染测量面）⇒ 表 6 该列 BLOCKED"}
+auxiliary_fields:
+  ONTO:
+    present_but_unused: [query_latency_p50_ms, query_latency_p95_ms, query_latency_sample_count]
+    reason: "ONTO 的审计行额外写滚动聚合字段；其「滚动 vs 单次」语义**从单行无法判定** ⇒ 本采集**不用、不猜**，per-call 一律取 elapsedMs。"
+aggregation:
+  query_latency_p50: "窗口内各次调用的 per-call 延迟（ms）取最近秩 P50"
+  query_latency_p95: "同上取 P95"
+  facts_consumed: "窗口内 rows_key 之和（★ **臂级**：审计链**没有 case_id** ⇒ 不做逐用例归属，见 open_questions）"
+window: "由 --window-start/--window-end 指定；或由 --answers <answers.jsonl> 的 captured_at_utc 最小/最大值推导"
+open_questions:
+  - id: OQ-M6M-01
+    question: "审计链无 case_id ⇒ query_latency_p50/p95 与 facts_consumed 只能做到**臂级**，不能逐用例归属。消费端（m5_judge）须按臂套用并在报告里声明该粒度。"
+  - id: OQ-M6M-02
+    question: "KG 的两臂（cc-kg-agent / cc-kg-r-agent）共用同一审计链文件 ⇒ 臂级读数按**时间窗口**区分；若两臂在同一窗口内并发跑，读数会混。真跑时须分窗或串行。"

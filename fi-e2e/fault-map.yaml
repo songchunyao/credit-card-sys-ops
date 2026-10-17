@@ -1,0 +1,514 @@
+# ============================================================================
+# fault-map.yaml · 注入故障 → 契约根因 **真值表**（故障—根因匹配性测试的唯一判据来源）
+# ----------------------------------------------------------------------------
+# 上游：cardsim / code/monitor.py#FAULT_DEFS（38 类，权威）+ FaultController.java（app 28 类机制）
+# 下游：shared/model/fault-modes.yaml v1.0.3（23 detect 模式 + 1 exclusion 叶 FM-APP-AUTH-INCOMPATIBLE = 24 码）
+# 用途：对每一类注入，声明「应当被判出的根因码」；测试器据此算命中/未命中/不可判。
+#
+# ★ 三条铁律
+#   1) expect_codes = **根因级**期望（含症状级码）；expect_symptoms = 合法会同时命中的症状级码，
+#      命中它们**不算错**，但**不能算根因命中**。
+#   2) match_kind 是**设计事实**、由人裁定；judge_status 是**机判事实**、由 fi.py 依
+#      「契约 detect 子句 × 实机观测清单」动态计算 —— 两者分开，禁止互相顶替。
+#   3) 判据指标在实机无观测时，契约规定必须报 unjudgeable（fault-modes.yaml:36-39），
+#      **禁止当 miss**。这一条决定了本批能测什么、不能测什么。
+#
+# match_kind 词表
+#   exact          契约中存在与该注入机制一一对应的根因码
+#   ambiguous      与另一注入共享同一组判据指标，机判无法区分（成对登记）
+#   symptom_only   契约中没有对应根因码，只能命中症状级码（如 FM-APP-ENDPOINT-SLOW）
+#   no_counterpart 契约词表里没有任何对应码（= 契约覆盖缺口，本身是结论）
+#   not_applicable 该注入在本环境（GaussDB 模式）不生效
+#
+# ★ injection_status（注入系统**自身**的可用性，与上面的契约映射是两个轴）
+#   ok      注入机制在本环境可用（实测生效）
+#   noop    注入被设计成空操作（返回 200 但什么都不做）
+#   broken  注入**报成功但实际失败**（静默 no-op）—— 见 FINDINGS F12。
+#           此时若只信 200，就会把「故障没发生」误判成「RCA 没诊断出来」（假阴性），
+#           所以测试器必须先做 L0 注入有效性，再看判据层与根因层。
+# ============================================================================
+
+schema: fi-fault-map/1
+meta:
+  version: "1.0.0"
+  date: "2026-10-13"
+  injection_system: "cardsim :8090 (monitor.py)"
+  contract_refs:
+    fault_modes: "shared/model/fault-modes.yaml (v1.0.3)"
+    causal_edges: "shared/model/causal-edges.yaml"
+    findings: "shared/model/findings.yaml"
+    coverage_matrix: "tmp/_fault_coverage_gap_analysis.md"
+  counts:
+    injection_types: 38
+    contract_codes: 24
+    exact: 23
+    symptom_only: 4
+    no_counterpart: 10
+    not_applicable: 1
+    # 注：ambiguous（判据同源、机判不可区分）通过 ambiguous_with 字段成对标注，不单列 match_kind
+    ambiguous_pairs: 3   # conn_kill↔net_partition / sql_full_scan↔sql_fuzzy_like / biz_hot_row↔biz_lock_range
+
+entries:
+
+# ─────────────────────────────── 基础设施（monitor 直接执行） ───────────────────────────────
+- type: container_pause
+  label: "容器假死 (pause)"
+  group: 基础设施
+  cardsim_layer: 容器层
+  target: 容器
+  mechanism: "docker pause：进程冻结、TCP 连接仍挂着（不 kill、不重启）"
+  match_kind: no_counterpart
+  expect_codes: []
+  expect_symptoms: [FM-APP-ENDPOINT-SLOW]
+  signature_metrics: [container.status, app.endpoint.p99_ms, app.endpoint.tps, app.uptime_s]
+  note: "契约无『容器暂停』码（container.status enum 只有 Running/Terminated/Waiting/…，D3 待演进）⇒ 只能观测到症状级端点劣化"
+
+- type: process_crash
+  label: "进程崩溃 (kill -9)"
+  group: 基础设施
+  cardsim_layer: 进程层
+  target: 容器
+  mechanism: "遍历 /proc 对容器内全部 java 进程 kill -9"
+  match_kind: exact
+  expect_codes: [FM-APP-INSTANCE-RESTART]
+  expect_symptoms: [FM-APP-ENDPOINT-SLOW]
+  signature_metrics: [app.uptime_s, container.restart_total, container.status]
+  note: "app 探针在进程消失时静默不发事实（缺口 D4）⇒ 只能靠 container.restart_total / uptime_s 判"
+
+- type: conn_kill
+  label: "连接中断 (terminate)"
+  group: 基础设施
+  cardsim_layer: 连接层
+  target: 容器
+  mechanism: "pg_terminate_backend 按 application_name 终止该实例全部后端连接"
+  match_kind: exact
+  expect_codes: [FM-APP-DS-CONNECT-FAIL]
+  expect_symptoms: []
+  signature_metrics: [app.datasource.connect_fail_total, app.datasource.active_connections, db.instance.session_count]
+  ambiguous_with: net_partition
+  note: "与 net_partition 同判据（connect_fail_total increased）；区分靠 connect_latency_ms 是否达 connectionTimeoutMs"
+
+- type: db_lock
+  label: "锁等待风暴 (FOR UPDATE)"
+  group: 基础设施
+  cardsim_layer: DB 层
+  target: —
+  mechanism: "psql 开事务 FOR UPDATE 1000 行 + pg_sleep(3600) 持锁不提交"
+  injection_status: broken
+  injection_note: >-
+    ★ 实测（2026-10-13，FINDINGS F12）：monitor.py:1198 执行 docker exec -d cardsim-pg psql ...，
+    但 cardsim-pg 容器在本环境**不存在**（GaussDB 是外部非容器化部署 192.0.2.19:8000/vapp），
+    且 PG_DB 常量写成 "cardsim"（真实库名 vapp）；该分支**不检查 err** ⇒ 返回 200 {"ok":true}
+    却什么都没做。清除分支（monitor.py:1272-1274）反而用的是可用的 pg_query() —— 两条路径不一致。
+    处置：本环境请改用 sql_idle_in_tx（机制等价且实测有效）。
+  replacement: sql_idle_in_tx
+  match_kind: exact
+  expect_codes: [FM-DB-LOCK-WAIT]
+  expect_symptoms: []
+  signature_metrics: [db.instance.lock_waits, db.session.wait_event, db.session.xact_age_s, db.instance.idle_in_xact]
+  note: "FM-DB-LOCK-WAIT 的 all_of 含 db.session.wait_event in_enum，该指标实机无观测 ⇒ 结构性不可判"
+
+- type: db_down
+  label: "数据库挂起 (pause)"
+  group: 基础设施
+  cardsim_layer: DB 层
+  target: —
+  mechanism: "无实现（monitor.py:1191-1194 在 GaussDB 模式下是 no-op，返回 200 但不做任何事）"
+  injection_status: noop
+  match_kind: not_applicable
+  expect_codes: []
+  expect_symptoms: []
+  signature_metrics: []
+  note: "★ 实测确认 no-op：注入后必须断言『无任何观测变化』，否则会把空结果误当检测失败（假阴性）。替代品 = net_partition"
+
+- type: cpu_throttle
+  label: "CPU 限流 (0.3 核)"
+  group: 基础设施
+  cardsim_layer: 容器层
+  target: 容器
+  mechanism: "docker update --cpus=0.3（宿主争抢/限流模型）"
+  match_kind: exact
+  expect_codes: [FM-CTR-CPU-THROTTLED]
+  expect_symptoms: [FM-APP-ENDPOINT-SLOW]
+  signature_metrics: [container.cpu_throttled_periods, container.cpu_usage_ratio, app.endpoint.p99_ms]
+
+# ─────────────────────────────── 网络与资源 ───────────────────────────────
+- type: net_partition
+  label: "网络隔离 (iptables)"
+  group: 网络与资源
+  cardsim_layer: 网络层
+  target: 容器
+  mechanism: "iptables -I DOCKER-USER -s <容器IP> -d <GaussDB>/32 -j DROP"
+  match_kind: exact
+  expect_codes: [FM-CTR-NET-UNREACHABLE]
+  expect_symptoms: []
+  signature_metrics: [app.datasource.connect_fail_total, app.datasource.connect_latency_ms, app.datasource.active_connections]
+  ambiguous_with: conn_kill
+  note: "FM-CTR-NET-UNREACHABLE 的 all_of 为 connect_fail_total increased，any_of 为 connect_latency_ms > connectionTimeoutMs ⇒ 两个判据指标实机均无观测，结构性不可判"
+
+- type: net_latency
+  label: "网络劣化 (netem 200ms)"
+  group: 网络与资源
+  cardsim_layer: 网络层
+  target: 宿主
+  mechanism: "宿主出口网卡 tc prio + netem delay 200ms 80ms + u32 filter dst=GaussDB"
+  match_kind: symptom_only
+  expect_codes: []
+  expect_symptoms: [FM-APP-ENDPOINT-SLOW]
+  signature_metrics: [app.datasource.connect_latency_ms, app.endpoint.p99_ms, app.endpoint.p95_ms, db.query.mean_exec_ms]
+  note: "200ms 远低于 connectionTimeoutMs ⇒ 不应命中 FM-CTR-NET-UNREACHABLE；契约无『链路劣化』根因码 ⇒ 只有症状级端点劣化"
+
+- type: net_loss
+  label: "网络丢包 (netem 30%)"
+  group: 网络与资源
+  cardsim_layer: 网络层
+  target: 宿主
+  mechanism: "同 net_latency 结构，netem loss 30%"
+  match_kind: exact
+  expect_codes: [FM-CTR-NET-UNREACHABLE]
+  expect_symptoms: [FM-APP-ENDPOINT-SLOW]
+  signature_metrics: [app.datasource.connect_fail_total, db.instance.session_count, app.endpoint.p99_ms]
+
+- type: mem_throttle
+  label: "内存限流 (256m)"
+  group: 网络与资源
+  cardsim_layer: 容器层
+  target: 容器
+  mechanism: "docker update --memory=256m --memory-swap=256m：GC 风暴直至 OOMKilled"
+  match_kind: exact
+  expect_codes: [FM-CTR-OOM-KILLED]
+  expect_symptoms: [FM-APP-HEAP-PRESSURE, FM-APP-INSTANCE-RESTART]
+  signature_metrics: [container.oom_kill_total, container.mem_working_set_mb, container.restart_total]
+
+# ─────────────────────────────── 类1 SQL 反模式 ───────────────────────────────
+- type: sql_full_scan
+  label: "全表扫描"
+  group: SQL反模式
+  cardsim_layer: 应用/SQL
+  target: 应用内
+  mechanism: "函数包裹条件使索引失效 ⇒ 周期性全表扫描"
+  match_kind: exact
+  expect_codes: [FM-DB-SEQ-SCAN]
+  expect_symptoms: [FM-DB-SLOW-QUERY, FM-APP-ENDPOINT-SLOW]
+  signature_metrics: [db.table.seq_scan, db.cluster.slow_query_count, app.endpoint.p99_ms]
+  ambiguous_with: sql_fuzzy_like
+  note: "与 sql_fuzzy_like 判据同源（seq_scan increased），需 query 文本才能分辨 ⇒ 机判层面两者不可区分"
+
+- type: sql_nplus1
+  label: "N+1 查询"
+  group: SQL反模式
+  cardsim_layer: 应用/SQL
+  target: 应用内
+  mechanism: "单事务循环 20 次单行查询"
+  match_kind: no_counterpart
+  expect_codes: []
+  expect_symptoms: [FM-DB-SLOW-QUERY, FM-APP-ENDPOINT-SLOW]
+  signature_metrics: [db.query.calls_per_row, app.endpoint.tps, app.endpoint.p99_ms]
+  note: "需 dbe_perf.statement 的 n_calls/n_returned_rows（缺口 C 类，未接）"
+
+- type: sql_fuzzy_like
+  label: "前置通配 LIKE"
+  group: SQL反模式
+  cardsim_layer: 应用/SQL
+  target: 应用内
+  mechanism: "LIKE '%000' ⇒ 无法走索引，顺序扫描"
+  match_kind: exact
+  expect_codes: [FM-DB-SEQ-SCAN]
+  expect_symptoms: [FM-DB-SLOW-QUERY, FM-APP-ENDPOINT-SLOW]
+  signature_metrics: [db.table.seq_scan, db.cluster.slow_query_count]
+  ambiguous_with: sql_full_scan
+
+- type: sql_order_noindex
+  label: "无索引排序"
+  group: SQL反模式
+  cardsim_layer: 应用/SQL
+  target: 应用内
+  mechanism: "ORDER BY 无索引列 ⇒ 排序溢出到临时文件"
+  match_kind: no_counterpart
+  expect_codes: []
+  expect_symptoms: [FM-DB-SLOW-QUERY, FM-APP-ENDPOINT-SLOW]
+  signature_metrics: [db.cluster.temp_files, db.cluster.temp_file_written, app.endpoint.p99_ms]
+  note: "有 temp_files 观测，但契约无『排序溢出』根因码"
+
+- type: sql_bloat_select
+  label: "大结果集拉取"
+  group: SQL反模式
+  cardsim_layer: 应用/SQL
+  target: 应用内
+  mechanism: "SELECT * 拉 5000 行"
+  match_kind: no_counterpart
+  expect_codes: []
+  expect_symptoms: [FM-DB-SLOW-QUERY, FM-APP-ENDPOINT-SLOW]
+  signature_metrics: [db.query.returned_rows, app.endpoint.p99_ms, app.endpoint.tps]
+
+# ─────────────────────────────── 类2 事务与锁 ───────────────────────────────
+- type: sql_long_tx
+  label: "长事务"
+  group: 事务与锁
+  cardsim_layer: 应用/SQL
+  target: 应用内
+  mechanism: "持锁慢处理 1.5s 不提交"
+  match_kind: exact
+  expect_codes: [FM-DB-LOCK-WAIT]
+  expect_symptoms: [FM-DB-SLOW-QUERY]
+  signature_metrics: [db.session.xact_age_s, db.instance.lock_waits, db.session.wait_event]
+  note: "xact_age_s 有观测，但 FM-DB-LOCK-WAIT 的 all_of 还要求 wait_event in_enum ⇒ 不可判"
+
+- type: biz_hot_row
+  label: "热点行"
+  group: 事务与锁
+  cardsim_layer: 应用/SQL
+  target: 应用内
+  mechanism: "全部线程 FOR UPDATE 同一行争锁"
+  match_kind: exact
+  expect_codes: [FM-DB-LOCK-WAIT]
+  expect_symptoms: [FM-DB-SLOW-QUERY, FM-APP-ENDPOINT-SLOW]
+  signature_metrics: [db.table.hot_update_ratio_pct, db.instance.lock_waits, db.session.wait_event]
+  ambiguous_with: biz_lock_range
+
+- type: biz_lock_range
+  label: "锁范围扩大"
+  group: 事务与锁
+  cardsim_layer: 应用/SQL
+  target: 应用内
+  mechanism: "FOR UPDATE 扫 100 行（每 10 tick 触发一次）"
+  match_kind: exact
+  expect_codes: [FM-DB-LOCK-WAIT]
+  expect_symptoms: [FM-DB-SLOW-QUERY]
+  signature_metrics: [db.instance.lock_waits, db.session.wait_event]
+  ambiguous_with: biz_hot_row
+
+- type: sql_dead_tuple
+  label: "死元组/表膨胀"
+  group: 事务与锁
+  cardsim_layer: 应用/SQL
+  target: 应用内
+  mechanism: "高频无效 UPDATE ⇒ 死元组堆积"
+  match_kind: no_counterpart
+  expect_codes: []
+  expect_symptoms: []
+  signature_metrics: [db.table.dead_tuples, db.table.dead_tuple_ratio]
+  note: "有死元组观测，但契约无对应根因码（FM-DB-UNUSED-INDEX 是索引未使用，不是死元组）"
+
+- type: sql_deadlock
+  label: "死锁 (交叉更新)"
+  group: 事务与锁
+  cardsim_layer: 应用/SQL
+  target: 应用内
+  mechanism: "随机顺序更新两行 ⇒ DB 检测到互锁后 abort"
+  match_kind: exact
+  expect_codes: [FM-DB-DEADLOCK]
+  expect_symptoms: [FM-DB-ROLLBACK-STORM]
+  signature_metrics: [db.cluster.deadlocks, db.cluster.xact_rollback]
+
+# ─────────────────────────────── 类3 Java 反模式 ───────────────────────────────
+- type: java_cpu_spin
+  label: "CPU 热点 (忙等)"
+  group: Java反模式
+  cardsim_layer: 应用/Java
+  target: 应用内
+  mechanism: "每事务忙等 30~80ms"
+  match_kind: no_counterpart
+  expect_codes: []
+  expect_symptoms: [FM-APP-ENDPOINT-SLOW, FM-HOST-CPU-CONTENTION, FM-CTR-CPU-THROTTLED]
+  signature_metrics: [container.cpu_usage_ratio, host.load1, host.cpu_usage_ratio, app.endpoint.p99_ms]
+  note: "契约无『容器 CPU 占用高』根因码（只有被限流 THROTTLED）⇒ 除非触发 cgroup 限流，否则只有症状"
+
+- type: java_slow_gc
+  label: "GC 压力"
+  group: Java反模式
+  cardsim_layer: 应用/Java
+  target: 应用内
+  mechanism: "每事务分配 8MB 大对象 ⇒ GC 停顿"
+  match_kind: exact
+  expect_codes: [FM-APP-HEAP-PRESSURE]
+  expect_symptoms: [FM-APP-ENDPOINT-SLOW]
+  signature_metrics: [app.heap_used_ratio, app.gc_pause_ms, container.mem_working_set_mb]
+  note: "app.heap_used_ratio / app.gc_pause_ms 实机无通道（需被测容器加 tmpfs，缺口 D1）⇒ 结构性不可判"
+
+- type: java_thread_contend
+  label: "全局锁串行化"
+  group: Java反模式
+  cardsim_layer: 应用/Java
+  target: 应用内
+  mechanism: "全部线程抢一把锁 ⇒ TPS 塌陷而 CPU 不高"
+  match_kind: symptom_only
+  expect_codes: []
+  expect_symptoms: [FM-APP-ENDPOINT-SLOW]
+  signature_metrics: [app.endpoint.p99_ms, app.endpoint.tps, container.cpu_usage_ratio]
+
+- type: java_conn_leak
+  label: "连接泄漏"
+  group: Java反模式
+  cardsim_layer: 应用/Java
+  target: 应用内
+  mechanism: "每 20 事务泄漏一条池连接"
+  match_kind: exact
+  expect_codes: [FM-APP-POOL-EXHAUSTED]
+  expect_symptoms: [FM-DB-SESSION-POOL-FULL, FM-APP-ENDPOINT-SLOW]
+  signature_metrics: [app.datasource.active_connections, app.datasource.idle_connections, db.instance.session_count]
+  note: "active_connections 有观测；但 FM-APP-POOL-EXHAUSTED 的 all_of 含 pending_threads non_zero（无通道）⇒ 不可判"
+
+- type: java_sync_blocking
+  label: "同步阻塞"
+  group: Java反模式
+  cardsim_layer: 应用/Java
+  target: 应用内
+  mechanism: "每事务 sleep 60~150ms"
+  match_kind: symptom_only
+  expect_codes: []
+  expect_symptoms: [FM-APP-ENDPOINT-SLOW]
+  signature_metrics: [app.endpoint.p99_ms, app.endpoint.tps]
+
+# ─────────────────────────────── 类4 业务与流量 ───────────────────────────────
+- type: java_retry_storm
+  label: "失败重试风暴"
+  group: 业务与流量
+  cardsim_layer: 应用/Java
+  target: 应用内
+  mechanism: "失败后无退避重试 3 次"
+  match_kind: no_counterpart
+  expect_codes: []
+  expect_symptoms: [FM-APP-ENDPOINT-SLOW]
+  signature_metrics: [app.endpoint.error_rate, app.endpoint.fail_total, app.endpoint.tps]
+  note: "有 error_rate/fail_total 观测，但契约无『重试风暴』根因码"
+
+- type: biz_event_skew
+  label: "事件分布倾斜"
+  group: 业务与流量
+  cardsim_layer: 应用/Java
+  target: 应用内
+  mechanism: "全部事件强制单类（挂事件选择处，非 beforeEvent）"
+  match_kind: no_counterpart
+  expect_codes: []
+  expect_symptoms: []
+  signature_metrics: [app.endpoint.tps]
+
+- type: biz_unique_conflict
+  label: "唯一键冲突风暴"
+  group: 业务与流量
+  cardsim_layer: 应用/Java
+  target: 应用内
+  mechanism: "固定幂等键反复 INSERT ⇒ 唯一约束冲突 ⇒ 回滚"
+  match_kind: exact
+  expect_codes: [FM-DB-ROLLBACK-STORM]
+  expect_symptoms: [FM-DB-DEADLOCK]
+  signature_metrics: [db.cluster.xact_rollback, app.endpoint.error_rate]
+
+- type: biz_write_amp
+  label: "写放大"
+  group: 业务与流量
+  cardsim_layer: 应用/Java
+  target: 应用内
+  mechanism: "每事务额外插 5 行流水"
+  match_kind: no_counterpart
+  expect_codes: []
+  expect_symptoms: []
+  signature_metrics: [db.cluster.wal_bytes, db.cluster.tup_inserted]
+
+- type: biz_slow_response
+  label: "整体延迟劣化"
+  group: 业务与流量
+  cardsim_layer: 应用/Java
+  target: 应用内
+  mechanism: "每事务固定 +100ms"
+  match_kind: symptom_only
+  expect_codes: []
+  expect_symptoms: [FM-APP-ENDPOINT-SLOW]
+  signature_metrics: [app.endpoint.p99_ms, app.endpoint.p95_ms, app.endpoint.tps]
+
+# ─────────────────────────────── 类5 JVM 资源 ───────────────────────────────
+- type: java_pool_starve
+  label: "连接池饥饿"
+  group: Java反模式
+  cardsim_layer: 应用/Java
+  target: 应用内
+  mechanism: "周期借光池连接持 300ms"
+  match_kind: exact
+  expect_codes: [FM-APP-POOL-EXHAUSTED]
+  expect_symptoms: [FM-APP-ENDPOINT-SLOW]
+  signature_metrics: [app.datasource.acquire_wait_ms, app.datasource.active_connections, app.endpoint.p99_ms]
+  note: "acquire_wait_ms 有观测（应用日志通道已接），但 all_of 缺 pending_threads ⇒ 不可判"
+
+- type: java_oom_leak
+  label: "内存泄漏→OOM"
+  group: Java反模式
+  cardsim_layer: 应用/Java
+  target: 应用内
+  mechanism: "每 3 事务保留 16MB，上限约 192MB ⇒ 触发容器 OOM"
+  match_kind: exact
+  expect_codes: [FM-CTR-OOM-KILLED]
+  expect_symptoms: [FM-APP-HEAP-PRESSURE, FM-APP-INSTANCE-RESTART]
+  signature_metrics: [container.oom_kill_total, container.mem_working_set_mb, container.restart_total]
+
+- type: java_fd_leak
+  label: "文件描述符泄漏"
+  group: Java反模式
+  cardsim_layer: 应用/Java
+  target: 应用内
+  mechanism: "每 10 事务开 1 条直连且永不关闭，上限 200 ⇒ fd + 库侧会话双增长"
+  match_kind: exact
+  expect_codes: [FM-DB-SESSION-POOL-FULL]
+  expect_symptoms: [FM-APP-POOL-EXHAUSTED]
+  signature_metrics: [db.instance.session_count, db.pool.session_used_ratio, app.fd_count]
+  note: "session_used_ratio 有观测，但 all_of 还要求 conn_rejected_total increased（无通道）⇒ 不可判；裸 fd 数需 root（缺口 D2）"
+
+- type: java_thread_pile
+  label: "线程堆积"
+  group: Java反模式
+  cardsim_layer: 应用/Java
+  target: 应用内
+  mechanism: "每 50 事务新建 50 个长睡线程，上限 400（每 50 tick 触发）"
+  match_kind: no_counterpart
+  expect_codes: []
+  expect_symptoms: [FM-APP-ENDPOINT-SLOW]
+  signature_metrics: [app.thread_count, app.endpoint.tps]
+  note: "app.thread_count 有观测（实测 20，故障可达 400+），但契约无『线程堆积』根因码"
+
+# ─────────────────────────────── 类6 会话与认证 ───────────────────────────────
+- type: sql_idle_in_tx
+  label: "idle in transaction 堆积"
+  group: 会话与认证
+  cardsim_layer: 应用/SQL
+  target: 应用内
+  mechanism: "4 条直连各自 BEGIN + FOR UPDATE 挂起不提交"
+  match_kind: exact
+  expect_codes: [FM-DB-IDLE-IN-TX]
+  expect_symptoms: [FM-DB-LOCK-WAIT]
+  signature_metrics: [db.instance.idle_in_xact, db.instance.lock_waits, db.session.state]
+
+- type: sql_lock_chain
+  label: "锁等待链"
+  group: 会话与认证
+  cardsim_layer: 应用/SQL
+  target: 应用内
+  mechanism: "链头持锁 row8 → 中间等待 → 业务线程三级排队"
+  match_kind: exact
+  expect_codes: [FM-DB-LOCK-WAIT]
+  expect_symptoms: [FM-DB-SLOW-QUERY]
+  signature_metrics: [db.instance.lock_waits, db.session.wait_event, db.session.xact_age_s]
+
+- type: sql_conn_storm
+  label: "登录连接风暴"
+  group: 会话与认证
+  cardsim_layer: 应用/SQL
+  target: 应用内
+  mechanism: "每 25 事务突发 30 条直连即关"
+  match_kind: exact
+  expect_codes: [FM-DB-SESSION-POOL-FULL]
+  expect_symptoms: []
+  signature_metrics: [db.instance.session_count, db.instance.active_sessions, db.pool.session_used_ratio]
+  note: "瞬时快照易错过尖峰；判据 conn_rejected_total 无通道 ⇒ 不可判"
+
+- type: sql_auth_fail
+  label: "认证失败风暴"
+  group: 会话与认证
+  cardsim_layer: 应用/SQL
+  target: 应用内
+  mechanism: "每 20 事务 10 次错误密码连接"
+  match_kind: exact
+  expect_codes: [FM-APP-DS-CONNECT-FAIL]
+  expect_symptoms: []
+  discrimination_leaf: FM-APP-AUTH-INCOMPATIBLE
+  signature_metrics: [app.datasource.connect_fail_total, app.datasource.connect_latency_ms]
+  note: "★ 契约把『认证不兼容』建成 exclusion 叶（causal-edges.yaml:292-303）：排除法判定 = DB在线 ∧ 网络可达 ∧ 立即失败。connect_* 无通道 ⇒ 不可判"

@@ -1,0 +1,32 @@
+# ============================================================================
+# tmp/cc_probe_inject_c.ttl —— 规则可触发性证明的「注入夹具 C」（非契约数据）
+# ----------------------------------------------------------------------------
+# 目的：r01（应用侧连接池耗尽 F1）在真机上产 0，原因有两条，必须分开说清：
+#   ① 数据面：真机 pending_threads=0、active_connections=24 < maxPoolSize=40 —— 健康，
+#      判据本就应不成立（**正确行为**）；
+#   ② 契约面：判据 3 引用 `threshold:acquire_wait_ms_light#warning`，而契约
+#      `shared/model/fault-modes.yaml` 里该档位 warning/critical **皆 null（未标定）**，
+#      我的 TTL 按契约落成 `ccm:uncalibrated true` 且**不写** thresholdValue
+#      ⇒ 判据 3 无绑定，规则按契约不产结论（不猜值）。
+# 本夹具只为证明 ①（判据链本身可通、规则不是死代码）：
+#   · JdbcDataSource.pending_threads = 5     （非零 ⇒ 判据 1 成立）
+#   · JdbcDataSource.active_connections = 40 （≥ cc:maxPoolSize=40 ⇒ 判据 2 成立）
+#   · JdbcDataSource.acquire_wait_ms = 100   （真机该值为 1，与假想档位值 1 相等而无法触发
+#                                              「严格大于」⇒ 夹具把延迟抬到 100）
+# ★★ 注意：本夹具还给未标定档位注入了一个**假想**标定值 `1`，目的仅是让判据 3 在
+#    「图里有一个值」时也能连通。**它不是契约值**，不代表任何标定结论；正式装载下该档位
+#    仍为 null，r01 依旧不产结论。绝不允许把这个数字搬进 TBox / 交付本体 / 契约。
+# ★ 测试夹具，不进 TBox、不进交付本体。
+# ============================================================================
+@prefix cc:  <https://credit-card-ops.ai/onto/topology#> .
+@prefix ccm: <https://credit-card-ops.ai/onto/metric#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<https://credit-card-ops.ai/onto/inst/jdbsrc/ds-cc-pay-gaussdb>
+    ccm:pendingThreads    "5"^^xsd:integer ;
+    ccm:activeConnections "40"^^xsd:integer ;
+    ccm:acquireWaitMs     "100"^^xsd:decimal .
+
+# 测试专用、假想标定值（非契约值）
+ccm:t_acquire_wait_ms_light_warning
+    ccm:thresholdValue "1"^^xsd:decimal .

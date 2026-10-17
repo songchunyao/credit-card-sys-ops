@@ -1,0 +1,21 @@
+# ============================================================================
+# tmp/cc_probe_inject_a.ttl —— 规则可触发性证明的「注入夹具 A」（非契约数据）
+# ----------------------------------------------------------------------------
+# 目的：真机快照里 oom_kill_total=0、connect_latency_ms(12.4) < connectionTimeoutMs(3000)，
+#       r04 / r06 因此产出 0。为证明这两条规则**不是死代码**（判据齐备即能产出），
+#       在快照之上注入两个最小事实：
+#         · container.oom_kill_total = 5（非零 ⇒ r04 的 P2 单快照降级路径成立）
+#         · JdbcDataSource.connectionTimeoutMs = 2（真机 cc_ops_live2 上 ccm:connectLatencyMs=2.87，
+#           2.87 ≥ 2 ⇒ r06 的 any_of 分支 1「连接延迟达连接超时」成立）
+# ★ 本文件是**测试夹具**：不进 TBox、不进任何交付本体，只在可触发性实验里与 ABox 合并。
+# ★ 只注入实体层事实，不改任何阈值档（阈值仍从 TBox 个体引用，规则内零数字字面量）。
+# ============================================================================
+@prefix cc:  <https://credit-card-ops.ai/onto/topology#> .
+@prefix ccm: <https://credit-card-ops.ai/onto/metric#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<https://credit-card-ops.ai/onto/inst/ctr/d81ed68a85c810e2f651a68d5d922582290a02d202450bdb4055848a20ee8cbc>
+    ccm:oomKillTotal "5"^^xsd:integer .
+
+<https://credit-card-ops.ai/onto/inst/jdbsrc/ds-cc-pay-gaussdb>
+    cc:connectionTimeoutMs "2"^^xsd:integer .

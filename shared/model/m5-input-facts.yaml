@@ -1,0 +1,2126 @@
+cases:
+- case_id: A-01
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: endpoint:ep-cc-pay-pay
+      obj_type: AppEndpoint
+      path: app.endpoint.p99_ms
+    value_after: 4180.0
+    value_before: 2.671
+  source_injection_id: INJ-20261008-001
+  working_set_sha256: 7605da172debd379532140e02539d2a67432cb450d9c1c8eca2e39b70bdab556
+- case_id: A-02
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: endpoint:ep-cc-pay-slow
+      obj_type: AppEndpoint
+      path: app.endpoint.p99_ms
+    value_after: 1250.0
+    value_before: 33.29
+  source_injection_id: INJ-20261008-002
+  working_set_sha256: cf1b129e1011fd77b1c418b2dea5a27b3ccab8d90b7662d1929cee5b55133968
+- case_id: A-03
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: endpoint:ep-cc-pay-pay
+      obj_type: AppEndpoint
+      path: app.endpoint.p99_ms
+    value_after: 2600.0
+    value_before: 2.671
+  source_injection_id: INJ-20261008-003
+  working_set_sha256: cccd421d5be10f92f936b917239c0642485406f640e0a6ef0f127322c3a3192b
+- case_id: A-04
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: endpoint:ep-cc-pay-slow
+      obj_type: AppEndpoint
+      path: app.endpoint.p99_ms
+    value_after: 880.0
+    value_before: 33.29
+  source_injection_id: INJ-20261008-004
+  working_set_sha256: 7c1d8415b1a0eff103c630aec8881cbb9fda2c4760d7af32821e0636fe550c82
+- case_id: A-05
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: appinst:appinst-cc-pay-1
+      obj_type: AppInstance
+      path: app.heap_used_ratio
+    value_after: 0.8841
+    value_before: 0.0413
+  source_injection_id: INJ-20261008-005
+  working_set_sha256: 15c164115a48fb527560803a04363b1cd2ed265495acb93c35257cac3bb9e23a
+- case_id: A-06
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: appinst:appinst-cc-pay-1
+      obj_type: AppInstance
+      path: app.heap_used_ratio
+    value_after: 0.9312
+    value_before: 0.0413
+  source_injection_id: INJ-20261008-006
+  working_set_sha256: 182bdf0a004a24c2b4c165a098e8eeb907acb447c4bb9f6f68d194984195ed6e
+- case_id: A-07
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: appinst:appinst-cc-pay-1
+      obj_type: AppInstance
+      path: app.heap_used_ratio
+    value_after: 0.7994
+    value_before: 0.0413
+  source_injection_id: INJ-20261008-007
+  working_set_sha256: ab442944d734823a5b534a6410447452f4f6d8aa4679c4bc9df0ab298a8db828
+- case_id: A-08
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: host:host-dn_6001
+      obj_type: Host
+      path: host.mem_available_ratio
+    value_after: 0.0212
+    value_before: 0.0743
+  source_injection_id: INJ-20261008-008
+  working_set_sha256: 9cac65649322d63c4c33c9c2d026897828a1c9a7f236fc311db337d1d52908e5
+- case_id: A-09
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: host:host-dn_6002
+      obj_type: Host
+      path: host.mem_available_ratio
+    value_after: 0.0288
+    value_before: 0.0659
+  source_injection_id: INJ-20261008-009
+  working_set_sha256: 731d8b055cee206d6288d53c3ad1fe3649c580edec255f9a613c8f195db64ad9
+- case_id: A-10
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: host:host-dn_6001
+      obj_type: Host
+      path: host.mem_available_ratio
+    value_after: 0.0402
+    value_before: 0.0743
+  source_injection_id: INJ-20261008-010
+  working_set_sha256: 10ab0a94a2a979dce182d1f3fef594592443af68e23c82ff3e96279dc6045548
+- case_id: A-11
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: host:host-dn_6002
+      obj_type: Host
+      path: host.mem_available_ratio
+    value_after: 0.0188
+    value_before: 0.0659
+  source_injection_id: INJ-20261008-011
+  working_set_sha256: 6f97f066a97450db43bb53f6560bb9396ea6043023005cee1eb59631bcaed75d
+- case_id: A-12
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: dbinst:dn_6001
+      obj_type: GaussDBInstance
+      path: db.instance.up
+    value_after: false
+    value_before: true
+  source_injection_id: INJ-20261008-012
+  working_set_sha256: 389df014596df88ecd7fac9bb84cf1a1054e5c56e1f825c6ca8a0b4a2b7a5729
+- case_id: A-13
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: dbinst:dn_6002
+      obj_type: GaussDBInstance
+      path: db.instance.up
+    value_after: false
+    value_before: true
+  - op: remove_relation
+    relation_id: rel-000004
+  source_injection_id: INJ-20261008-013
+  working_set_sha256: 272900c287e1af7b1dd7b09c5af9f20351cf8ab92ed48674265f72ddcc57bac2
+- case_id: A-14
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: dbinst:dn_6001
+      obj_type: GaussDBInstance
+      path: db.instance.up
+    value_after: false
+    value_before: true
+  - field: value
+    op: set_fact
+    target:
+      obj_id: dbcluster:79b62ee45b9e401fb06ca86941d5f419in14
+      obj_type: GaussDBCluster
+      path: db.cluster.down_nodes
+    value_after: 1
+    value_before: 0
+  - field: value
+    op: set_fact
+    target:
+      obj_id: dbcluster:79b62ee45b9e401fb06ca86941d5f419in14
+      obj_type: GaussDBCluster
+      path: db.cluster.up_nodes
+    value_after: 1
+    value_before: 2
+  source_injection_id: INJ-20261008-014
+  working_set_sha256: 01a988fdb4458012ae11b8eaf345df2bf10ba11b7cef59dd285271863869bffb
+- case_id: B-01
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: appinst:appinst-cc-pay-1
+      obj_type: AppInstance
+      path: app.heap_used_ratio
+    value_after: 0.9021
+    value_before: 0.0413
+  - field: value
+    op: set_fact
+    target:
+      obj_id: host:host-dn_6001
+      obj_type: Host
+      path: host.mem_available_ratio
+    value_after: 0.0303
+    value_before: 0.0743
+  source_injection_id: INJ-20261008-015
+  working_set_sha256: 9feb7312743d5dcc4de76f507c52be6770c35614ec8b1228d306e03178df31d5
+- case_id: B-02
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: appinst:appinst-cc-pay-1
+      obj_type: AppInstance
+      path: app.heap_used_ratio
+    value_after: 0.8453
+    value_before: 0.0413
+  - field: value
+    op: set_fact
+    target:
+      obj_id: host:host-dn_6002
+      obj_type: Host
+      path: host.mem_available_ratio
+    value_after: 0.0341
+    value_before: 0.0659
+  source_injection_id: INJ-20261008-016
+  working_set_sha256: a0fafe7474357173747b8118a8ffdb190aa56aa73f38a519c4616ce18accac08
+- case_id: B-03
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: endpoint:ep-cc-pay-pay
+      obj_type: AppEndpoint
+      path: app.endpoint.p99_ms
+    value_after: 3100.0
+    value_before: 2.671
+  source_injection_id: INJ-20261008-017
+  working_set_sha256: 259642afad0449bfec0b98bee62cf5753e103cccc3ff3fdca43bdda5b8c8af26
+- case_id: B-04
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: endpoint:ep-cc-pay-slow
+      obj_type: AppEndpoint
+      path: app.endpoint.p99_ms
+    value_after: 4400.0
+    value_before: 33.29
+  source_injection_id: INJ-20261008-018
+  working_set_sha256: ac0c67ed6b81379fd5b81290bf257523ce9425f0de7e1cdbb76d0708bb69f365
+- case_id: B-05
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: appinst:appinst-cc-pay-1
+      obj_type: AppInstance
+      path: app.heap_used_ratio
+    value_after: 0.8766
+    value_before: 0.0413
+  source_injection_id: INJ-20261008-019
+  working_set_sha256: a02367c883d254980743d36b59f58eccf7fe1fedb7f0979721a9cb270cebbd7d
+- case_id: B-06
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: host:host-dn_6001
+      obj_type: Host
+      path: host.mem_available_ratio
+    value_after: 0.0255
+    value_before: 0.0743
+  source_injection_id: INJ-20261008-020
+  working_set_sha256: 4252904e1550ddfe9ea55c4e14e05edd2ae5257e7af2420883a9748cd2f47c0e
+- case_id: B-07
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: dbinst:dn_6001
+      obj_type: GaussDBInstance
+      path: db.instance.up
+    value_after: false
+    value_before: true
+  source_injection_id: INJ-20261008-021
+  working_set_sha256: 389df014596df88ecd7fac9bb84cf1a1054e5c56e1f825c6ca8a0b4a2b7a5729
+- case_id: B-08
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: dbinst:dn_6002
+      obj_type: GaussDBInstance
+      path: db.instance.up
+    value_after: false
+    value_before: true
+  - field: value
+    op: set_fact
+    target:
+      obj_id: dbcluster:79b62ee45b9e401fb06ca86941d5f419in14
+      obj_type: GaussDBCluster
+      path: db.cluster.down_nodes
+    value_after: 1
+    value_before: 0
+  - field: value
+    op: set_fact
+    target:
+      obj_id: dbcluster:79b62ee45b9e401fb06ca86941d5f419in14
+      obj_type: GaussDBCluster
+      path: db.cluster.up_nodes
+    value_after: 1
+    value_before: 2
+  source_injection_id: INJ-20261008-022
+  working_set_sha256: 223b57f5580beb1cab51a8c6eef9347d81a03e4c91766839263c50556a841395
+- case_id: B-09
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: endpoint:ep-cc-pay-pay
+      obj_type: AppEndpoint
+      path: app.endpoint.p99_ms
+    value_after: 2900.0
+    value_before: 2.671
+  source_injection_id: INJ-20261008-023
+  working_set_sha256: d4df7ce1477a092f0af6ebfdd28c43749adf117149ae68d133c62051557c1277
+- case_id: B-10
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: appinst:appinst-cc-pay-1
+      obj_type: AppInstance
+      path: app.heap_used_ratio
+    value_after: 0.9552
+    value_before: 0.0413
+  source_injection_id: INJ-20261008-024
+  working_set_sha256: b07655dfef25b7f2adf2edbe0e73d43603232619db7165fd55d955e37a97b0ca
+- case_id: B-11
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: host:host-dn_6002
+      obj_type: Host
+      path: host.mem_available_ratio
+    value_after: 0.0199
+    value_before: 0.0659
+  - op: remove_object
+    target:
+      obj_id: table:tbl-snapshot.snap_class_vital_info
+      obj_type: Table
+  source_injection_id: INJ-20261008-025
+  working_set_sha256: 0bd0de8567970990fb586ddc4b0ff20a744543764967ce89bbb76ad1dad79c34
+- case_id: B-12
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: endpoint:ep-cc-pay-slow
+      obj_type: AppEndpoint
+      path: app.endpoint.p99_ms
+    value_after: 1700.0
+    value_before: 33.29
+  - op: remove_relation
+    relation_id: rel-000002
+  source_injection_id: INJ-20261008-026
+  working_set_sha256: 765048c475d0188bbf3c0d695a695cd3af363dc8c87edb8207df10a9f5f835f2
+- case_id: B-13
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: host:host-dn_6001
+      obj_type: Host
+      path: host.mem_available_ratio
+    value_after: 0.0455
+    value_before: 0.0743
+  - attrs:
+      hostname: m5-host-a
+      role: k8s-worker
+    constructed_at: '2026-09-28T23:55:45.000000'
+    id_local: m5-host-a
+    key:
+      hostname: m5-host-a
+    op: add_object
+    type: Host
+  source_injection_id: INJ-20261008-027
+  working_set_sha256: f04fee9386d9ac1df30609fef09cf5e4dddb58128ce8088722a37030b764a8ea
+- case_id: B-14
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: dbinst:dn_6001
+      obj_type: GaussDBInstance
+      path: db.instance.up
+    value_after: false
+    value_before: true
+  - field: value
+    op: set_fact
+    target:
+      obj_id: dbcluster:79b62ee45b9e401fb06ca86941d5f419in14
+      obj_type: GaussDBCluster
+      path: db.cluster.down_nodes
+    value_after: 1
+    value_before: 0
+  - field: value
+    op: set_fact
+    target:
+      obj_id: dbcluster:79b62ee45b9e401fb06ca86941d5f419in14
+      obj_type: GaussDBCluster
+      path: db.cluster.up_nodes
+    value_after: 1
+    value_before: 2
+  source_injection_id: INJ-20261008-028
+  working_set_sha256: 01a988fdb4458012ae11b8eaf345df2bf10ba11b7cef59dd285271863869bffb
+- case_id: D-01
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: endpoint:ep-cc-pay-pay
+      obj_type: AppEndpoint
+      path: app.endpoint.p99_ms
+    value_after: 3600.0
+    value_before: 2.671
+  - field: value
+    op: set_fact
+    target:
+      obj_id: appinst:appinst-cc-pay-1
+      obj_type: AppInstance
+      path: app.heap_used_ratio
+    value_after: 0.9183
+    value_before: 0.0413
+  source_injection_id: INJ-20261008-029
+  working_set_sha256: 90e647ba9d602efe09a0f05c2af50a4f5a29844a8bbdb461c33ecb9d0fa6e935
+- case_id: D-02
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: endpoint:ep-cc-pay-pay
+      obj_type: AppEndpoint
+      path: app.endpoint.p99_ms
+    value_after: 3600.0
+    value_before: 2.671
+  - field: value
+    op: set_fact
+    target:
+      obj_id: host:host-dn_6001
+      obj_type: Host
+      path: host.mem_available_ratio
+    value_after: 0.0266
+    value_before: 0.0743
+  source_injection_id: INJ-20261008-030
+  working_set_sha256: aad584ff04f9dec192684df7340fdfa24250df36a6127972bca1f105c4623947
+- case_id: D-03
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: endpoint:ep-cc-pay-pay
+      obj_type: AppEndpoint
+      path: app.endpoint.p99_ms
+    value_after: 2750.0
+    value_before: 2.671
+  - field: value
+    op: set_fact
+    target:
+      obj_id: host:host-dn_6002
+      obj_type: Host
+      path: host.mem_available_ratio
+    value_after: 0.0231
+    value_before: 0.0659
+  source_injection_id: INJ-20261008-031
+  working_set_sha256: 775b6af25087c44af7ab067225645f612c229f83154cf00cd35ead83ee055bae
+- case_id: D-04
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: endpoint:ep-cc-pay-pay
+      obj_type: AppEndpoint
+      path: app.endpoint.p99_ms
+    value_after: 2750.0
+    value_before: 2.671
+  - field: value
+    op: set_fact
+    target:
+      obj_id: dbinst:dn_6001
+      obj_type: GaussDBInstance
+      path: db.instance.up
+    value_after: false
+    value_before: true
+  source_injection_id: INJ-20261008-032
+  working_set_sha256: 023454e954f0917297207bceb1e212996cabc6c4a826b738ecd393c931fc83bd
+- case_id: D-05
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: endpoint:ep-cc-pay-slow
+      obj_type: AppEndpoint
+      path: app.endpoint.p99_ms
+    value_after: 3300.0
+    value_before: 33.29
+  - field: value
+    op: set_fact
+    target:
+      obj_id: appinst:appinst-cc-pay-1
+      obj_type: AppInstance
+      path: app.heap_used_ratio
+    value_after: 0.8874
+    value_before: 0.0413
+  source_injection_id: INJ-20261008-033
+  working_set_sha256: 4abc1dd262d94b7ceaa4004c8374bced4dfd061686a2c78ec3443cc9f5f1f225
+- case_id: D-06
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: endpoint:ep-cc-pay-slow
+      obj_type: AppEndpoint
+      path: app.endpoint.p99_ms
+    value_after: 3300.0
+    value_before: 33.29
+  - field: value
+    op: set_fact
+    target:
+      obj_id: dbinst:dn_6002
+      obj_type: GaussDBInstance
+      path: db.instance.up
+    value_after: false
+    value_before: true
+  source_injection_id: INJ-20261008-034
+  working_set_sha256: 128c3f0116ddeb0c4f5647d7b9ccf5cb38613910a09dae46d6125bfc77da1215
+- case_id: N-01
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: appinst:appinst-cc-pay-1
+      obj_type: AppInstance
+      path: app.heap_used_ratio
+    value_after: 0.9054
+    value_before: 0.0413
+  source_injection_id: INJ-20261008-035
+  working_set_sha256: d0079e0995c179b9a6b15b5bd0cb89acef25b1d6abe8dd5638101705460a7c66
+- case_id: N-02
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: appinst:appinst-cc-pay-1
+      obj_type: AppInstance
+      path: app.heap_used_ratio
+    value_after: 0.8691
+    value_before: 0.0413
+  source_injection_id: INJ-20261008-036
+  working_set_sha256: fa3ee13a64a354fa35ff8a8a31760bca7b9826afad10d4059c5d2a7d82b8d72b
+- case_id: N-03
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: host:host-dn_6001
+      obj_type: Host
+      path: host.mem_available_ratio
+    value_after: 0.0244
+    value_before: 0.0743
+  source_injection_id: INJ-20261008-037
+  working_set_sha256: 6e43c279f901bfb20d9658865028967915782aa78aea6bce80004d61f141be9d
+- case_id: N-04
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: host:host-dn_6002
+      obj_type: Host
+      path: host.mem_available_ratio
+    value_after: 0.0177
+    value_before: 0.0659
+  source_injection_id: INJ-20261008-038
+  working_set_sha256: 8182c9c24ffc404068d1b9b126c4fd92fcfffe14b881bf3ac0b5528a49a08238
+- case_id: N-05
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: dbinst:dn_6001
+      obj_type: GaussDBInstance
+      path: db.instance.up
+    value_after: false
+    value_before: true
+  - field: value
+    op: set_fact
+    target:
+      obj_id: dbcluster:79b62ee45b9e401fb06ca86941d5f419in14
+      obj_type: GaussDBCluster
+      path: db.cluster.down_nodes
+    value_after: 1
+    value_before: 0
+  - field: value
+    op: set_fact
+    target:
+      obj_id: dbcluster:79b62ee45b9e401fb06ca86941d5f419in14
+      obj_type: GaussDBCluster
+      path: db.cluster.up_nodes
+    value_after: 1
+    value_before: 2
+  - op: remove_relation
+    relation_id: rel-000029
+  source_injection_id: INJ-20261008-039
+  working_set_sha256: ef6a7e12bfe2481c671a4e50b2474d31df0d540ea7ab996b9fab598075764fd5
+- case_id: N-06
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: endpoint:ep-cc-pay-pay
+      obj_type: AppEndpoint
+      path: app.endpoint.p99_ms
+    value_after: 5200.0
+    value_before: 2.671
+  source_injection_id: INJ-20261008-040
+  working_set_sha256: 7a47cbcd536b806f3af0048ee49ca090465a9adbdd799cfb9c7bd0ccc4451a18
+- case_id: Z-01
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections: []
+  source_injection_id: INJ-20261008-041
+  working_set_sha256: ae39ab5390b3b470acdf2983bbf81ee90064400787d098fefa6430e0dd42f11a
+- case_id: Z-02
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections: []
+  source_injection_id: INJ-20261008-042
+  working_set_sha256: ae39ab5390b3b470acdf2983bbf81ee90064400787d098fefa6430e0dd42f11a
+- case_id: Z-03
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections: []
+  source_injection_id: INJ-20261008-043
+  working_set_sha256: ae39ab5390b3b470acdf2983bbf81ee90064400787d098fefa6430e0dd42f11a
+- case_id: Z-04
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections: []
+  source_injection_id: INJ-20261008-044
+  working_set_sha256: ae39ab5390b3b470acdf2983bbf81ee90064400787d098fefa6430e0dd42f11a
+- case_id: Z-05
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections: []
+  source_injection_id: INJ-20261008-045
+  working_set_sha256: ae39ab5390b3b470acdf2983bbf81ee90064400787d098fefa6430e0dd42f11a
+- case_id: Z-06
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections: []
+  source_injection_id: INJ-20261008-046
+  working_set_sha256: ae39ab5390b3b470acdf2983bbf81ee90064400787d098fefa6430e0dd42f11a
+- case_id: T-01
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: dbinst:dn_6001
+      obj_type: GaussDBInstance
+      path: db.instance.up
+    value_after: false
+    value_before: true
+  source_injection_id: INJ-20261008-047
+  working_set_sha256: 389df014596df88ecd7fac9bb84cf1a1054e5c56e1f825c6ca8a0b4a2b7a5729
+- case_id: T-02
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: dbinst:dn_6001
+      obj_type: GaussDBInstance
+      path: db.instance.up
+    value_after: false
+    value_before: true
+  - field: value
+    op: set_fact
+    target:
+      obj_id: dbcluster:79b62ee45b9e401fb06ca86941d5f419in14
+      obj_type: GaussDBCluster
+      path: db.cluster.down_nodes
+    value_after: 1
+    value_before: 0
+  - field: value
+    op: set_fact
+    target:
+      obj_id: dbcluster:79b62ee45b9e401fb06ca86941d5f419in14
+      obj_type: GaussDBCluster
+      path: db.cluster.up_nodes
+    value_after: 1
+    value_before: 2
+  source_injection_id: INJ-20261008-048
+  working_set_sha256: 01a988fdb4458012ae11b8eaf345df2bf10ba11b7cef59dd285271863869bffb
+- case_id: T-03
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - op: remove_object
+    target:
+      obj_id: dbinst:dn_6002
+      obj_type: GaussDBInstance
+  - field: value
+    op: set_fact
+    target:
+      obj_id: dbinst:dn_6001
+      obj_type: GaussDBInstance
+      path: db.instance.up
+    value_after: false
+    value_before: true
+  - field: value
+    op: set_fact
+    target:
+      obj_id: dbcluster:79b62ee45b9e401fb06ca86941d5f419in14
+      obj_type: GaussDBCluster
+      path: db.cluster.down_nodes
+    value_after: 1
+    value_before: 0
+  - field: value
+    op: set_fact
+    target:
+      obj_id: dbcluster:79b62ee45b9e401fb06ca86941d5f419in14
+      obj_type: GaussDBCluster
+      path: db.cluster.up_nodes
+    value_after: 1
+    value_before: 2
+  source_injection_id: INJ-20261008-049
+  working_set_sha256: d187ecd9fa9140be697336a0c65e2dfd45b92f99f9ef307806110feab7d84b60
+- case_id: T-04
+  constructed_at: '2026-10-08T00:00:00Z'
+  injections:
+  - field: value
+    op: set_fact
+    target:
+      obj_id: dbinst:dn_6002
+      obj_type: GaussDBInstance
+      path: db.instance.up
+    value_after: false
+    value_before: true
+  - field: value
+    op: set_fact
+    target:
+      obj_id: dbcluster:79b62ee45b9e401fb06ca86941d5f419in14
+      obj_type: GaussDBCluster
+      path: db.cluster.down_nodes
+    value_after: 1
+    value_before: 0
+  - attrs:
+      instanceId: dn_6003
+      role: Standby
+    constructed_at: '2026-09-28T23:56:00.000000'
+    id_local: dn_6003
+    key:
+      instanceId: dn_6003
+    op: add_object
+    type: GaussDBInstance
+  - constructed_at: '2026-10-08T00:00:00Z'
+    from: dbcluster:79b62ee45b9e401fb06ca86941d5f419in14
+    op: add_relation
+    relation: HAS_DB_INSTANCE
+    to: dbinst:dn_6003
+  source_injection_id: INJ-20261008-050
+  working_set_sha256: dbb4867ea474c897cb3b564126e5fe27df3804c2e604ca607b3d6080718a2723
+mapping:
+- case_id: A-01
+  chain: F1
+  confirmable:
+  - FM-APP-ENDPOINT-SLOW
+  difficulty: easy
+  evidence_facts:
+  - obs-000023
+  evidence_metrics:
+  - app.endpoint.p99_ms
+  expect_layer: App
+  expect_objects:
+  - endpoint:ep-cc-pay-pay
+  expect_path:
+  - FM-APP-ENDPOINT-SLOW
+  expect_root_cause: FM-APP-ENDPOINT-SLOW
+  family: C1
+  injected:
+  - FM-APP-ENDPOINT-SLOW
+  injection_ops:
+  - set_fact
+  injections_n: 1
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: 7605da172debd379532140e02539d2a67432cb450d9c1c8eca2e39b70bdab556
+- case_id: A-02
+  chain: F1
+  confirmable:
+  - FM-APP-ENDPOINT-SLOW
+  difficulty: easy
+  evidence_facts:
+  - obs-000026
+  evidence_metrics:
+  - app.endpoint.p99_ms
+  expect_layer: App
+  expect_objects:
+  - endpoint:ep-cc-pay-slow
+  expect_path:
+  - FM-APP-ENDPOINT-SLOW
+  expect_root_cause: FM-APP-ENDPOINT-SLOW
+  family: C1
+  injected:
+  - FM-APP-ENDPOINT-SLOW
+  injection_ops:
+  - set_fact
+  injections_n: 1
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: cf1b129e1011fd77b1c418b2dea5a27b3ccab8d90b7662d1929cee5b55133968
+- case_id: A-03
+  chain: F2
+  confirmable:
+  - FM-APP-ENDPOINT-SLOW
+  difficulty: easy
+  evidence_facts:
+  - obs-000023
+  evidence_metrics:
+  - app.endpoint.p99_ms
+  expect_layer: App
+  expect_objects:
+  - endpoint:ep-cc-pay-pay
+  expect_path:
+  - FM-APP-ENDPOINT-SLOW
+  expect_root_cause: FM-APP-ENDPOINT-SLOW
+  family: C1
+  injected:
+  - FM-APP-ENDPOINT-SLOW
+  injection_ops:
+  - set_fact
+  injections_n: 1
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: cccd421d5be10f92f936b917239c0642485406f640e0a6ef0f127322c3a3192b
+- case_id: A-04
+  chain: F3
+  confirmable:
+  - FM-APP-ENDPOINT-SLOW
+  difficulty: easy
+  evidence_facts:
+  - obs-000026
+  evidence_metrics:
+  - app.endpoint.p99_ms
+  expect_layer: App
+  expect_objects:
+  - endpoint:ep-cc-pay-slow
+  expect_path:
+  - FM-APP-ENDPOINT-SLOW
+  expect_root_cause: FM-APP-ENDPOINT-SLOW
+  family: C1
+  injected:
+  - FM-APP-ENDPOINT-SLOW
+  injection_ops:
+  - set_fact
+  injections_n: 1
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: 7c1d8415b1a0eff103c630aec8881cbb9fda2c4760d7af32821e0636fe550c82
+- case_id: A-05
+  chain: F4
+  confirmable:
+  - FM-APP-HEAP-PRESSURE
+  difficulty: easy
+  evidence_facts:
+  - obs-000002
+  - obs-000001
+  evidence_metrics:
+  - app.heap_used_ratio
+  - app.gc_pause_ms
+  expect_layer: App
+  expect_objects:
+  - appinst:appinst-cc-pay-1
+  expect_path:
+  - FM-APP-HEAP-PRESSURE
+  expect_root_cause: FM-APP-HEAP-PRESSURE
+  family: C1
+  injected:
+  - FM-APP-HEAP-PRESSURE
+  injection_ops:
+  - set_fact
+  injections_n: 1
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: 15c164115a48fb527560803a04363b1cd2ed265495acb93c35257cac3bb9e23a
+- case_id: A-06
+  chain: F4
+  confirmable:
+  - FM-APP-HEAP-PRESSURE
+  difficulty: easy
+  evidence_facts:
+  - obs-000002
+  - obs-000001
+  evidence_metrics:
+  - app.heap_used_ratio
+  - app.gc_pause_ms
+  expect_layer: App
+  expect_objects:
+  - appinst:appinst-cc-pay-1
+  expect_path:
+  - FM-APP-HEAP-PRESSURE
+  expect_root_cause: FM-APP-HEAP-PRESSURE
+  family: C1
+  injected:
+  - FM-APP-HEAP-PRESSURE
+  injection_ops:
+  - set_fact
+  injections_n: 1
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: 182bdf0a004a24c2b4c165a098e8eeb907acb447c4bb9f6f68d194984195ed6e
+- case_id: A-07
+  chain: F4
+  confirmable:
+  - FM-APP-HEAP-PRESSURE
+  difficulty: easy
+  evidence_facts:
+  - obs-000002
+  - obs-000001
+  evidence_metrics:
+  - app.heap_used_ratio
+  - app.gc_pause_ms
+  expect_layer: App
+  expect_objects:
+  - appinst:appinst-cc-pay-1
+  expect_path:
+  - FM-APP-HEAP-PRESSURE
+  expect_root_cause: FM-APP-HEAP-PRESSURE
+  family: C1
+  injected:
+  - FM-APP-HEAP-PRESSURE
+  injection_ops:
+  - set_fact
+  injections_n: 1
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: ab442944d734823a5b534a6410447452f4f6d8aa4679c4bc9df0ab298a8db828
+- case_id: A-08
+  chain: F4
+  confirmable:
+  - FM-HOST-MEM-PRESSURE
+  difficulty: easy
+  evidence_facts:
+  - obs-000033
+  evidence_metrics:
+  - host.mem_available_ratio
+  expect_layer: Runtime
+  expect_objects:
+  - host:host-dn_6001
+  expect_path:
+  - FM-HOST-MEM-PRESSURE
+  expect_root_cause: FM-HOST-MEM-PRESSURE
+  family: C1
+  injected:
+  - FM-HOST-MEM-PRESSURE
+  injection_ops:
+  - set_fact
+  injections_n: 1
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: 9cac65649322d63c4c33c9c2d026897828a1c9a7f236fc311db337d1d52908e5
+- case_id: A-09
+  chain: F4
+  confirmable:
+  - FM-HOST-MEM-PRESSURE
+  difficulty: easy
+  evidence_facts:
+  - obs-000039
+  evidence_metrics:
+  - host.mem_available_ratio
+  expect_layer: Runtime
+  expect_objects:
+  - host:host-dn_6002
+  expect_path:
+  - FM-HOST-MEM-PRESSURE
+  expect_root_cause: FM-HOST-MEM-PRESSURE
+  family: C1
+  injected:
+  - FM-HOST-MEM-PRESSURE
+  injection_ops:
+  - set_fact
+  injections_n: 1
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: 731d8b055cee206d6288d53c3ad1fe3649c580edec255f9a613c8f195db64ad9
+- case_id: A-10
+  chain: F4
+  confirmable:
+  - FM-HOST-MEM-PRESSURE
+  difficulty: easy
+  evidence_facts:
+  - obs-000033
+  evidence_metrics:
+  - host.mem_available_ratio
+  expect_layer: Runtime
+  expect_objects:
+  - host:host-dn_6001
+  expect_path:
+  - FM-HOST-MEM-PRESSURE
+  expect_root_cause: FM-HOST-MEM-PRESSURE
+  family: C1
+  injected:
+  - FM-HOST-MEM-PRESSURE
+  injection_ops:
+  - set_fact
+  injections_n: 1
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: 10ab0a94a2a979dce182d1f3fef594592443af68e23c82ff3e96279dc6045548
+- case_id: A-11
+  chain: F4
+  confirmable:
+  - FM-HOST-MEM-PRESSURE
+  difficulty: easy
+  evidence_facts:
+  - obs-000039
+  evidence_metrics:
+  - host.mem_available_ratio
+  expect_layer: Runtime
+  expect_objects:
+  - host:host-dn_6002
+  expect_path:
+  - FM-HOST-MEM-PRESSURE
+  expect_root_cause: FM-HOST-MEM-PRESSURE
+  family: C1
+  injected:
+  - FM-HOST-MEM-PRESSURE
+  injection_ops:
+  - set_fact
+  injections_n: 1
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: 6f97f066a97450db43bb53f6560bb9396ea6043023005cee1eb59631bcaed75d
+- case_id: A-12
+  chain: F7
+  confirmable:
+  - FM-DB-INSTANCE-DOWN
+  difficulty: easy
+  evidence_facts:
+  - obs-000017
+  evidence_metrics:
+  - db.instance.up
+  expect_layer: Data
+  expect_objects:
+  - dbinst:dn_6001
+  expect_path:
+  - FM-DB-INSTANCE-DOWN
+  expect_root_cause: FM-DB-INSTANCE-DOWN
+  family: C1
+  injected:
+  - FM-DB-INSTANCE-DOWN
+  injection_ops:
+  - set_fact
+  injections_n: 1
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: 389df014596df88ecd7fac9bb84cf1a1054e5c56e1f825c6ca8a0b4a2b7a5729
+- case_id: A-13
+  chain: F7
+  confirmable:
+  - FM-DB-INSTANCE-DOWN
+  difficulty: easy
+  evidence_facts:
+  - obs-000019
+  evidence_metrics:
+  - db.instance.up
+  expect_layer: Data
+  expect_objects:
+  - dbinst:dn_6002
+  expect_path:
+  - FM-DB-INSTANCE-DOWN
+  expect_root_cause: FM-DB-INSTANCE-DOWN
+  family: C1
+  injected:
+  - FM-DB-INSTANCE-DOWN
+  injection_ops:
+  - remove_relation
+  - set_fact
+  injections_n: 2
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: 272900c287e1af7b1dd7b09c5af9f20351cf8ab92ed48674265f72ddcc57bac2
+- case_id: A-14
+  chain: F7
+  confirmable:
+  - FM-DB-INSTANCE-DOWN
+  difficulty: easy
+  evidence_facts:
+  - obs-000017
+  evidence_metrics:
+  - db.instance.up
+  expect_layer: Data
+  expect_objects:
+  - dbinst:dn_6001
+  expect_path:
+  - FM-DB-INSTANCE-DOWN
+  expect_root_cause: FM-DB-INSTANCE-DOWN
+  family: C1
+  injected:
+  - FM-DB-INSTANCE-DOWN
+  injection_ops:
+  - set_fact
+  injections_n: 3
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: 01a988fdb4458012ae11b8eaf345df2bf10ba11b7cef59dd285271863869bffb
+- case_id: B-01
+  chain: F4
+  confirmable:
+  - FM-APP-HEAP-PRESSURE
+  - FM-HOST-MEM-PRESSURE
+  difficulty: medium
+  evidence_facts:
+  - obs-000002
+  - obs-000001
+  - obs-000033
+  evidence_metrics:
+  - app.heap_used_ratio
+  - app.gc_pause_ms
+  - host.mem_available_ratio
+  expect_layer: App
+  expect_objects:
+  - appinst:appinst-cc-pay-1
+  - host:host-dn_6001
+  expect_path:
+  - FM-APP-HEAP-PRESSURE
+  - FM-HOST-MEM-PRESSURE
+  expect_root_cause: FM-APP-HEAP-PRESSURE
+  family: C2
+  injected:
+  - FM-APP-HEAP-PRESSURE
+  - FM-HOST-MEM-PRESSURE
+  injection_ops:
+  - set_fact
+  injections_n: 2
+  path_basis: causal-edge
+  removed_objects: []
+  symptom: FM-HOST-MEM-PRESSURE
+  working_set_sha256: 9feb7312743d5dcc4de76f507c52be6770c35614ec8b1228d306e03178df31d5
+- case_id: B-02
+  chain: F4
+  confirmable:
+  - FM-APP-HEAP-PRESSURE
+  - FM-HOST-MEM-PRESSURE
+  difficulty: medium
+  evidence_facts:
+  - obs-000002
+  - obs-000001
+  - obs-000039
+  evidence_metrics:
+  - app.heap_used_ratio
+  - app.gc_pause_ms
+  - host.mem_available_ratio
+  expect_layer: App
+  expect_objects:
+  - appinst:appinst-cc-pay-1
+  - host:host-dn_6002
+  expect_path:
+  - FM-APP-HEAP-PRESSURE
+  - FM-HOST-MEM-PRESSURE
+  expect_root_cause: FM-APP-HEAP-PRESSURE
+  family: C2
+  injected:
+  - FM-APP-HEAP-PRESSURE
+  - FM-HOST-MEM-PRESSURE
+  injection_ops:
+  - set_fact
+  injections_n: 2
+  path_basis: causal-edge
+  removed_objects: []
+  symptom: FM-HOST-MEM-PRESSURE
+  working_set_sha256: a0fafe7474357173747b8118a8ffdb190aa56aa73f38a519c4616ce18accac08
+- case_id: B-03
+  chain: F2
+  confirmable:
+  - FM-APP-ENDPOINT-SLOW
+  difficulty: medium
+  evidence_facts:
+  - obs-000023
+  evidence_metrics:
+  - app.endpoint.p99_ms
+  expect_layer: App
+  expect_objects:
+  - endpoint:ep-cc-pay-pay
+  expect_path:
+  - FM-APP-ENDPOINT-SLOW
+  expect_root_cause: FM-APP-ENDPOINT-SLOW
+  family: C2
+  injected:
+  - FM-APP-ENDPOINT-SLOW
+  injection_ops:
+  - set_fact
+  injections_n: 1
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: 259642afad0449bfec0b98bee62cf5753e103cccc3ff3fdca43bdda5b8c8af26
+- case_id: B-04
+  chain: F3
+  confirmable:
+  - FM-APP-ENDPOINT-SLOW
+  difficulty: medium
+  evidence_facts:
+  - obs-000026
+  evidence_metrics:
+  - app.endpoint.p99_ms
+  expect_layer: App
+  expect_objects:
+  - endpoint:ep-cc-pay-slow
+  expect_path:
+  - FM-APP-ENDPOINT-SLOW
+  expect_root_cause: FM-APP-ENDPOINT-SLOW
+  family: C2
+  injected:
+  - FM-APP-ENDPOINT-SLOW
+  injection_ops:
+  - set_fact
+  injections_n: 1
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: ac0c67ed6b81379fd5b81290bf257523ce9425f0de7e1cdbb76d0708bb69f365
+- case_id: B-05
+  chain: F4
+  confirmable:
+  - FM-APP-HEAP-PRESSURE
+  difficulty: medium
+  evidence_facts:
+  - obs-000002
+  - obs-000001
+  evidence_metrics:
+  - app.heap_used_ratio
+  - app.gc_pause_ms
+  expect_layer: App
+  expect_objects:
+  - appinst:appinst-cc-pay-1
+  expect_path:
+  - FM-APP-HEAP-PRESSURE
+  expect_root_cause: FM-APP-HEAP-PRESSURE
+  family: C2
+  injected:
+  - FM-APP-HEAP-PRESSURE
+  injection_ops:
+  - set_fact
+  injections_n: 1
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: a02367c883d254980743d36b59f58eccf7fe1fedb7f0979721a9cb270cebbd7d
+- case_id: B-06
+  chain: F5
+  confirmable:
+  - FM-HOST-MEM-PRESSURE
+  difficulty: medium
+  evidence_facts:
+  - obs-000033
+  evidence_metrics:
+  - host.mem_available_ratio
+  expect_layer: Runtime
+  expect_objects:
+  - host:host-dn_6001
+  expect_path:
+  - FM-HOST-MEM-PRESSURE
+  expect_root_cause: FM-HOST-MEM-PRESSURE
+  family: C2
+  injected:
+  - FM-HOST-MEM-PRESSURE
+  injection_ops:
+  - set_fact
+  injections_n: 1
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: 4252904e1550ddfe9ea55c4e14e05edd2ae5257e7af2420883a9748cd2f47c0e
+- case_id: B-07
+  chain: F6
+  confirmable:
+  - FM-DB-INSTANCE-DOWN
+  difficulty: medium
+  evidence_facts:
+  - obs-000017
+  evidence_metrics:
+  - db.instance.up
+  expect_layer: Data
+  expect_objects:
+  - dbinst:dn_6001
+  expect_path:
+  - FM-DB-INSTANCE-DOWN
+  expect_root_cause: FM-DB-INSTANCE-DOWN
+  family: C2
+  injected:
+  - FM-DB-INSTANCE-DOWN
+  injection_ops:
+  - set_fact
+  injections_n: 1
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: 389df014596df88ecd7fac9bb84cf1a1054e5c56e1f825c6ca8a0b4a2b7a5729
+- case_id: B-08
+  chain: F7
+  confirmable:
+  - FM-DB-INSTANCE-DOWN
+  difficulty: medium
+  evidence_facts:
+  - obs-000019
+  evidence_metrics:
+  - db.instance.up
+  expect_layer: Data
+  expect_objects:
+  - dbinst:dn_6002
+  expect_path:
+  - FM-DB-INSTANCE-DOWN
+  expect_root_cause: FM-DB-INSTANCE-DOWN
+  family: C2
+  injected:
+  - FM-DB-INSTANCE-DOWN
+  injection_ops:
+  - set_fact
+  injections_n: 3
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: 223b57f5580beb1cab51a8c6eef9347d81a03e4c91766839263c50556a841395
+- case_id: B-09
+  chain: F1
+  confirmable:
+  - FM-APP-ENDPOINT-SLOW
+  difficulty: medium
+  evidence_facts:
+  - obs-000023
+  evidence_metrics:
+  - app.endpoint.p99_ms
+  expect_layer: App
+  expect_objects:
+  - endpoint:ep-cc-pay-pay
+  expect_path:
+  - FM-APP-ENDPOINT-SLOW
+  expect_root_cause: FM-APP-ENDPOINT-SLOW
+  family: C2
+  injected:
+  - FM-APP-ENDPOINT-SLOW
+  injection_ops:
+  - set_fact
+  injections_n: 1
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: d4df7ce1477a092f0af6ebfdd28c43749adf117149ae68d133c62051557c1277
+- case_id: B-10
+  chain: F2
+  confirmable:
+  - FM-APP-HEAP-PRESSURE
+  difficulty: medium
+  evidence_facts:
+  - obs-000002
+  - obs-000001
+  evidence_metrics:
+  - app.heap_used_ratio
+  - app.gc_pause_ms
+  expect_layer: App
+  expect_objects:
+  - appinst:appinst-cc-pay-1
+  expect_path:
+  - FM-APP-HEAP-PRESSURE
+  expect_root_cause: FM-APP-HEAP-PRESSURE
+  family: C2
+  injected:
+  - FM-APP-HEAP-PRESSURE
+  injection_ops:
+  - set_fact
+  injections_n: 1
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: b07655dfef25b7f2adf2edbe0e73d43603232619db7165fd55d955e37a97b0ca
+- case_id: B-11
+  chain: F3
+  confirmable:
+  - FM-HOST-MEM-PRESSURE
+  difficulty: hard
+  evidence_facts:
+  - obs-000039
+  evidence_metrics:
+  - host.mem_available_ratio
+  expect_layer: Runtime
+  expect_objects:
+  - host:host-dn_6002
+  expect_path:
+  - FM-HOST-MEM-PRESSURE
+  expect_root_cause: FM-HOST-MEM-PRESSURE
+  family: C2
+  injected:
+  - FM-HOST-MEM-PRESSURE
+  injection_ops:
+  - remove_object
+  - set_fact
+  injections_n: 2
+  path_basis: single-node
+  removed_objects:
+  - table:tbl-snapshot.snap_class_vital_info
+  symptom: null
+  working_set_sha256: 0bd0de8567970990fb586ddc4b0ff20a744543764967ce89bbb76ad1dad79c34
+- case_id: B-12
+  chain: F4
+  confirmable:
+  - FM-APP-ENDPOINT-SLOW
+  difficulty: hard
+  evidence_facts:
+  - obs-000026
+  evidence_metrics:
+  - app.endpoint.p99_ms
+  expect_layer: App
+  expect_objects:
+  - endpoint:ep-cc-pay-slow
+  expect_path:
+  - FM-APP-ENDPOINT-SLOW
+  expect_root_cause: FM-APP-ENDPOINT-SLOW
+  family: C2
+  injected:
+  - FM-APP-ENDPOINT-SLOW
+  injection_ops:
+  - remove_relation
+  - set_fact
+  injections_n: 2
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: 765048c475d0188bbf3c0d695a695cd3af363dc8c87edb8207df10a9f5f835f2
+- case_id: B-13
+  chain: F5
+  confirmable:
+  - FM-HOST-MEM-PRESSURE
+  difficulty: hard
+  evidence_facts:
+  - obs-000033
+  evidence_metrics:
+  - host.mem_available_ratio
+  expect_layer: Runtime
+  expect_objects:
+  - host:host-dn_6001
+  expect_path:
+  - FM-HOST-MEM-PRESSURE
+  expect_root_cause: FM-HOST-MEM-PRESSURE
+  family: C2
+  injected:
+  - FM-HOST-MEM-PRESSURE
+  injection_ops:
+  - add_object
+  - set_fact
+  injections_n: 2
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: f04fee9386d9ac1df30609fef09cf5e4dddb58128ce8088722a37030b764a8ea
+- case_id: B-14
+  chain: F6
+  confirmable:
+  - FM-DB-INSTANCE-DOWN
+  difficulty: hard
+  evidence_facts:
+  - obs-000017
+  evidence_metrics:
+  - db.instance.up
+  expect_layer: Data
+  expect_objects:
+  - dbinst:dn_6001
+  expect_path:
+  - FM-DB-INSTANCE-DOWN
+  expect_root_cause: FM-DB-INSTANCE-DOWN
+  family: C2
+  injected:
+  - FM-DB-INSTANCE-DOWN
+  injection_ops:
+  - set_fact
+  injections_n: 3
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: 01a988fdb4458012ae11b8eaf345df2bf10ba11b7cef59dd285271863869bffb
+- case_id: D-01
+  chain: F4
+  confirmable:
+  - FM-APP-ENDPOINT-SLOW
+  - FM-APP-HEAP-PRESSURE
+  difficulty: medium
+  evidence_facts:
+  - obs-000023
+  - obs-000002
+  - obs-000001
+  evidence_metrics:
+  - app.endpoint.p99_ms
+  - app.heap_used_ratio
+  - app.gc_pause_ms
+  expect_layer: App
+  expect_objects:
+  - endpoint:ep-cc-pay-pay
+  - appinst:appinst-cc-pay-1
+  expect_path:
+  - FM-APP-HEAP-PRESSURE
+  expect_root_cause: FM-APP-HEAP-PRESSURE
+  family: C3
+  injected:
+  - FM-APP-ENDPOINT-SLOW
+  - FM-APP-HEAP-PRESSURE
+  injection_ops:
+  - set_fact
+  injections_n: 2
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: 90e647ba9d602efe09a0f05c2af50a4f5a29844a8bbdb461c33ecb9d0fa6e935
+- case_id: D-02
+  chain: F4
+  confirmable:
+  - FM-APP-ENDPOINT-SLOW
+  - FM-HOST-MEM-PRESSURE
+  difficulty: medium
+  evidence_facts:
+  - obs-000023
+  - obs-000033
+  evidence_metrics:
+  - app.endpoint.p99_ms
+  - host.mem_available_ratio
+  expect_layer: Runtime
+  expect_objects:
+  - endpoint:ep-cc-pay-pay
+  - host:host-dn_6001
+  expect_path:
+  - FM-HOST-MEM-PRESSURE
+  expect_root_cause: FM-HOST-MEM-PRESSURE
+  family: C3
+  injected:
+  - FM-APP-ENDPOINT-SLOW
+  - FM-HOST-MEM-PRESSURE
+  injection_ops:
+  - set_fact
+  injections_n: 2
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: aad584ff04f9dec192684df7340fdfa24250df36a6127972bca1f105c4623947
+- case_id: D-03
+  chain: F4
+  confirmable:
+  - FM-APP-ENDPOINT-SLOW
+  - FM-HOST-MEM-PRESSURE
+  difficulty: medium
+  evidence_facts:
+  - obs-000023
+  - obs-000039
+  evidence_metrics:
+  - app.endpoint.p99_ms
+  - host.mem_available_ratio
+  expect_layer: Runtime
+  expect_objects:
+  - endpoint:ep-cc-pay-pay
+  - host:host-dn_6002
+  expect_path:
+  - FM-HOST-MEM-PRESSURE
+  expect_root_cause: FM-HOST-MEM-PRESSURE
+  family: C3
+  injected:
+  - FM-APP-ENDPOINT-SLOW
+  - FM-HOST-MEM-PRESSURE
+  injection_ops:
+  - set_fact
+  injections_n: 2
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: 775b6af25087c44af7ab067225645f612c229f83154cf00cd35ead83ee055bae
+- case_id: D-04
+  chain: F7
+  confirmable:
+  - FM-APP-ENDPOINT-SLOW
+  - FM-DB-INSTANCE-DOWN
+  difficulty: medium
+  evidence_facts:
+  - obs-000023
+  - obs-000017
+  evidence_metrics:
+  - app.endpoint.p99_ms
+  - db.instance.up
+  expect_layer: Data
+  expect_objects:
+  - endpoint:ep-cc-pay-pay
+  - dbinst:dn_6001
+  expect_path:
+  - FM-DB-INSTANCE-DOWN
+  expect_root_cause: FM-DB-INSTANCE-DOWN
+  family: C3
+  injected:
+  - FM-APP-ENDPOINT-SLOW
+  - FM-DB-INSTANCE-DOWN
+  injection_ops:
+  - set_fact
+  injections_n: 2
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: 023454e954f0917297207bceb1e212996cabc6c4a826b738ecd393c931fc83bd
+- case_id: D-05
+  chain: F4
+  confirmable:
+  - FM-APP-ENDPOINT-SLOW
+  - FM-APP-HEAP-PRESSURE
+  difficulty: medium
+  evidence_facts:
+  - obs-000026
+  - obs-000002
+  - obs-000001
+  evidence_metrics:
+  - app.endpoint.p99_ms
+  - app.heap_used_ratio
+  - app.gc_pause_ms
+  expect_layer: App
+  expect_objects:
+  - endpoint:ep-cc-pay-slow
+  - appinst:appinst-cc-pay-1
+  expect_path:
+  - FM-APP-HEAP-PRESSURE
+  expect_root_cause: FM-APP-HEAP-PRESSURE
+  family: C3
+  injected:
+  - FM-APP-ENDPOINT-SLOW
+  - FM-APP-HEAP-PRESSURE
+  injection_ops:
+  - set_fact
+  injections_n: 2
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: 4abc1dd262d94b7ceaa4004c8374bced4dfd061686a2c78ec3443cc9f5f1f225
+- case_id: D-06
+  chain: F7
+  confirmable:
+  - FM-APP-ENDPOINT-SLOW
+  - FM-DB-INSTANCE-DOWN
+  difficulty: medium
+  evidence_facts:
+  - obs-000026
+  - obs-000019
+  evidence_metrics:
+  - app.endpoint.p99_ms
+  - db.instance.up
+  expect_layer: Data
+  expect_objects:
+  - endpoint:ep-cc-pay-slow
+  - dbinst:dn_6002
+  expect_path:
+  - FM-DB-INSTANCE-DOWN
+  expect_root_cause: FM-DB-INSTANCE-DOWN
+  family: C3
+  injected:
+  - FM-APP-ENDPOINT-SLOW
+  - FM-DB-INSTANCE-DOWN
+  injection_ops:
+  - set_fact
+  injections_n: 2
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: 128c3f0116ddeb0c4f5647d7b9ccf5cb38613910a09dae46d6125bfc77da1215
+- case_id: N-01
+  chain: F4
+  confirmable:
+  - FM-APP-HEAP-PRESSURE
+  difficulty: hard
+  evidence_facts:
+  - obs-000002
+  - obs-000001
+  evidence_metrics:
+  - app.heap_used_ratio
+  - app.gc_pause_ms
+  expect_layer: App
+  expect_objects:
+  - appinst:appinst-cc-pay-1
+  expect_path:
+  - FM-APP-HEAP-PRESSURE
+  expect_root_cause: FM-APP-HEAP-PRESSURE
+  family: C4
+  injected:
+  - FM-APP-HEAP-PRESSURE
+  injection_ops:
+  - set_fact
+  injections_n: 1
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: d0079e0995c179b9a6b15b5bd0cb89acef25b1d6abe8dd5638101705460a7c66
+- case_id: N-02
+  chain: F4
+  confirmable:
+  - FM-APP-HEAP-PRESSURE
+  difficulty: hard
+  evidence_facts:
+  - obs-000002
+  - obs-000001
+  evidence_metrics:
+  - app.heap_used_ratio
+  - app.gc_pause_ms
+  expect_layer: App
+  expect_objects:
+  - appinst:appinst-cc-pay-1
+  expect_path:
+  - FM-APP-HEAP-PRESSURE
+  expect_root_cause: FM-APP-HEAP-PRESSURE
+  family: C4
+  injected:
+  - FM-APP-HEAP-PRESSURE
+  injection_ops:
+  - set_fact
+  injections_n: 1
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: fa3ee13a64a354fa35ff8a8a31760bca7b9826afad10d4059c5d2a7d82b8d72b
+- case_id: N-03
+  chain: F4
+  confirmable:
+  - FM-HOST-MEM-PRESSURE
+  difficulty: hard
+  evidence_facts:
+  - obs-000033
+  evidence_metrics:
+  - host.mem_available_ratio
+  expect_layer: Runtime
+  expect_objects:
+  - host:host-dn_6001
+  expect_path:
+  - FM-HOST-MEM-PRESSURE
+  expect_root_cause: FM-HOST-MEM-PRESSURE
+  family: C4
+  injected:
+  - FM-HOST-MEM-PRESSURE
+  injection_ops:
+  - set_fact
+  injections_n: 1
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: 6e43c279f901bfb20d9658865028967915782aa78aea6bce80004d61f141be9d
+- case_id: N-04
+  chain: F4
+  confirmable:
+  - FM-HOST-MEM-PRESSURE
+  difficulty: hard
+  evidence_facts:
+  - obs-000039
+  evidence_metrics:
+  - host.mem_available_ratio
+  expect_layer: Runtime
+  expect_objects:
+  - host:host-dn_6002
+  expect_path:
+  - FM-HOST-MEM-PRESSURE
+  expect_root_cause: FM-HOST-MEM-PRESSURE
+  family: C4
+  injected:
+  - FM-HOST-MEM-PRESSURE
+  injection_ops:
+  - set_fact
+  injections_n: 1
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: 8182c9c24ffc404068d1b9b126c4fd92fcfffe14b881bf3ac0b5528a49a08238
+- case_id: N-05
+  chain: F7
+  confirmable:
+  - FM-DB-INSTANCE-DOWN
+  difficulty: hard
+  evidence_facts:
+  - obs-000017
+  evidence_metrics:
+  - db.instance.up
+  expect_layer: Data
+  expect_objects:
+  - dbinst:dn_6001
+  expect_path:
+  - FM-DB-INSTANCE-DOWN
+  expect_root_cause: FM-DB-INSTANCE-DOWN
+  family: C4
+  injected:
+  - FM-DB-INSTANCE-DOWN
+  injection_ops:
+  - remove_relation
+  - set_fact
+  injections_n: 4
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: ef6a7e12bfe2481c671a4e50b2474d31df0d540ea7ab996b9fab598075764fd5
+- case_id: N-06
+  chain: F1
+  confirmable:
+  - FM-APP-ENDPOINT-SLOW
+  difficulty: hard
+  evidence_facts:
+  - obs-000023
+  evidence_metrics:
+  - app.endpoint.p99_ms
+  expect_layer: App
+  expect_objects:
+  - endpoint:ep-cc-pay-pay
+  expect_path:
+  - FM-APP-ENDPOINT-SLOW
+  expect_root_cause: FM-APP-ENDPOINT-SLOW
+  family: C4
+  injected:
+  - FM-APP-ENDPOINT-SLOW
+  injection_ops:
+  - set_fact
+  injections_n: 1
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: 7a47cbcd536b806f3af0048ee49ca090465a9adbdd799cfb9c7bd0ccc4451a18
+- case_id: Z-01
+  chain: F4
+  confirmable: []
+  difficulty: easy
+  evidence_facts: []
+  evidence_metrics: []
+  expect_layer: NONE
+  expect_objects: []
+  expect_path: []
+  expect_root_cause: NONE
+  family: C5
+  injected: []
+  injection_ops:
+  - noop
+  injections_n: 0
+  path_basis: none
+  removed_objects: []
+  symptom: null
+  working_set_sha256: ae39ab5390b3b470acdf2983bbf81ee90064400787d098fefa6430e0dd42f11a
+- case_id: Z-02
+  chain: F4
+  confirmable: []
+  difficulty: easy
+  evidence_facts: []
+  evidence_metrics: []
+  expect_layer: NONE
+  expect_objects: []
+  expect_path: []
+  expect_root_cause: NONE
+  family: C5
+  injected: []
+  injection_ops:
+  - noop
+  injections_n: 0
+  path_basis: none
+  removed_objects: []
+  symptom: null
+  working_set_sha256: ae39ab5390b3b470acdf2983bbf81ee90064400787d098fefa6430e0dd42f11a
+- case_id: Z-03
+  chain: F4
+  confirmable: []
+  difficulty: medium
+  evidence_facts: []
+  evidence_metrics: []
+  expect_layer: NONE
+  expect_objects: []
+  expect_path: []
+  expect_root_cause: NONE
+  family: C5
+  injected: []
+  injection_ops:
+  - noop
+  injections_n: 0
+  path_basis: none
+  removed_objects: []
+  symptom: null
+  working_set_sha256: ae39ab5390b3b470acdf2983bbf81ee90064400787d098fefa6430e0dd42f11a
+- case_id: Z-04
+  chain: F4
+  confirmable: []
+  difficulty: medium
+  evidence_facts: []
+  evidence_metrics: []
+  expect_layer: NONE
+  expect_objects: []
+  expect_path: []
+  expect_root_cause: NONE
+  family: C5
+  injected: []
+  injection_ops:
+  - noop
+  injections_n: 0
+  path_basis: none
+  removed_objects: []
+  symptom: null
+  working_set_sha256: ae39ab5390b3b470acdf2983bbf81ee90064400787d098fefa6430e0dd42f11a
+- case_id: Z-05
+  chain: F4
+  confirmable: []
+  difficulty: medium
+  evidence_facts: []
+  evidence_metrics: []
+  expect_layer: NONE
+  expect_objects: []
+  expect_path: []
+  expect_root_cause: NONE
+  family: C5
+  injected: []
+  injection_ops:
+  - noop
+  injections_n: 0
+  path_basis: none
+  removed_objects: []
+  symptom: null
+  working_set_sha256: ae39ab5390b3b470acdf2983bbf81ee90064400787d098fefa6430e0dd42f11a
+- case_id: Z-06
+  chain: F4
+  confirmable: []
+  difficulty: medium
+  evidence_facts: []
+  evidence_metrics: []
+  expect_layer: NONE
+  expect_objects: []
+  expect_path: []
+  expect_root_cause: NONE
+  family: C5
+  injected: []
+  injection_ops:
+  - noop
+  injections_n: 0
+  path_basis: none
+  removed_objects: []
+  symptom: null
+  working_set_sha256: ae39ab5390b3b470acdf2983bbf81ee90064400787d098fefa6430e0dd42f11a
+- case_id: T-01
+  chain: F7
+  confirmable:
+  - FM-DB-INSTANCE-DOWN
+  difficulty: hard
+  evidence_facts:
+  - obs-000017
+  evidence_metrics:
+  - db.instance.up
+  expect_layer: Data
+  expect_objects:
+  - dbinst:dn_6001
+  expect_path:
+  - FM-DB-INSTANCE-DOWN
+  expect_root_cause: FM-DB-INSTANCE-DOWN
+  family: C6
+  injected:
+  - FM-DB-INSTANCE-DOWN
+  injection_ops:
+  - set_fact
+  injections_n: 1
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: 389df014596df88ecd7fac9bb84cf1a1054e5c56e1f825c6ca8a0b4a2b7a5729
+- case_id: T-02
+  chain: F7
+  confirmable:
+  - FM-DB-INSTANCE-DOWN
+  difficulty: hard
+  evidence_facts:
+  - obs-000017
+  evidence_metrics:
+  - db.instance.up
+  expect_layer: Data
+  expect_objects:
+  - dbinst:dn_6001
+  expect_path:
+  - FM-DB-INSTANCE-DOWN
+  expect_root_cause: FM-DB-INSTANCE-DOWN
+  family: C6
+  injected:
+  - FM-DB-INSTANCE-DOWN
+  injection_ops:
+  - set_fact
+  injections_n: 3
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: 01a988fdb4458012ae11b8eaf345df2bf10ba11b7cef59dd285271863869bffb
+- case_id: T-03
+  chain: F7
+  confirmable:
+  - FM-DB-INSTANCE-DOWN
+  difficulty: hard
+  evidence_facts:
+  - obs-000017
+  evidence_metrics:
+  - db.instance.up
+  expect_layer: Data
+  expect_objects:
+  - dbinst:dn_6001
+  expect_path:
+  - FM-DB-INSTANCE-DOWN
+  expect_root_cause: FM-DB-INSTANCE-DOWN
+  family: C6
+  injected:
+  - FM-DB-INSTANCE-DOWN
+  injection_ops:
+  - remove_object
+  - set_fact
+  injections_n: 4
+  path_basis: single-node
+  removed_objects:
+  - dbinst:dn_6002
+  symptom: null
+  working_set_sha256: d187ecd9fa9140be697336a0c65e2dfd45b92f99f9ef307806110feab7d84b60
+- case_id: T-04
+  chain: F7
+  confirmable:
+  - FM-DB-INSTANCE-DOWN
+  difficulty: hard
+  evidence_facts:
+  - obs-000019
+  evidence_metrics:
+  - db.instance.up
+  expect_layer: Data
+  expect_objects:
+  - dbinst:dn_6002
+  expect_path:
+  - FM-DB-INSTANCE-DOWN
+  expect_root_cause: FM-DB-INSTANCE-DOWN
+  family: C6
+  injected:
+  - FM-DB-INSTANCE-DOWN
+  injection_ops:
+  - add_object
+  - add_relation
+  - set_fact
+  injections_n: 4
+  path_basis: single-node
+  removed_objects: []
+  symptom: null
+  working_set_sha256: dbb4867ea474c897cb3b564126e5fe27df3804c2e604ca607b3d6080718a2723
+meta:
+  base_ref: ../../tmp/ccf_live5.json
+  canonical_sha256: fb287c2ebeacf321254c5b9525b19d7afdbee8da483d7987208e0396d4d7ad1b
+  captured_at: '2026-09-28T23:55:15.792516'
+  case_count: 50
+  case_selection_channel: --case / 环境变量 M5_CASE_ID（进程级信道）；工具 schema 里没有任何用例参数（D48）
+  coverage_checked: true
+  frozen_digest_policy: 整份正本（schema+meta+cases+mapping）先移除 meta 下的 frozen_digest_sha256+frozen_digest_policy
+    两键，再取 sha256(json.dumps(obj, ensure_ascii=False, sort_keys=True, separators=(',',':')))
+  frozen_digest_sha256: 12469dd923ac619e24680b49bfb38ced8640dc3802238edf355f8adce5a80e81
+  injector: shared/collect/m5_inject_build.py
+  note: 基底引用 + 每例注入差分 + 三哈希；value_before 逐字取自基底实值，不符即 BLOCKED。工作集是 (case_id) 的纯函数。
+  oracle: shared/model/fault-modes.yaml#fault_modes[].detect 复算
+  snapshot_id: ccf-20260928T155516Z-937b79
+  uncovered_gaps:
+  - 14 条故障模式里只有 4 条能在本基底上机判确认（FM-APP-ENDPOINT-SLOW / FM-APP-HEAP-PRESSURE / FM-HOST-MEM-PRESSURE
+    / FM-DB-INSTANCE-DOWN）；其余 10 条（FM-APP-POOL-EXHAUSTED、FM-APP-DS-CONNECT-FAIL、FM-APP-INSTANCE-RESTART、FM-CTR-OOM-KILLED、FM-CTR-CPU-THROTTLED、FM-CTR-NET-UNREACHABLE、FM-HOST-CPU-CONTENTION、FM-DB-SLOW-QUERY、FM-DB-SESSION-POOL-FULL、FM-DB-LOCK-WAIT）在本批里只作为症状叙述/期望路径节点出现，不是可机判真值。
+  - 上述 10 条的不可构造原因分三类：①阈值两档均为 null（acquire_wait_ms_light、load1_per_core_light —— 后者已由用户裁定
+    ②(A) 改为按 Host.cpuCores 归一化，但因基线里带 load1 的主机缺 cpuCores 属性 ⇒ 仍不可标、仍 unjudgeable）⇒
+    unjudgeable；②increased/decreased 判据缺 delta（connect_fail_total、oom_kill_total、cpu_throttled_periods、restart_total
+    的 delta 缺失或恒 0）；③基底根本没有该观测且 set_fact 不能新增 metricCode（db.query.mean_exec_ms、db.pool.conn_rejected_total、db.session.wait_event）。
+  - 跨层因果边（shared/model/causal-edges.yaml 18 条）里两端都能在本基底构造的只有 E17 FM-APP-HEAP-PRESSURE→FM-HOST-MEM-PRESSURE（F4，App→Runtime）⇒
+    除 B-01/B-02 外，跨层用例的 expect_path 只能退化为单节点（mapping.path_basis=single-node），本批未能考「真跨层路径」。
+  - 该基底无时序信号：191 条观测 observedAt 逐字相同，仅 3 条 Container 观测带 delta 且全为 0 ⇒ F7 时间对齐族（T-*）只能用「单快照内状态共现」近似，未覆盖真实时间窗共现。
+  - host:node-01 在基底里没有任何观测 ⇒ 该宿主上的任何 Runtime 现象不可机判；被 DEPLOYED_ON 指向的容器因此也只能靠自身观测（container.*）定性。
+  - 注入面（D44）只能改已存在观测的值/状态、增删对象与关系，不能新增 metricCode 或观测 ⇒ 「新指标出现」类故障在本框架下不可构造。
+  - C5（Z-01..Z-06）为 NOOP 空注入，其「无故障」真值是定义性派生（不注入即无现象），不是从一次真实故障采集得到的标签。
+  - docs/06 §1.3 的族×难度联合构成自相矛盾（OQ-M5-01）仍未决 ⇒ 本批只保证族分布与难度分布两个边际（14/14/6/6/6/4 与 16/20/14），不断言族×难度联合分布。
+schema: m5-input-facts/1

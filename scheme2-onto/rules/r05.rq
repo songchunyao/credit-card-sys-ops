@@ -1,0 +1,72 @@
+# ============================================================================
+# scheme2-onto/rules/r05.rq —— 方案2 原生 SPARQL CONSTRUCT 规则
+# ----------------------------------------------------------------------------
+#   规则执行口径: 见本文件头 + docs/04-appendix-ORSD.md「规则口径」一节
+#   契约: shared/model/causal-edges.yaml#leaf_root_causes（subtype FM-APP-AUTH-INCOMPATIBLE，
+#         detection_mode: exclusion）+ docs/04 §6 r05
+#   4 条排除要求（契约原文）:
+#     1) "db.instance.up == true            （数据库在线）"
+#     2) "host/container 网络可达             （网络正常）"
+#     3) "app.datasource.connect_latency_ms 立即失败而非超时（认证失败）"
+#     4) "jdbcUrl / driverVersion / authMode 存在可疑变更（配置异常）"
+#   产出: F-005（ccf:FM-APP-AUTH-INCOMPATIBLE 是契约里的叶子根因，属 ccf:RootCause）
+#   ★ 口径: 要求 4 的「可疑变更」契约无可机检判据 ⇒ 我落地为
+#     「driverVersion 含未展开占位符 '$' 或 unknown/todo 标记」这一可机检近似（自定判据，进诚实清单）。
+#     'authMode' 在 shared/model/metrics.yaml 与 type-map.yaml 中**都没有**对应属性（仅出现在本句契约
+#     文字里）⇒ 不建 ccm:authMode 悬空引用，排除要求 4 只由 driverVersion 判据承载。
+PREFIX cc:    <https://credit-card-ops.ai/onto/topology#>
+PREFIX cco:   <https://credit-card-ops.ai/onto/core#>
+PREFIX ccm:   <https://credit-card-ops.ai/onto/metric#>
+PREFIX ccf:   <https://credit-card-ops.ai/onto/fault#>
+PREFIX ccc:   <https://credit-card-ops.ai/onto/causal#>
+PREFIX cca:   <https://credit-card-ops.ai/onto/action#>
+PREFIX ccp:   <https://credit-card-ops.ai/onto/prov#>
+PREFIX prov:  <http://www.w3.org/ns/prov#>
+PREFIX xsd:   <http://www.w3.org/2001/XMLSchema#>
+PREFIX rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs:  <http://www.w3.org/2000/01/rdf-schema#>
+
+CONSTRUCT {
+  ?finding a ccf:Finding ;
+      ccf:findingCode "F-005" ;
+      ccp:findingSeverity "critical" ;
+      ccp:findingFaultMode ccf:FM-APP-AUTH-INCOMPATIBLE ;
+      ccp:findingFor ?target ;
+      ccp:associatedRule ccp:Rule-r05 ;
+      prov:wasDerivedFrom ?ev .
+}
+WHERE {
+  ?target a cc:JdbcDataSource ;
+      ccm:connectFailTotal ?fail ;
+      ccm:connectLatencyMs ?latency ;
+      cc:connectionTimeoutMs ?timeout ;
+      cc:driverVersion ?driverVersion .
+
+  # 要求 1: 数据库在线
+  ?inst a cc:GaussDBInstance ; ccm:up ?up .
+  FILTER(?up = true)
+
+  # 要求 2: 网络可达 —— 否定式：不存在「连接延迟达超时」的网络证据
+  FILTER NOT EXISTS {
+      ?other a cc:JdbcDataSource ;
+             ccm:connectLatencyMs ?l ; cc:connectionTimeoutMs ?t .
+      FILTER(?l >= ?t)
+  }
+
+  # 要求 3: 立即失败而非超时 + 确有失败计数（非零基线）
+  FILTER(?latency < ?timeout)
+  ?nzBase ccm:tierReference "baseline:counter_non_zero" ;
+          ccm:baselineValue ?zero .
+  FILTER(?fail > ?zero)
+
+  # 要求 4: 可疑驱动/认证配置（自定可机检近似）
+  FILTER(CONTAINS(?driverVersion, "$")
+      || CONTAINS(LCASE(?driverVersion), "unknown")
+      || CONTAINS(LCASE(?driverVersion), "todo"))
+
+  ?target cc:hasEvidence ?ev .
+  ?ev cc:metricCode "app.datasource.connect_fail_total"^^xsd:string .
+  BIND(IRI(CONCAT("https://credit-card-ops.ai/onto/inst/finding/",
+                  "F-005/",
+                  ENCODE_FOR_URI(STRAFTER(STR(?target), "/inst/")))) AS ?finding)
+}

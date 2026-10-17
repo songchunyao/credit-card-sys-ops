@@ -1,0 +1,335 @@
+# =============================================================================
+# 中性取数工具 · 单一定义源（S2b；队长裁定 D47 取数面拓扑 / D48 case 选择信道）
+#
+# 本文件的唯一职责：把「读当前状态读数」这**一个**操作，定义成一份可被
+# 四组实验组共享的形状权威。它刻意不含任何实现/载体专有词——因为这个能力
+# 对四组一律可用（蓝本要求：四组都要有取实时状态读数的能力）。
+#
+# ★ 单一来源纪律（D47）：本文件是**形状声明**的唯一权威，任何工具登记处
+#   都**只写引用、不复制正文**：
+#     shared/model/tools-setb.yaml  → tools.read_facts.neutral_tool_ref
+#     shared/model/kgt-tools.yaml   → tools[read_facts].neutral_tool_ref
+#   解析实现放 S2c 的 shared/deploy/dify/register_tools.py（协议见本文件
+#   read_facts.resolution_contract）。⇒ 四组拿到的形状**逐字同源**。
+#
+# 证据链（可机械复核，不靠人工比对）：
+#   声明形状 = 本文件 read_facts
+#   字节形状 = shared/collect/live_facts_service.py --emit-schema 的真实 stdout
+#   实现     = shared/collect/live_facts.py（归一化 + 基底 + 注入 + 工作集库）
+# =============================================================================
+
+meta:
+  version: "1.0.0"
+  date: "2026-10-05"
+  batch: "S2b"
+  owner_decision: "D47（取数面拓扑）、D48（case 选择信道）"
+  owner_doc: "docs/05-编排层设计（Dify）.md"
+  layer_scope: "契约与工具源层。本批不含 binding / 注册 / 校验器 / 真机；注册面从 S2c 起"
+  carrier_neutral: true
+  carrier_neutral_why: >
+    ★ 本操作是对「当前状态读数」的**中性取数**，与任何一组的实现路径无关：
+    它不查询任何查询语言、不依赖任何图式或推理，也不属于任何一个方案。
+    因此四组实验组（主对比对两侧 + KG-T 面 + 免费臂）都可以持有它，
+    而不会破坏各自的「归因主体」「工具面」单变量对照。
+  single_source_rule: >
+    ★ 只许**引用**、不许**复制**：登记处（tools-setb.yaml / kgt-tools.yaml）里
+    本工具的 params / returns 必须是空列表 + 一个 neutral_tool_ref 键。
+    任何一处出现正文副本 ⇒ 视为契约漂移（S2c 的解析器必须硬失败，见
+    read_facts.resolution_contract.conflict_policy）。
+  shape_drift_detector: >
+    ★ 形状是否漂移，由「本文件 read_facts.emit_schema 登记的 (bytes, lf_count, sha256)」
+    与「实跑 --emit-schema 的真实 stdout」逐字节比对判定；不一致即为漂移。
+
+# -----------------------------------------------------------------------------
+# 一、名字（两个名字、一份形状）
+# -----------------------------------------------------------------------------
+names:
+  primary: read_facts
+  free_alias: read_live_facts
+  why_two_names: >
+    ★ 不是两个工具，是同一中性操作的**两个对外名字**。免费臂（KG-T-free）在
+    shared/verify/toolset_parity_gate.py 的 G24-10 里被要求「不得拿到 Set B 工具」
+    （判据：allowed_tools_kgt_free ∩ cset 必须为空）——因此同一个操作在该组
+    只能以**别名**出现。别名让「四组都具备该能力」与「免费臂不碰 Set B 工具面」
+    两条约束同时成立。
+  same_shape: >
+    ★ 别名与主名**共用同一份形状权威**（本文件 read_facts）：别名不是第二份定义，
+    只改对外名称，params / returns / 约束逐字同源。禁止在别处为别名写第二份正文。
+  arm_usage:
+    # ★ R-55（2026-10-08）：补入 BASE —— 它是 7 个被测组里的基线/分母，绑的正是主名
+    #   `read_facts`（此前 arm_usage 两边都没列它，属契约缺口）。
+    read_facts: [KG-Q, ONTO-Q, KG-R, ONTO-R, KG-T, KG-T-dyn, BASE]
+    read_live_facts: [KG-T-free]
+  name_discipline: >
+    ★ 两个名字都**不匹配** shared/verify/f5_kgt_gate.py 的 SERVICE_TOOL_RE
+    （模式为 ^(cc_|run_rules$|validate$|get_[a-z_]+$|collect_now$) ）：
+    它们既不是 cc_* 门面工具，也不是 get_* 取数端点 ⇒ 不会被误判为「服务门面工具」。
+    ★ 免费臂侧只可出现 read_live_facts、绝不可出现 read_facts
+    （shared/verify/f5_kgt_gate.py 的 D8-c 要求免费臂工具名 ∩ forbidden_tools_kgt_free 为空，
+    而 read_facts 已登记进 shared/model/kgt-tools.yaml 的 forbidden_tools_kgt_free）。
+  forbidden_side_registration: >
+    read_facts 必须**同时**出现在 shared/model/kgt-tools.yaml 的
+    forbidden_tools_kgt_free（防免费臂误用 Set B 名字）与
+    info-products.access.KG-Q/ONTO-Q/KG-R/ONTO-R.read_facts（Set B 工具集）。
+
+# -----------------------------------------------------------------------------
+# 二、别名声明（只声明「它是谁的别名」，不重复正文）
+# -----------------------------------------------------------------------------
+aliases:
+  read_live_facts:
+    of: read_facts
+    kind: "declarative-alias"
+    shape: "逐字同源：params / returns / 只读纪律 / case 信道一律取自本文件 read_facts"
+    used_by_arms: [KG-T-free]
+    served_by_provider: "S2c 新增的 api provider（载体标识 live-facts，端口 :8304）"
+    why: "G24-10：免费臂不得持有 Set B 名字；同一操作在该组只得以别名暴露"
+    must_not: "免费臂的任何提示词与契约条目里不得出现 read_facts 这个名字（D8-c 机检）"
+
+# -----------------------------------------------------------------------------
+# 三、工具定义（形状权威）
+# -----------------------------------------------------------------------------
+read_facts:
+  name: read_facts
+  name_authority: "shared/collect/live_facts_service.py 的 TOOL_NAME（唯一定义处；S2b 不改名）"
+  read_only: true
+  # ★ S3a 窗口收口：原先用 YAML `>` 折行，落出的词间空格与登记文本
+  #   （shared/model/tools-setb.yaml#tools.read_facts.description）不同 ⇒ 曾用
+  #   binding.meta.ref_description_fold_exemptions 钉住。现改成单行逐字同源，
+  #   该豁免条目已删除（register_tools.py 的 ERR_REF_DESCRIPTION_DRIFT 仍 fail-closed）。
+  description: "只读取数：按本进程固定的用例确定性重建（判决模式），或在未固定用例时向采集面真采一次（运行模式），返回有界的当前读数三段与公共信封。无结果时返回 hint 说明可能原因；返回 0 行或 hint 指出作用域不符时，不得据此断言对象或读数不存在。"
+  description_discipline: >
+    ★ 措辞必须与实现自述一致（实现自述即 --emit-schema 的 description 字段）：
+    两处不许出现同一操作的两种说法。★ 描述里不得出现任何实现/载体专有词
+    （契约门禁的说明面自检按该纪律判）。
+  transport:
+    method: POST
+    path: "/tools/read_facts"
+    health: { method: GET, path: "/health" }
+  params:
+    layers:
+      type: array
+      items: { type: string }
+      default: [gaussdb, os, container, app]
+      injected_by: llm
+      # ★ R-58 / 方案C（2026-10-12）：模型面上**唯一**能写取值说明的字段就是 description
+      #   （Dify 的注册面 = 本文件 → register_tools.py 的 params_from_entry，只带
+      #    name/type/required/description；载体自己的 /openapi.json 里根本没有参数说明，
+      #    真机核对 `tool_api_providers.schema` 已确认注册面就是本文件的 description）。
+      #   真机事故：模型因**无取值说明**而猜层名（发过 `["app","container","db","host"]`、
+      #   `["App","Runtime","Data"]`），被覆盖门禁正确拒绝，却因门面错误面失真而误判
+      #   「采集接口不可用」并放弃取数 ⇒ 故把「合法取值 + 必需层 + 收窄该用谁」全部写进本字段。
+      description: "采集层：只决定「去采集哪些层」，不是收窄返回范围的旋钮。不传 = 四层全采。合法取值只有 gaussdb / os / container / app（另有 storage / tpops，其读数不进事实层，通常无需使用）；★ 运行模式（本进程未固定用例）下必须至少包含 gaussdb 与 os，否则覆盖校验必然失败。★ 要按对象类型 / 对象 id / 层收窄返回结果，请用 scope 参数，不要用本参数。"
+    sections:
+      type: array
+      items: { type: string }
+      default: []
+      injected_by: llm
+      description: "可选，透传给采集面。"
+    scope:
+      # ★ R-54 / A1（2026-10-07）：原为 `type: object` + 4 个 properties。
+      #   Dify 的 `registration_face.type_alias`（shared/deploy/dify/binding.yaml）把 `object`
+      #   折成 `string` 给模型看，而服务端 `live_facts_service.py` 硬拒非 dict
+      #   ⇒ **模型面与服务面的类型结构性冲突：每一个带 `scope` 的调用都必然 HTTP 400**
+      #   （M5 主跑中止的主因，证据链见 tmp/_m5_wall_report.md §2）。
+      #   ⇒ 改为 **string + 显式 JSON 对象文法**：模型面与服务面类型终于一致；
+      #     服务端 `json.loads` 后再走既有 SCOPE_KEYS 校验，并保留 dict 兼容路径。
+      type: string
+      injected_by: llm
+      description: >-
+        限定对象范围（只做收窄，不改工作集，不影响 working_set_sha256）。
+        传**一个 JSON 对象字符串**：键只能取 object_ids / types / layers / metric_codes，
+        值为字符串数组；例 {"types":["Container"]} 或 {"object_ids":["appinst:appinst-cc-pay-1"]}。
+        不传、传 null 或传 "{}" 都表示不收窄。键名未知、值不是字符串数组、或不是合法 JSON
+        ⇒ INVALID_PARAM（**不静默回落默认值**）。
+    max_records:
+      type: integer
+      minimum: 0
+      maximum: 5000
+      default: 200
+      injected_by: llm
+      description: "三段行数之和上限；0 = 不返回任何行。"
+    max_bytes:
+      type: integer
+      minimum: 0
+      maximum: 200000
+      default: 20000
+      injected_by: llm
+      description: "三段行容器字节上限。"
+  required: []
+  additional_properties: false
+  case_param_forbidden: >
+    ★ 工具入参里**不得**出现任何用例参数（模型面零 M5 专有参数 ⇒ 生产同形）。
+    本次运行消费哪个用例由**进程级**参数固定，见 case_channel。
+  returns:
+    tool_level:
+      objects: array
+      relations: array
+      observations: array
+      source:
+        snapshot_id: string
+        canonical_sha256: string
+        working_set_sha256: string
+        facts_source: string
+    envelope:
+      hint: string
+      truncated: boolean
+      droppedRows: integer
+      droppedBytes: integer
+    envelope_note: >
+      ★ 公共信封的四个名字与 shared/model/tools-setb.yaml 的
+      return_envelope.fields 逐字相同（G24-05 会把信封并入**每个**工具的比对面）；
+      该等式由 shared/verify/toolset_parity_gate.py 的引用感知比对机械断言（不等即 BLOCKED）。
+      ★ S3a-2c 接线事实（防止「定义结构」被误读成「线上形状」）：线上返回体是
+      tool_level ∪ envelope 的**平铺**八名（source 仍是嵌套对象），即 manifest 的
+      returns 面；本文件的 tool_level / envelope 两层是**定义结构**，其中 envelope
+      这一层同时是 G24 引用感知断言的锚点 ⇒ 结构不动，平铺由实现保证。
+  error_codes:
+    BAD_JSON: 400
+    BAD_PARAM: 400
+    READ_ONLY_REFUSED: 400
+    UNKNOWN_PARAM: 400
+    PAYLOAD_TOO_LARGE: 413
+    METHOD_NOT_ALLOWED: 405
+    NOT_FOUND: 404
+    NETWORK_REFUSED: 403
+    # ★ R-56/B（2026-10-12）：**补登** —— 实现面一直在返回它（`live_facts_service.BlockedBase`，
+    #   也是 Dify 真机故障里用户实际看到的那个码），声明面此前漏记；而
+    #   `--emit-schema` 的 error_codes 是**从异常类推导**的（`_error_code_table`）⇒
+    #   声明面与实现面在此处长期不一致（本行只补声明，不改实现、不影响 emit_schema 指纹）。
+    BLOCKED_BASE: 409
+    BLOCKED_NO_INPUT_FACTS: 409
+    BLOCKED_UNKNOWN_CASE: 409
+    BLOCKED_COVERAGE: 409
+    BLOCKED_INJECTION: 409
+    UPSTREAM_UNAVAILABLE: 502
+    INTERNAL: 500
+  error_discipline: >
+    ★ 未知入参一律 UNKNOWN_PARAM（400），不得静默忽略——这条纪律使
+    「请求体里塞用例参数」这类注入尝试必然失败而不是被悄悄采纳。
+
+# -----------------------------------------------------------------------------
+# 四、用例选择信道（D48：进程级，不是请求级）
+# -----------------------------------------------------------------------------
+case_channel:
+  mode: "process-level"
+  cli: "--case <case_id>"
+  env: "M5_CASE_ID"
+  precedence: "命令行 --case 优先于环境变量 M5_CASE_ID；两者都空 ⇒ 运行模式（真采集）"
+  immutable_within_process: true
+  cross_request_state: "none"
+  request_body_case_id: >
+    ★ 请求体**不再接受**用例参数。带 case_id（或任何未登记入参）的请求走既有
+    UNKNOWN_PARAM(400) 路径被拒——不是被忽略。
+  schema_rule: "★ --emit-schema 的输出里不得出现任何用例参数（由自检项机械断言）"
+  dump_case: "--dump-case 保留为**内部**确定性工具（不经 HTTP 暴露）"
+  why_not_request_level: >
+    上一版曾设想用编排面的工具参数注入用例，但注册面要求工具参数集为空、
+    而「模型不可见的注入」是另一类载体才有的参数模型 ⇒ 不可实现。
+    改为进程级后：进程生命周期内不可变、无跨请求可变状态、
+    模型面零用例参数（生产同形），且确定性可复现。
+  blocked_unknown_case: "未知用例 id ⇒ BLOCKED（错误块里必须回报那个 id），不得回落到默认用例"
+
+# -----------------------------------------------------------------------------
+# 五、指纹登记（漂移检测的对照基准）
+# -----------------------------------------------------------------------------
+emit_schema:
+  command: "python shared/collect/live_facts_service.py --emit-schema"
+  bytes: 2768
+  lf_count: 1
+  cr_count: 0
+  sha256: "39492d504fb43211cc2705aaceed65546ac35f837adea79fa36a3608a335ac3d"
+  measured_at: "2026-10-12（**R-58 / 方案C**：① `layers` 的 description 重写为「合法取值 + 运行模式必需层 + 要收窄请用 `scope`」—— 真机事故里模型因**无取值说明**而猜层名（发过 `[\"app\",\"container\",\"db\",\"host\"]` / `[\"App\",\"Runtime\",\"Data\"]`），被覆盖门禁正确拒绝却因门面错误面失真而误判「采集接口不可用」；② 同批把实现自述里 `scope` 的 description 补齐到与声明面**逐字相同**（新增自检 c19c 首次运行即抓到该**既有漂移**：实现面少了「或 {\"object_ids\":[…]}.」与「键名未知 / 值非字符串数组 / 非合法 JSON ⇒ INVALID_PARAM（不静默回落默认值）」两句）。上一版 = bytes 2188 / lf 1 / cr 0 / sha256 `421f78769d6a85a4…`（R-54 / A1），**仅存沿革、不得再引**；更早一版 = bytes 2216 / lf 1 / cr 0 / sha256 `f330100a…`（S3a-2c），同属沿革）"
+  note: "★ 是**真实 stdout** 的字节（不是重定向落盘的副本）；文本模式会翻 CRLF，故实现以二进制写出。"
+selftest:
+  command: "python shared/collect/live_facts_service.py --selftest"
+  ok: 38
+  bad: 0
+  blocked: 0
+  claimed_at: "2026-10-12（R-57 增至 37：新增 c19b 层名纪律；R-58 增至 38：新增 c19c 参数说明同源。上一版 36（2026-10-05 / S2b）仅存沿革）"
+
+# -----------------------------------------------------------------------------
+# 六、注册面计划（S2c 执行；本批只声明，不落 binding）
+# -----------------------------------------------------------------------------
+registration_plan:
+  provider:
+    id: "cc-live-facts-tools"
+    carrier: "live-facts"
+    service_port: 8304
+    status: "S2c 新建（本批不落 binding、不注册、不连真机）"
+  exposed_names:
+    read_facts: [KG-Q, ONTO-Q, KG-R, ONTO-R, KG-T, KG-T-dyn]
+    read_live_facts: [KG-T-free]
+  shape_source: "同一份形状权威（本文件 read_facts）；别名只换名称"
+  not_in_this_batch: >
+    ★ S2b 明确不碰：binding.yaml / register_tools.py / deploy_agents.py /
+    check_fairness.py / contract_audit.py / app_meta.py。
+    因此「契约已声明 8 工具、真机清单仍是 7」这一段时间内，三源一致性门禁
+    必然报红——这是**已声明的改造窗口**，由 S2c 注册后收敛。
+
+# -----------------------------------------------------------------------------
+# 七、引用解析协议（给 S2c 的 shared/deploy/dify/register_tools.py）
+# -----------------------------------------------------------------------------
+resolution_contract:
+  key: "neutral_tool_ref"
+  format: "<文件名>#<顶层键>，文件名与登记处同目录（shared/model/）"
+  example: "live-facts-tools.yaml#read_facts"
+  parsed_fields: [params, required, additional_properties, returns, description]
+  conflict_policy: >
+    ★ 同一条目里「既有引用又有正文」是**冲突**，必须硬失败
+    （否则一半引用一半正文 ⇒ 四组形状可能不同源，且门禁看不出来）。
+  missing_policy: "★ 引用无法解析（文件不存在 / 键不存在 / 形状缺必需字段）⇒ 硬失败，不得静默跳过"
+  pseudocode: |
+    # S2c · register_tools.py（伪代码，不构成代码正文）
+    MODEL_DIR = "shared/model"
+    REF_KEY   = "neutral_tool_ref"
+    BODY_KEYS = ("params", "returns")
+
+    def resolve_tool_entry(entry: dict) -> dict:
+        ref = entry.get(REF_KEY)
+        if ref is None:
+            return entry                       # 旧条目：正文自持，原样返回
+        # 1) 解析 file#key
+        if "#" not in ref:
+            raise RefError("ERR_REF_FORMAT", entry["name"], ref)
+        fname, key = ref.split("#", 1)
+        if "/" in fname or "\\" in fname or not fname.endswith((".yaml", ".yml")):
+            raise RefError("ERR_REF_FORMAT", entry["name"], ref)
+        path = os.path.join(MODEL_DIR, fname)
+        if not os.path.exists(path):
+            raise RefError("ERR_REF_MISSING_FILE", entry["name"], path)
+        src = yaml.safe_load(open(path, encoding="utf-8"))
+        if key not in src:
+            raise RefError("ERR_REF_MISSING_KEY", entry["name"], ref)
+        shape = src[key]
+        # 2) 冲突：登记处不得同时自持正文
+        for k in BODY_KEYS:
+            if entry.get(k):
+                raise RefError("ERR_REF_CONFLICT", entry["name"], k)
+        # 3) 必须存在的形状字段
+        for k in ("params", "returns"):
+            if k not in shape:
+                raise RefError("ERR_REF_SHAPE", entry["name"], k)
+        # 4) 描述若两边都写了 ⇒ 必须逐字相同（防止两种说法并行）
+        if entry.get("description") and shape.get("description"):
+            if entry["description"].strip() != shape["description"].strip():
+                raise RefError("ERR_REF_DESCRIPTION_DRIFT", entry["name"], ref)
+        # 5) 用源形状构建 manifest 条目（键序 = 契约键序；别名只换 name）
+        out = copy.deepcopy(shape)
+        out["name"] = entry["name"]           # read_live_facts 走这里：只换名
+        out["returns"] = shape["returns"]
+        return out
+
+    # ★ 四组（含别名）必须走**同一个** resolve_tool_entry；
+    #   任何「顺手复制一份」的分支都是本协议要消灭的对象。
+  why_pseudocode_here: >
+    ★ 把协议写在定义源旁边，是为了让 S2c 的实现者读一份文件就能照做；
+    它同时出现在 S2b 报告第三节（逐字节摘要），两处内容必须一致。
+
+# -----------------------------------------------------------------------------
+# 八、边界（本批不做的事）
+# -----------------------------------------------------------------------------
+non_goals:
+  - "不改 binding.yaml / register_tools.py / deploy_agents.py / check_fairness.py（S2c）"
+  - "不把任何用例参数写进工具 schema（D48）"
+  - "不为别名复制第二份形状正文"
+  - "不连真机、不调编排面接口、不访问 :8187"

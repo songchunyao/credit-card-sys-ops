@@ -1,0 +1,634 @@
+# ============================================================================
+# shared/model/purity-contract.yaml
+#   两实现纯粹性契约（P1–P6）· 门禁 G25 的**唯一权威**
+#
+#   用户原则（逐字，m11121）：
+#     「需要，另外我给一个处理原则，我这个项目就是要验证基于图库（neo4j）和本体
+#      （graphDB）做运维智能体的效果差异，所以本身就是故意保留两种实现，而且你
+#      需要保证两种实现的纯粹性。」
+#   ⇒ 两实现**故意并存**（载体本身是被测自变量），但「纯粹性」必须被机检：
+#     任一实现都不得靠借用对侧载体的机制/结果把差异做小或做假。
+#
+#   裁决登记：docs/00-总体设计与裁决记录.md §8 裁决 15
+#   门禁登记：docs/07-实施计划与验收.md §7 G25
+#
+#   ★ 本文件不列自身滚动 sha256（标记用、不得 pin）。
+#   ★ 本契约是**声明驱动**的：门禁不硬编码任何载体名/端口/文件清单；
+#     契约缺字段或引用不上 ⇒ 门禁 BLOCKED（退出码 2），不得静默 PASS。
+# ============================================================================
+
+meta:
+  id: purity-contract
+  version: "1.0"
+  title: 两实现纯粹性契约（P1 依赖面 / P2 运行期端点面 / P3 语义面 / P4 词表面 / P5 共享面中性 / P6 测量面）
+  decision_ref: docs/00-总体设计与裁决记录.md §8 裁决 15
+  gate_ref: docs/07-实施计划与验收.md §7 G25
+  user_principle_msg: m11121
+  self_sha256_policy: 本文档不列自身滚动 sha256，标记用、不得 pin
+  # 两侧载体（被测自变量）与其臂
+  carriers:
+    kg:
+      name: Neo4j
+      paradigm: LPG（属性图）
+      arms: [KG-Q, KG-R, KG-T, KG-T-free, KG-T-dyn]
+      endpoints: ["127.0.0.1:7475", "127.0.0.1:7688"]
+      reasoning_surface: LPG 约束/索引 + Cypher 断言
+    onto:
+      name: GraphDB
+      paradigm: RDF / OWL 2
+      arms: [ONTO-Q, ONTO-R]
+      endpoints: ["127.0.0.1:7200"]
+      reasoning_surface: OWL 2 RL 闭包（ruleset owl2-rl，仓库 cc-ops）
+  # 方案3（KG-T / KG-T-free）同属 **KG 载体**，一并受 P1–P6 约束
+  scheme3_note: KG-T（:8303 门面）与 KG-T-free（插件直连）同属 KG 载体，不得为提升准确率引入本体验证
+  # 自指豁免：契约与门禁本身必须同时说出两侧载体名才能完成声明/检查
+  self_excluded:
+    - {path: shared/model/purity-contract.yaml, class: declaration, reason: 本契约必须同时声明两侧载体名与端点才能做互斥判定（自指）}
+    - {path: shared/verify/purity_gate.py, class: declaration, reason: 本门禁必须同时打印两侧载体名与端点才能做互斥判定（自指）}
+
+# ---------------------------------------------------------------------------
+# 词汇表：被判为「对侧载体独有」的 token
+# ---------------------------------------------------------------------------
+vocab:
+  onto_forbidden_in_kg:
+    - '\bgraphdb\b'
+    - '\bontotext\b'
+    - '\bsparql\b'
+    - '\brdf4j\b'
+    - '\brdflib\b'
+    - '\bjena\b'
+    - '\brdf\b|\brdfs\b|\bowl\b'
+    - '\bshacl\b'
+    - '\bturtle\b'
+    - '\bttl\b'
+    - '\b(repository|repositories)\b'
+    - '\binfer=true\b'
+    - '\bntriples\b'
+    - '\btrig\b'
+    - '推理机|reasoner'
+    - ':7200\b'
+  kg_forbidden_in_onto:
+    - '\bneo4j\b'
+    - '\b7475\b'
+    - '\b7688\b'
+    - '\bbolt\b'
+    - '\bcypher\b'
+    - '\bcypher-shell\b'
+    - '\blpg\b'
+    - '\bneo4j_query\b'
+    - '\bapoc\b'
+    - '属性图|property\s+graph'
+  carrier_tokens:
+    - '\bneo4j\b'
+    - '\bgraphdb\b'
+    - '\bcypher\b'
+    - '\bsparql\b'
+    - '\brdf\b|\brdfs\b|\bowl\b'
+    - '\bshacl\b'
+    - '\bturtle\b'
+    - '\blpg\b'
+    - '\bbolt\b'
+    - '\b7475\b'
+    - '\b7688\b'
+    - ':7200\b'
+    - '知识图谱|本体|三元组|属性图|property\s+graph'
+  materialization_markers:
+    - '\binfer=true\b'
+    - '\bhasInferred\b|\binferredTypes\b|\bmaterializedAt\b'
+    - '\bclosur(e|ed)\s+expansion\b'
+
+# ---------------------------------------------------------------------------
+# 分类器：把「命中」分成 中性(comment/scanner/doc_ref/docstring/prose/fixture/declaration)
+#         与 污染(code)。注释里提到对侧载体不算污染；**代码头里提到就是污染**。
+# ---------------------------------------------------------------------------
+classify:
+  scan_exts: [".py", ".yaml", ".yml", ".sh", ".json", ".jsonl", ".ttl", ".cypher", ".txt", ".conf"]
+  prose_exts: [".md"]
+  code_only_exts: [".py"]
+  triple_quote_exts: [".py"]
+  comment_leaders:
+    ".py": ["#"]
+    ".sh": ["#"]
+    ".conf": ["#"]
+    ".yaml": ["#"]
+    ".yml": ["#"]
+    ".jsonl": ["#"]
+    ".ttl": ["#"]
+    ".txt": ["#"]
+    ".cypher": ["//"]
+    ".json": []
+    ".md": []
+  allowed_classes: [comment, scanner, doc_ref, docstring, prose, fixture, declaration]
+  # 扫描器本体：两侧各自的「禁用词扫描器」必须提到对侧词汇，属合法中性
+  scanner_patterns:
+    - '\(cypher\|sparql'
+    - 'banned\s*=\s*re\.compile'
+    - 'neo4j\|graphdb'
+    - 'graphdb\|turtle'
+    - 'cypher\|sparql\|rdf\|owl'
+    - 'docs05_banned_regex'
+  doc_ref_patterns:
+    - 'docs[/\\]'
+    - '见 docs'
+    - '蓝本'
+  declaration_patterns:
+    - '对账'
+    - '同口径|口径'
+    - '登记'
+    - '禁用词|排除清单'
+
+# ---------------------------------------------------------------------------
+# 豁免（allowlist）：每条必须带 class + reason，且必须在盘上**仍然复现**
+#   条目字段（P1 行级）：face/scan/path/line/token/class/max_hits/reason
+#   条目字段（P5 路径级）：face/scan/path/class/max_hits/reason（line 省略或 0）
+#   反漏洞纪律：① 未登记命中 ⇒ FAIL；② 某条豁免在盘上不复现（count==0）⇒ FAIL
+#               ③ 条目数 > max_allowlist_entries ⇒ FAIL；④ class 与实测不符 ⇒ FAIL
+# ---------------------------------------------------------------------------
+allowlist:
+  max_allowlist_entries: 80
+  entries:
+    - {face: P1, scan: kg_no_onto_stack, path: scheme1-kg/ontology/04-rules.cypher, line: 50, token: "GraphDB", class: comment, max_hits: 1, reason: '规则文件头注释，登记 LPG 侧无对应机制：注释说明该侧不依赖对侧载体（纯注释）'}
+    - {face: P1, scan: kg_no_onto_stack, path: scheme1-kg/ontology/04-rules.cypher, line: 195, token: "SPARQL", class: doc_ref, max_hits: 1, reason: '规则文件头注释，登记 LPG 侧无对应机制：引用 docs/ 的对账说明或排除清单（散文，非运行期代码）'}
+    - {face: P1, scan: kg_no_onto_stack, path: scheme1-kg/project/p1_neo4j.py, line: 173, token: "GraphDB", class: declaration, max_hits: 1, reason: '加载器注释，登记两侧加载口径差异：对账/口径声明（位于注释区段内，不是运行期调用）'}
+    - {face: P1, scan: kg_no_onto_stack, path: scheme1-kg/project/p1_neo4j.py, line: 386, token: "GraphDB", class: declaration, max_hits: 1, reason: '加载器注释，登记两侧加载口径差异：对账/口径声明（位于注释区段内，不是运行期调用）'}
+    - {face: P1, scan: kg_no_onto_stack, path: scheme1-kg/project/p1_neo4j.py, line: 386, token: "SPARQL", class: declaration, max_hits: 1, reason: '加载器注释，登记两侧加载口径差异：对账/口径声明（位于注释区段内，不是运行期调用）'}
+    - {face: P1, scan: kg_no_onto_stack, path: scheme1-kg/tests/test_cc_tools.py, line: 630, token: "graphdb", class: scanner, max_hits: 1, reason: '本侧禁用词扫描器：禁用词扫描器必须枚举对侧载体词才能拦住（闸的反面，不是依赖）'}
+    - {face: P1, scan: kg_no_onto_stack, path: scheme1-kg/tests/test_cc_tools.py, line: 630, token: "owl", class: scanner, max_hits: 1, reason: '本侧禁用词扫描器：禁用词扫描器必须枚举对侧载体词才能拦住（闸的反面，不是依赖）'}
+    - {face: P1, scan: kg_no_onto_stack, path: scheme1-kg/tests/test_cc_tools.py, line: 630, token: "rdf", class: scanner, max_hits: 1, reason: '本侧禁用词扫描器：禁用词扫描器必须枚举对侧载体词才能拦住（闸的反面，不是依赖）'}
+    - {face: P1, scan: kg_no_onto_stack, path: scheme1-kg/tests/test_cc_tools.py, line: 630, token: "sparql", class: scanner, max_hits: 1, reason: '本侧禁用词扫描器：禁用词扫描器必须枚举对侧载体词才能拦住（闸的反面，不是依赖）'}
+    - {face: P1, scan: kg_no_onto_stack, path: scheme1-kg/tests/test_cc_tools.py, line: 990, token: "owl", class: scanner, max_hits: 1, reason: '本侧禁用词扫描器：禁用词扫描器必须枚举对侧载体词才能拦住（闸的反面，不是依赖）'}
+    - {face: P1, scan: kg_no_onto_stack, path: scheme1-kg/tests/test_cc_tools.py, line: 990, token: "rdf", class: scanner, max_hits: 1, reason: '本侧禁用词扫描器：禁用词扫描器必须枚举对侧载体词才能拦住（闸的反面，不是依赖）'}
+    - {face: P1, scan: kg_no_onto_stack, path: scheme1-kg/tests/test_cc_tools.py, line: 990, token: "sparql", class: scanner, max_hits: 1, reason: '本侧禁用词扫描器：禁用词扫描器必须枚举对侧载体词才能拦住（闸的反面，不是依赖）'}
+    - {face: P1, scan: kg_no_onto_stack, path: scheme1-kg/tests/test_cc_tools.py, line: 991, token: "graphdb", class: scanner, max_hits: 1, reason: '本侧禁用词扫描器：禁用词扫描器必须枚举对侧载体词才能拦住（闸的反面，不是依赖）'}
+    - {face: P1, scan: kg_no_onto_stack, path: scheme1-kg/tests/test_cc_tools.py, line: 991, token: "reasoner", class: scanner, max_hits: 1, reason: '本侧禁用词扫描器：禁用词扫描器必须枚举对侧载体词才能拦住（闸的反面，不是依赖）'}
+    - {face: P1, scan: kg_no_onto_stack, path: scheme1-kg/tests/test_cc_tools.py, line: 991, token: "shacl", class: scanner, max_hits: 1, reason: '本侧禁用词扫描器：禁用词扫描器必须枚举对侧载体词才能拦住（闸的反面，不是依赖）'}
+    - {face: P1, scan: kg_no_onto_stack, path: scheme1-kg/tests/test_cc_tools.py, line: 991, token: "ttl", class: scanner, max_hits: 1, reason: '本侧禁用词扫描器：禁用词扫描器必须枚举对侧载体词才能拦住（闸的反面，不是依赖）'}
+    - {face: P1, scan: kg_no_onto_stack, path: scheme1-kg/tests/test_cc_tools.py, line: 991, token: "turtle", class: scanner, max_hits: 1, reason: '本侧禁用词扫描器：禁用词扫描器必须枚举对侧载体词才能拦住（闸的反面，不是依赖）'}
+    - {face: P1, scan: kg_no_onto_stack, path: scheme1-kg/tests/test_cc_tools.py, line: 991, token: "推理机", class: scanner, max_hits: 1, reason: '本侧禁用词扫描器：禁用词扫描器必须枚举对侧载体词才能拦住（闸的反面，不是依赖）'}
+    - {face: P1, scan: onto_no_kg_stack, path: scheme2-onto/ontology/cc-action.ttl, line: 19, token: "Neo4j", class: comment, max_hits: 1, reason: 'TBox 注释，登记 LPG 侧只能靠 DDL：注释说明该侧不依赖对侧载体（纯注释）'}
+    - {face: P1, scan: onto_no_kg_stack, path: scheme2-onto/ontology/cc-action.ttl, line: 219, token: "Neo4j", class: comment, max_hits: 1, reason: 'TBox 注释，登记 LPG 侧只能靠 DDL：注释说明该侧不依赖对侧载体（纯注释）'}
+    - {face: P1, scan: onto_no_kg_stack, path: scheme2-onto/ontology/cc-causal.ttl, line: 15, token: "LPG", class: comment, max_hits: 1, reason: 'TBox 注释，登记 LPG 侧只能在代码里断言：注释说明该侧不依赖对侧载体（纯注释）'}
+    - {face: P1, scan: onto_no_kg_stack, path: scheme2-onto/ontology/cc-causal.ttl, line: 377, token: "LPG", class: comment, max_hits: 1, reason: 'TBox 注释，登记 LPG 侧只能在代码里断言：注释说明该侧不依赖对侧载体（纯注释）'}
+    - {face: P1, scan: onto_no_kg_stack, path: scheme2-onto/ontology/cc-fault.ttl, line: 51, token: "LPG", class: comment, max_hits: 1, reason: 'TBox 注释，登记 LPG 侧无此语义：注释说明该侧不依赖对侧载体（纯注释）'}
+    - {face: P1, scan: onto_no_kg_stack, path: scheme2-onto/ontology/cc-fault.ttl, line: 457, token: "LPG", class: comment, max_hits: 1, reason: 'TBox 注释，登记 LPG 侧无此语义：注释说明该侧不依赖对侧载体（纯注释）'}
+    - {face: P1, scan: onto_no_kg_stack, path: scheme2-onto/ontology/cc-fault.ttl, line: 776, token: "Neo4j", class: doc_ref, max_hits: 1, reason: 'TBox 注释，登记 LPG 侧无此语义：引用 docs/ 的对账说明或排除清单（散文，非运行期代码）'}
+    - {face: P1, scan: onto_no_kg_stack, path: scheme2-onto/ontology/cc-fault.ttl, line: 778, token: "Neo4j", class: comment, max_hits: 1, reason: 'TBox 注释，登记 LPG 侧无此语义：注释说明该侧不依赖对侧载体（纯注释）'}
+    - {face: P1, scan: onto_no_kg_stack, path: scheme2-onto/ontology/cc-metric.ttl, line: 707, token: "Neo4j", class: doc_ref, max_hits: 1, reason: 'TBox 注释，登记两侧口径差异：引用 docs/ 的对账说明或排除清单（散文，非运行期代码）'}
+    - {face: P1, scan: onto_no_kg_stack, path: scheme2-onto/project/p2_graphdb.py, line: 247, token: "Neo4j", class: comment, max_hits: 1, reason: '加载器注释，登记对侧对象模型差异：注释说明该侧不依赖对侧载体（纯注释）'}
+    - {face: P1, scan: onto_no_kg_stack, path: scheme2-onto/service/cc_tools_onto.py, line: 3750, token: "cypher", class: scanner, max_hits: 1, reason: '本侧禁用词扫描器：禁用词扫描器必须枚举对侧载体词才能拦住（闸的反面，不是依赖）'}
+    - {face: P1, scan: onto_no_kg_stack, path: scheme2-onto/service/cc_tools_onto.py, line: 3750, token: "property graph", class: scanner, max_hits: 1, reason: '本侧禁用词扫描器：禁用词扫描器必须枚举对侧载体词才能拦住（闸的反面，不是依赖）'}
+    - {face: P1, scan: onto_no_kg_stack, path: scheme2-onto/service/cc_tools_onto.py, line: 3750, token: "属性图", class: scanner, max_hits: 1, reason: '本侧禁用词扫描器：禁用词扫描器必须枚举对侧载体词才能拦住（闸的反面，不是依赖）'}
+    - {face: P1, scan: onto_no_kg_stack, path: scheme2-onto/service/cc_tools_onto.py, line: 3751, token: "neo4j", class: scanner, max_hits: 1, reason: '本侧禁用词扫描器：禁用词扫描器必须枚举对侧载体词才能拦住（闸的反面，不是依赖）'}
+    - {face: P1, scan: onto_no_kg_stack, path: scheme2-onto/service/start_cc_tools_onto.sh, line: 15, token: "7475", class: comment, max_hits: 1, reason: '启动脚本注释，登记端口绝不占用既有端口：注释说明该侧不依赖对侧载体（纯注释）'}
+    - {face: P1, scan: onto_no_kg_stack, path: scheme2-onto/shapes/shacl-constraints.ttl, line: 4, token: "LPG", class: doc_ref, max_hits: 1, reason: 'SHACL 注释，登记对侧无此形状校验：引用 docs/ 的对账说明或排除清单（散文，非运行期代码）'}
+    - {face: P1, scan: onto_no_kg_stack, path: scheme2-onto/tools/load_tbox.py, line: 22, token: "Cypher", class: doc_ref, max_hits: 1, reason: '模块 docstring，引用 docs/07 排除清单：引用 docs/ 的对账说明或排除清单（散文，非运行期代码）'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/collect/_inventory/v3-facts.raw.json, class: code, max_hits: 5, reason: 'shared\ 同源中性面：双载体契约/映射/声明面，该处必须同时命名两侧载体（声明驱动，不是依赖）'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/collect/freeze.py, class: docstring, max_hits: 1, reason: 'shared\ 同源中性面：docstring 内容（散文，不是运行期代码）'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/mapping/gen_maps.py, class: code, max_hits: 24, reason: 'shared\ 同源中性面：双载体契约/映射/声明面，该处必须同时命名两侧载体（声明驱动，不是依赖）'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/mapping/gen_maps.py, class: comment, max_hits: 3, reason: 'shared\ 同源中性面：注释说明该侧不依赖对侧载体（纯注释）'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/mapping/gen_maps.py, class: docstring, max_hits: 4, reason: 'shared\ 同源中性面：docstring 内容（散文，不是运行期代码）'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/mapping/rel-map.yaml, class: code, max_hits: 10, reason: 'shared\ 同源中性面：双载体契约/映射/声明面，该处必须同时命名两侧载体（声明驱动，不是依赖）'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/mapping/rel-map.yaml, class: comment, max_hits: 4, reason: 'shared\ 同源中性面：注释说明该侧不依赖对侧载体（纯注释）'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/mapping/type-map.yaml, class: code, max_hits: 3, reason: 'shared\ 同源中性面：双载体契约/映射/声明面，该处必须同时命名两侧载体（声明驱动，不是依赖）'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/mapping/type-map.yaml, class: comment, max_hits: 9, reason: 'shared\ 同源中性面：注释说明该侧不依赖对侧载体（纯注释）'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/model/answer-shape.yaml, class: code, max_hits: 111, reason: 'shared\ 同源中性面：双载体契约/映射/声明面，该处必须同时命名两侧载体（声明驱动，不是依赖）'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/model/answer-shape.yaml, class: comment, max_hits: 8, reason: 'shared\ 同源中性面：注释说明该侧不依赖对侧载体（纯注释）'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/model/answer-shape.yaml, class: doc_ref, max_hits: 4, reason: 'shared\ 同源中性面：引用 docs/ 的对账说明或排除清单（散文，非运行期代码）'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/model/causal-edges.yaml, class: comment, max_hits: 1, reason: 'shared\ 同源中性面：注释说明该侧不依赖对侧载体（纯注释）'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/model/ccf.schema.json, class: code, max_hits: 6, reason: 'shared\ 同源中性面：双载体契约/映射/声明面，该处必须同时命名两侧载体（声明驱动，不是依赖）'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/model/fault-modes.yaml, class: comment, max_hits: 1, reason: 'shared\ 同源中性面：注释说明该侧不依赖对侧载体（纯注释）'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/model/findings.yaml, class: code, max_hits: 2, reason: 'shared\ 同源中性面：双载体契约/映射/声明面，该处必须同时命名两侧载体（声明驱动，不是依赖）'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/model/findings.yaml, class: doc_ref, max_hits: 2, reason: 'shared\ 同源中性面：引用 docs/ 的对账说明或排除清单（散文，非运行期代码）'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/model/health-face.yaml, class: code, max_hits: 17, reason: 'shared\ 同源中性面：双载体契约/映射/声明面，该处必须同时命名两侧载体（声明驱动，不是依赖）'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/model/info-products.yaml, class: code, max_hits: 4, reason: 'shared\ 同源中性面：双载体契约/映射/声明面，该处必须同时命名两侧载体（声明驱动，不是依赖）'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/model/info-products.yaml, class: comment, max_hits: 1, reason: 'shared\ 同源中性面：注释说明该侧不依赖对侧载体（纯注释）'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/model/kgt-prompt-variants.yaml, class: code, max_hits: 18, reason: 'shared\ 同源中性面：双载体契约/映射/声明面，该处必须同时命名两侧载体（声明驱动，不是依赖）'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/model/kgt-prompt-variants.yaml, class: scanner, max_hits: 12, reason: 'shared\ 同源中性面：禁用词扫描器必须枚举对侧载体词才能拦住（闸的反面，不是依赖）'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/model/kgt-tools.yaml, class: code, max_hits: 19, reason: 'shared\ 同源中性面：双载体契约/映射/声明面，该处必须同时命名两侧载体（声明驱动，不是依赖）'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/model/kgt-tools.yaml, class: comment, max_hits: 4, reason: 'shared\ 同源中性面：注释说明该侧不依赖对侧载体（纯注释）'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/model/kgt-tools.yaml, class: doc_ref, max_hits: 2, reason: 'shared\ 同源中性面：引用 docs/ 的对账说明或排除清单（散文，非运行期代码）。★ R-53（2026-10-07）1→2 的增量唯一来源 = shared/model/kgt-tools.yaml:355 的 forbidden_reason 条目里点名了规则文件 docs/03 §6 的 04-rules.cypher ⇒ 该行同时含 docs/ 与 cypher，分类器判 doc_ref；内容仍是「该工具在任何臂都不存在」的事实更正，不是任一载体的依赖'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/model/tools-setb.yaml, class: code, max_hits: 102, reason: 'shared\ 同源中性面：双载体契约/映射/声明面，该处必须同时命名两侧载体（声明驱动，不是依赖）'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/model/tools-setb.yaml, class: declaration, max_hits: 2, reason: '★ R-52（2026-10-07）：:102 的 what 散文补入「逐条登记」等口径用词 ⇒ 分类器按**行**判定（declaration_patterns 含「登记」），该行原有的 Cypher / SPARQL 两个 token 由 code 改判 declaration，与 token 语义无关；内容仍是双载体中性声明（info-products.yaml#access 的工具名口径），不是任一载体的依赖。同批 code 档实测 102→100，仍在原登记 cap 内'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/model/topology.yaml, class: code, max_hits: 2, reason: 'shared\ 同源中性面：双载体契约/映射/声明面，该处必须同时命名两侧载体（声明驱动，不是依赖）'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/model/topology.yaml, class: comment, max_hits: 14, reason: 'shared\ 同源中性面：注释说明该侧不依赖对侧载体（纯注释）'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/model/v3-ccf-map.yaml, class: code, max_hits: 1, reason: 'shared\ 同源中性面：双载体契约/映射/声明面，该处必须同时命名两侧载体（声明驱动，不是依赖）'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/model/v3-ccf-map.yaml, class: doc_ref, max_hits: 1, reason: 'shared\ 同源中性面：引用 docs/ 的对账说明或排除清单（散文，非运行期代码）'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/model/zero-instance-ledger.yaml, class: code, max_hits: 23, reason: 'shared\ 同源中性面：双载体契约/映射/声明面，该处必须同时命名两侧载体（声明驱动，不是依赖）'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/project/ccf_plan.py, class: code, max_hits: 1, reason: 'shared\ 同源中性面：双载体契约/映射/声明面，该处必须同时命名两侧载体（声明驱动，不是依赖）'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/project/ccf_plan.py, class: comment, max_hits: 2, reason: 'shared\ 同源中性面：注释说明该侧不依赖对侧载体（纯注释）'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/project/ccf_plan.py, class: declaration, max_hits: 1, reason: 'shared\ 同源中性面：对账/口径声明（位于注释区段内，不是运行期调用）'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/project/ccf_plan.py, class: docstring, max_hits: 3, reason: 'shared\ 同源中性面：docstring 内容（散文，不是运行期代码）'}
+
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/model/gate-registry.yaml, class: code, max_hits: 7, reason: 'shared\ 同源中性面：门禁登记表必须点名被测门禁依赖的载体技术（Neo4j/GraphDB/本体）才能表达 offline/online（shared/model/gate-registry.yaml:113 的「零 Neo4j/GraphDB 依赖⇒offline」、:212 的「rdflib 解析本体文件⇒offline」、:290 的「连 Neo4j/GraphDB⇒online」、:313 的「需 Neo4j + GraphDB⇒会拨号」共 7 处；声明面，不是依赖、不是推理产物）'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/model/m6-cost.yaml, line: 17, token: "cypher", class: code, max_hits: 1, reason: 'shared\\model\\m6-cost.yaml 的**口径与文件映射**：键/正则是各载体**规则文件的真实文件名与语言**（KG 的 .cypher 文件、ONTO 的 shapes 文件）—— 属 M6.4 成本口径的**文件标识**，不是推理产物物化。★ 2026-10-10 重钉：本文件加 ruled_by 行后整体 +1，旧条目按行号失效，此处按**当前实测行**重写（各 max_hits=1）。'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/model/m6-cost.yaml, line: 21, token: "Cypher", class: code, max_hits: 1, reason: 'shared\\model\\m6-cost.yaml 的**口径与文件映射**：键/正则是各载体**规则文件的真实文件名与语言**（KG 的 .cypher 文件、ONTO 的 shapes 文件）—— 属 M6.4 成本口径的**文件标识**，不是推理产物物化。★ 2026-10-10 重钉：本文件加 ruled_by 行后整体 +1，旧条目按行号失效，此处按**当前实测行**重写（各 max_hits=1）。'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/model/m6-cost.yaml, line: 37, token: "cypher", class: code, max_hits: 1, reason: 'shared\\model\\m6-cost.yaml 的**口径与文件映射**：键/正则是各载体**规则文件的真实文件名与语言**（KG 的 .cypher 文件、ONTO 的 shapes 文件）—— 属 M6.4 成本口径的**文件标识**，不是推理产物物化。★ 2026-10-10 重钉：本文件加 ruled_by 行后整体 +1，旧条目按行号失效，此处按**当前实测行**重写（各 max_hits=1）。'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/model/m6-cost.yaml, line: 38, token: "cypher", class: code, max_hits: 1, reason: 'shared\\model\\m6-cost.yaml 的**口径与文件映射**：键/正则是各载体**规则文件的真实文件名与语言**（KG 的 .cypher 文件、ONTO 的 shapes 文件）—— 属 M6.4 成本口径的**文件标识**，不是推理产物物化。★ 2026-10-10 重钉：本文件加 ruled_by 行后整体 +1，旧条目按行号失效，此处按**当前实测行**重写（各 max_hits=1）。'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/model/m6-cost.yaml, line: 39, token: "cypher", class: code, max_hits: 1, reason: 'shared\\model\\m6-cost.yaml 的**口径与文件映射**：键/正则是各载体**规则文件的真实文件名与语言**（KG 的 .cypher 文件、ONTO 的 shapes 文件）—— 属 M6.4 成本口径的**文件标识**，不是推理产物物化。★ 2026-10-10 重钉：本文件加 ruled_by 行后整体 +1，旧条目按行号失效，此处按**当前实测行**重写（各 max_hits=1）。'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/model/m6-cost.yaml, line: 40, token: "cypher", class: code, max_hits: 1, reason: 'shared\\model\\m6-cost.yaml 的**口径与文件映射**：键/正则是各载体**规则文件的真实文件名与语言**（KG 的 .cypher 文件、ONTO 的 shapes 文件）—— 属 M6.4 成本口径的**文件标识**，不是推理产物物化。★ 2026-10-10 重钉：本文件加 ruled_by 行后整体 +1，旧条目按行号失效，此处按**当前实测行**重写（各 max_hits=1）。'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/model/m6-cost.yaml, line: 46, token: "shacl", class: code, max_hits: 1, reason: 'shared\\model\\m6-cost.yaml 的**口径与文件映射**：键/正则是各载体**规则文件的真实文件名与语言**（KG 的 .cypher 文件、ONTO 的 shapes 文件）—— 属 M6.4 成本口径的**文件标识**，不是推理产物物化。★ 2026-10-10 重钉：本文件加 ruled_by 行后整体 +1，旧条目按行号失效，此处按**当前实测行**重写（各 max_hits=1）。'}
+    - {face: P5, scan: shared_carrier_vocabulary, path: shared/model/m5-cases.yaml, line: 175, token: "知识图谱", class: code, max_hits: 1, reason: 'shared\ 同源中性面：该行 pattern_source 引用文档文件名（docs/03-方案1设计（知识图谱+LLM）.md:122），命中落在 YAML 字符串值内故实测 class=code；文件名引用，非载体依赖、非推理产物物化'}
+
+# ---------------------------------------------------------------------------
+# 六个面
+# ---------------------------------------------------------------------------
+faces:
+
+  P1:
+    id: dependency
+    name: 依赖面（两实现不得运行期依赖对侧载体栈）
+    tier: static
+    scans:
+      - id: kg_no_onto_stack
+        root: scheme1-kg
+        pattern_set: onto_forbidden_in_kg
+      - id: onto_no_kg_stack
+        root: scheme2-onto
+        pattern_set: kg_forbidden_in_onto
+
+  P2:
+    id: runtime-endpoint
+    name: 运行期端点面（配置/环境变量名集合互斥；进程只拨本载体端口）
+    tier: static+runtime-evidence
+    env_exclusivity:
+      - file: scheme1-kg/service/cc_tools.py
+        must_contain: [CC_NEO4J_HTTP_URL, CC_NEO4J_USER, CC_NEO4J_PASSWORD, CC_NEO4J_DATABASE]
+        must_not_contain_in_code: [CC_GRAPHDB_]
+      - file: scheme2-onto/service/cc_tools_onto.py
+        must_contain: [DEFAULT_GRAPHDB_URL, DEFAULT_REPOSITORY]
+        must_not_contain_in_code: [CC_NEO4J_]
+    endpoint_constants:
+      - file: scheme1-kg/service/cc_tools.py
+        expect: ["127.0.0.1:7475"]
+        forbid: ["7200", "7688", "/repositories/"]
+      - file: scheme2-onto/service/cc_tools_onto.py
+        expect: ["http://127.0.0.1:7200", "cc-ops"]
+        forbid: ["7475", "7688"]
+    evidence:
+      collected_at: "2026-09-29T19:43:20Z"
+      collector: 真机 192.0.2.10 只读采样：ss -tnp 每 0.25s × 80，期间打一次只读 POST /schema（BT.8：ONTO 载体只读守卫「语句层分号」修复后忠实重启，`:8302` pid 变更 ⇒ 按新 pid 重采；B 脚本的观测窗口在 POST **之前**）
+      files:
+        - tmp/w28_p2_bt8_a.out.txt
+        - tmp/w28_p2_bt8_b.out.txt
+      max_age_days: 30
+      expectations:
+        - {pid: 1926537, arm: KG-Q, own_port: 7475, min_own: 1, forbid_ports: [7200, 7688]}
+        - {pid: 2244231, arm: ONTO-Q, own_port: 7200, min_own: 1, forbid_ports: [7475, 7688]}
+        - {pid: 1926657, arm: KG-T, own_port: 7688, min_own: 1, forbid_ports: [7200, 7475]}
+      note: >-
+        ONTO-Q(2244231) 必须**冷缓存**观测：cc_tools_onto.py 的 TYPE_CACHE_TTL_S=60.0 会使
+        60s 内的重复 /schema 完全不产生新拨号（这是仪表特性，不是缺陷，已在采集脚本里 sleep 70 越过）。
+        本面是**重放校验**：门禁自身不拨号、不连真机；证据文件过期或缺失即 BLOCKED。窗口顺序为 B 档实测修正：A 档 ONTO 腿 to_7200=0（热缓存，预期），B 档 to_7200=1（冷缓存 POST 落在窗口内）。
+
+  P3:
+    id: semantics
+    name: 语义面（声明↔实现对账：OWL 原生公理必须落在 .ttl；LPG 断言必须落在 .cypher）
+    tier: static
+    onto_construct_roots: [scheme2-onto/ontology, scheme2-onto/shapes]
+    onto_construct_exts: [".ttl"]
+    onto_construct_regex:
+      hasKey: 'owl:hasKey'
+      AllDifferent: 'owl:AllDifferent'
+      inverseOf: 'owl:inverseOf'
+      unionOf: 'owl:unionOf'
+      Ontology: 'owl:Ontology'
+      imports: 'owl:imports'
+      TransitiveProperty: 'owl:TransitiveProperty'
+      FunctionalProperty: 'owl:FunctionalProperty'
+      disjointWith: 'owl:disjointWith'
+      cardinality: 'owl:cardinality'
+      propertyChainAxiom: 'owl:propertyChainAxiom'
+      Restriction: 'owl:Restriction'
+    onto_min_construct_counts:
+      hasKey: 26
+      AllDifferent: 12
+      inverseOf: 20
+      unionOf: 18
+      Ontology: 7
+      imports: 6
+      TransitiveProperty: 2
+      FunctionalProperty: 5
+      disjointWith: 7
+      cardinality: 8
+      propertyChainAxiom: 2
+      Restriction: 3
+    onto_axioms:
+      - id: A1
+        statement: 动作动作码唯一（OWL 2 键公理）
+        ttl_refs:
+          - {file: scheme2-onto/ontology/cc-action.ttl, line: 221, pattern: "owl:hasKey ( cca:actionCode )"}
+      - id: A2
+        statement: 动作提案码唯一（OWL 2 键公理）
+        ttl_refs:
+          - {file: scheme2-onto/ontology/cc-action.ttl, line: 222, pattern: "owl:hasKey ( cca:proposalCode )"}
+      - id: A3
+        statement: 风险三档两两不同（OWL AllDifferent）
+        ttl_refs:
+          - {file: scheme2-onto/ontology/cc-action.ttl, line: 128, pattern: "owl:AllDifferent"}
+      - id: A4
+        statement: 规则码唯一（OWL 2 键公理）
+        ttl_refs:
+          - {file: scheme2-onto/ontology/cc-audit.ttl, line: 186, pattern: "owl:hasKey ( ccp:ruleCode )"}
+      - id: A5
+        statement: 22 条因果边两两不同（OWL 原生公理）
+        ttl_refs:
+          - {file: scheme2-onto/ontology/cc-causal.ttl, line: 377, pattern: "OWL 原生公理"}
+      - id: A6
+        statement: 18 个故障模式互斥（OWL 原生公理）
+        ttl_refs:
+          - {file: scheme2-onto/ontology/cc-fault.ttl, line: 457, pattern: "OWL 原生公理"}
+      - id: A7
+        statement: 故障模式码唯一（OWL 2 键公理）
+        ttl_refs:
+          - {file: scheme2-onto/ontology/cc-fault.ttl, line: 780, pattern: "owl:hasKey ( ccf:faultModeCode )"}
+      - id: A8
+        statement: 指标码唯一（OWL 2 键公理）
+        ttl_refs:
+          - {file: scheme2-onto/ontology/cc-metric.ttl, line: 710, pattern: "owl:hasKey ( ccm:metricCode )"}
+      - id: A9
+        statement: 应用码唯一（OWL 2 键公理）
+        ttl_refs:
+          - {file: scheme2-onto/ontology/cc-topology.ttl, line: 53, pattern: "owl:hasKey ( cc:appCode )"}
+      - id: A10
+        statement: Table 身份 = (schemaName, tableName)（OWL 2 键公理，与裁决 14 同源）
+        ttl_refs:
+          - {file: scheme2-onto/ontology/cc-topology.ttl, line: 184, pattern: "owl:hasKey ( cc:schemaName cc:tableName )"}
+    kg_construct_roots: [scheme1-kg/ontology]
+    kg_construct_exts: [".cypher"]
+    kg_construct_regex:
+      create_constraint: 'CREATE\s+CONSTRAINT'
+      create_index: 'CREATE\s+INDEX'
+      rule_body_note: '规则体'
+    # 下限 = 交付时的**出现次数**实测值（含 01-schema.cypher:12/:13 两条命名纪律注释里
+    # 出现的字样：CREATE CONSTRAINT 共 21 处 = 20 条真实约束 + 1 处注释；
+    # CREATE INDEX 共 7 处 = 6 条真实索引 + 1 处注释）。只作「只许增不许减」的下限漂移探测，
+    # 不冒充「约束条数」这一业务口径。
+    kg_min_construct_counts:
+      create_constraint: 21
+      create_index: 7
+      rule_body_note: 6
+    kg_rules:
+      - id: K1
+        statement: 命名空间前缀 CC_ 下的唯一性约束（CREATE CONSTRAINT 20 条，LPG DDL 表达）
+        cypher_refs:
+          - {file: scheme1-kg/ontology/01-schema.cypher, line: 36, pattern: "CREATE CONSTRAINT"}
+      - id: K2
+        statement: 支撑查询的 LPG 索引（CREATE INDEX 6 条，Cypher DDL 表达）
+        cypher_refs:
+          - {file: scheme1-kg/ontology/01-schema.cypher, line: 83, pattern: "CREATE INDEX"}
+      - id: K3
+        statement: 6 条业务规则**无规则体**（docs/03 未给 ⇒ 未自创，诚实边界）
+        cypher_refs:
+          - {file: scheme1-kg/ontology/04-rules.cypher, line: 175, pattern: "规则体"}
+    purity_of_shape_files:
+      - {file: scheme2-onto/shapes/shacl-constraints.ttl, forbid: ["owl:"], max_owl_constructs: 0}
+    note: >-
+      判据 = 「声明↔实现」对账（不是「有没有 .ttl」）：每一条被声明为 OWL 原生公理的条目
+      必须给出 .ttl 出处（存在、落在 ontology/shapes 下、行内 pattern 命中）；
+      方案1 的每一条规则条目必须给出 .cypher 出处。两侧构造计数设**下限**：只许增不许减。
+
+  P4:
+    id: vocabulary
+    name: 词表面（复用既有禁用词闸，断言其仍存在且仍有拦截力）
+    tier: reuse-existing-gates
+    power_source:
+      file: shared/model/kgt-prompt-variants.yaml
+      pointer: gate
+      regex_key: docs05_banned_regex
+    mechanisms:
+      - file: shared/model/kgt-prompt-variants.yaml
+        consumer: shared/verify/f5_kgt_gate.py
+      - file: scheme1-kg/tests/test_cc_tools.py
+        must_contain: ["banned = re.compile", "graphdb"]
+      - file: scheme2-onto/service/cc_tools_onto.py
+        must_contain: ["cypher|sparql|rdf|owl", "neo4j|graphdb"]
+    blocking_power:
+      must_match: [Cypher, SPARQL, 图, 本体, 三元组, schema, 查询语句, property graph, RDF, OWL, neo4j, graphdb, turtle, ttl, shacl, 推理机, reasoner, 知识图谱, 属性图]
+      must_not_match: [topology, metrics, cause, 拓扑, 指标, 根因, trace]
+      max_banned_words: 10
+      scope_applies_to: [KG-T, KG-T-dyn]
+      scope_exempt: [KG-T-free]
+    note: >-
+      **不新增判据**：本面只断言既有机制（kgt-prompt-variants.yaml 的 banned_words +
+      docs05_banned_regex、两侧源码里的禁用词扫描器、f5_kgt_gate.py）依然存在，
+      并用 must_match/must_not_match 两组探针实测其拦截力没被稀释。
+
+  P5:
+    id: shared-neutrality
+    name: 共享面中性（shared\ 不得夹带任一载体独有的推理产物）
+    tier: static
+    scans:
+      - id: shared_carrier_vocabulary
+        roots: [shared/model, shared/mapping, shared/collect, shared/project]
+        pattern_set: carrier_tokens
+        exts: [".py", ".yaml", ".yml", ".json", ".jsonl", ".md", ".txt", ".conf", ".csv"]
+        skip_files: [shared/model/purity-contract.yaml]
+      - id: shared_no_materialized_inference
+        roots: [shared]
+        pattern_set: materialization_markers
+        exts: [".py", ".yaml", ".yml", ".json", ".jsonl", ".md", ".txt", ".conf", ".csv"]
+        skip_files: [shared/model/purity-contract.yaml, shared/verify/purity_gate.py]
+    excluded_roots:
+      - root: shared/deploy
+        pattern_set: carrier_tokens
+        max_hits: 251
+        reason: >-
+          部署面必须同时说出两侧载体（targets.yaml 的 neo4j/graphdb 目标、binding.yaml 的
+          三个 provider）才能部署两套实现；它**不是**任一载体的推理产物，属合法双载体面。
+          242→243 的增量唯一来源 = shared/deploy/smoke/e2e_smoke.py:984 的中文测试问句含
+          「知识图谱」（W31 阶段 1 新增夹具文本，W28 登记时位于 :776、W37 后位移到 :967、
+          ★ R-53 在 APPS 字典补入 R 臂两个 App 后位移到 **:984**；非推理产物物化）。
+          243→244 的增量唯一来源 = shared/deploy/smoke/e2e_smoke.py:1142 的 selftest 定向④夹具
+          p3_err["why"] 含「Neo4j」（W37 阶段 1 新增夹具文本；W37 时位于 :1084、
+          ★ R-53 后位移到 :1101、★ U-N 裁定 = A（2026-10-08）在 APPS 字典补入 KG-T-dyn 后
+          位移到 **:1142**（本次只改行号引用，措辞与计数一字未改）；非推理产物物化）；
+          244→251 的增量唯一来源 = R-52（2026-10-07）新增的 R 臂两个 App 的元数据声明
+          —— shared/deploy/dify/binding.yaml:513 display_name「方案1·知识图谱+LLM（规则组）」含「知识图谱」1 处；
+          :514 display_description 含「Neo4j」1 处 +「知识图谱」1 处；
+          :523 display_name「方案2·本体+LLM（规则组）」含「本体」1 处；
+          :524 display_description 含「GraphDB」「OWL」「本体」各 1 处 ⇒ 合计 **恰 7 处**（1+2+1+3）。
+          ★ R-58（2026-10-12）行号校正：上述四行原记 :402/:403/:412/:413、下文 Q 臂原记
+          :378/:379/:386/:387 —— 均因 R-56/R-57/R-58 期间 binding.yaml 在其之前插入内容而整体
+          **位移 +111**（现真值 = 规则组 :513/:514/:523/:524、主对比组 :489/:490/:497/:498）。
+          **只改行号引用，措辞与计数一字未改**（G20 只判「目标行非空」，语义漂移它检测不了 ⇒ 必须人工校正）。
+          这四行与既有 Q 臂 :489/:490/:497/:498 同形，是**必须同时命名两侧载体**的 App 展示名/描述（app_meta.py 的
+          声明面，非推理产物、非运行期注入模型面），属合法双载体面。
+          历次都按声明式增长协议抬到实测值（每次都必须点名 file:line，严禁删上限或放行 .md）。
+      - root: shared/verify
+        pattern_set: carrier_tokens
+          # ★ 2026-10-09 深夜再增 461→462（+1）：来自 shared/verify/m6/change_cost.py:216 ——
+          #   我为本工具新增的**自检断言**里引用了 KG 规则文件的文件名（含扩展名），属文件标识、非推理产物物化。
+          #   上游 455→461（+6）的口径见下条：：5 处来自新增的 shared/verify/m6/change_cost.py（:130/:132/:133/:158/:178 —— 夹具与范围里的**规则文件扩展名**，属 M6.4 成本口径的**文件名**，不是推理产物物化）；余 1 处同类（shared/verify/contract_gates.py:418）。上游 455 的口径见该上限原 reason。
+        max_hits: 462
+        reason: >-
+          校验面必须同时说出两侧载体才能做公平性/工具面对账（check_fairness.py、toolface_diff.py、
+          guard_conformance.py、f5_kgt_gate.py）；它**不是**任一载体的推理产物，属合法双载体面。
+          448→450 的增量唯一来源 = shared/verify/parity.py:17（用法段引用
+          `shared/deploy/targets.yaml` 的 `neo4j.auth.password_env` 键名）与
+          shared/verify/parity.py:29（「Neo4j 口令环境变量未设 ⇒ BLOCKED(exit 2)」三态说明）——
+          W43 判态修正新增的 docstring 散文，同属「中性注释/docstring」类，非推理产物物化。
+          450→455 的增量唯一来源 = W54 改写的 shared/verify/gate_runner.py:54 / :482 / :537（三行都写「证据本体」，指证据文件正文本身，是载体词「本体」的**同形异义中性词**，与本体库无关）与 :1211 / :1253（脱敏器自检夹具，必须写成真实世界凭据形状 NEO4J_AUTH=neo4j/<明文> 与 neo4j://user:pw@host 才能证明脱敏器真的生效——W34 泄漏过的正是该形状）；同窗内 shared/verify 其他改动文件（m5_cases_gate.py、m5/contract.py、m5/judge.py）IGNORECASE 命中各为 0，故 455 可完全归因、非任一载体的推理产物物化。按声明式增长协议抬到冻结实测值（必须点名 file:line，严禁删上限或放行 .md）。
+    materialized_dump_exts: [".nt", ".trig", ".rdf", ".ttl"]
+    note: >-
+      判据 = token/产物扫描 + 人工可审 allowlist。共享面同时提到两侧载体是**合法中性**
+      （两侧同源的契约/映射/声明），但必须逐文件登记并受 max_hits 约束，防止无声漂移。
+
+  P6:
+    id: measurement
+    name: 测量面（除载体外两侧一致 —— 断言既有对账门禁结论仍成立）
+    tier: pinned-evidence + optional-rerun
+    dependent_gates:
+      - id: F0-F5-check-fairness
+        script: shared/deploy/check_fairness.py
+        # ★ R-52（2026-10-07）同批重冻：脚本改为「逐对照对跑 F1–F4 + 新增 F3.e」后重钉。
+        # ★ U-N 裁定 = A（2026-10-08）同批重冻：新增 KG-T-dyn 的**独立 carrier**（`kgt-dyn`，
+        #   端口 8305）⇒ 改了两处：`PORT_BY_CARRIER` 补 `"kgt-dyn": 8305`；
+        #   binding 侧新增 carrier/provider/app 三件套。判据本身**一字未改**。
+        #   上一版（R-52 后）= f518cc2553a49d4ce78066321adae117a4ca5f615aec637b7450a2a06e4b40f1
+        #   （证据 tmp/w28_check_fairness.out.txt = 12824 B / 168 LF /
+        #   24f7ddea77f8b07566343742f11f48eff678d61927ef93e6c9cae82f2606f336，含 R 对照对 4 条 PASS）。
+        #   本版证据同批重采 = 13314 B / 172 LF / efcb39d32b052468b7dff28766e9410782465eac81ddd2911c67e4abad6f0059（真机 F0–F5 全跑：PASS=10 FAIL=0 BLOCKED=0，
+        #   含新增 App 的 F0.n「真机 name == 声明 display_name」共 **8 个 App**）。
+        # ★ R-62（2026-10-16）同批重冻：`DEFAULT_ENV` 由**硬编码的另一项目凭据文件**
+        #   （`<workspace>\upstream-ops-agent\.env`，其 `DIFY_BASE_URL=http://192.0.2.10`
+        #   = R-58 已登记的**迁址前旧主机**）改为**本仓库根 `.env`**（与 m5_run.py / deploy_agents.py 同源）。
+        #   判据本身一字未改；改的是「不带 `--env` 时默认打哪台 Dify」。修前默认运行的实测形态 =
+        #   `base=http://192.0.2.10`、`login_ok=True` 但 `apps=[]` ⇒ **F0–F5 全部 BLOCKED（假失败）**；
+        #   修后（四臂 max_iteration=40，R-60）真机 `PASS=10 FAIL=0 BLOCKED=0`、exit 0。
+        #   上一版 = d5f5d76eb21e61d4a59f14e4707d2e645ad18dd5fde1e01836003c36529342e7
+        #   本版证据同批重采 = 13587 B / 172 LF /
+        #   4f78c1d0bdf9ac9168a87051757d7685446a9e19e530f5ca6981d7c85668cfe9
+        #   （★ 采集方式：`cmd /c "set PYTHONIOENCODING=utf-8&& python … > <file> 2>&1"`
+        #    ⇒ **原始 UTF-8 字节**；用 PowerShell `Tee-Object` 落盘会写成 UTF-16LE+BOM，
+        #    门禁按 UTF-8 找标记即 `BLOCKED: P6-evidence-marker-absent`（本次踩过）。
+        #    `base=http://192.0.2.11:8081`；F0–F5 + `F1@…`–`F4@…` 共 10 条 PASS）。
+        sha256: 5a95a4bd1d23c36df19c5c4f1ec8048b63317a64e9c7dfc034f7d8922e1d7582
+        expect_exit: 0
+        expect_marker: "★ 整体: PASS"
+        evidence: tmp/w28_check_fairness.out.txt
+      - id: toolface-strict
+        script: shared/verify/toolface_diff.py
+        sha256: ""
+        expect_exit: 0
+        expect_marker: "RESULT: SAME"
+        evidence: tmp/w28_toolface_diff_strict.out.txt
+        cli: [--kg, tmp/w28_kg_openapi_live.json, --onto, tmp/w28_onto_openapi_live.json]
+      - id: guard-conformance
+        script: shared/verify/guard_conformance.py
+        sha256: ""
+        expect_exit: 3
+        expect_marker: "CARRIER_SPECIFIC 1"
+        evidence: tmp/w28_guard_conformance.out.txt
+      - id: f5-kgt
+        script: shared/verify/f5_kgt_gate.py
+        sha256: ""
+        expect_exit: 0
+        expect_marker: "F5 RESULT: PASS"
+        evidence: tmp/w28_f5_kgt_gate.out.txt
+    parity_assertions:
+      - id: E1
+        statement: 两侧 8 工具同序同名同入参同响应字段同错误码（F0.a–F0.h 全 PASS；S2b 把 Set B 由 7 工具扩到 8 工具，留档读数 7 工具自此仅存沿革；★ S3a-2c 已在真机注册 8 工具后重测：toolface_diff strict RESULT=SAME（两侧各 9 项含 POST /tools/read_facts）+ check_fairness F0–F5 全 PASS；★ R-52（2026-10-07）：**R 臂（KG-R/ONTO-R）已建成**，工具面 = Q 臂去掉 cc_query（7 个）⇒ 上述「8 工具」口径**仅适用于 Q 对照对**；R 对照对由 check_fairness 的同名判据标签 `F1@…`–`F4@…` 覆盖，其工具面为 7 个且两侧逐字相同）
+        reason: 工具面是「除载体外一切一致」的最关键一项，载体差异不得伪装成工具面差异
+      - id: E2
+        statement: normalized sha256 两侧相等（0f6766356076244e…，S3a-2c 真机读数；7 工具时代为 5249aef9…）
+        reason: 归一化后工具定义必须逐字节一致，否则被测变量被污染
+      - id: E3
+        statement: model_face_projection sha256 两侧相等（3c0cc66e1e8682e8，S3a-2c 真机读数；7 工具时代为 001bc2ed…）
+        reason: 模型可见面投影一致，保证 LLM 看到的是同一个工具面
+      - id: E4
+        statement: "guard_conformance 期望 exit = 3（CARRIER_SPECIFIC 1，已登记载体能力边界 C04-normal-bounded-path @ onto，approved_by=captain:R-21）"
+        reason: "GraphDB SPARQL 解析器不支持 {n,m} 属性路径修饰符 ⇒ 该差异是载体能力边界，既非 FAIL 也不得改判为 PASS"
+      - id: E5
+        statement: 本轮门控区间一律 executed=false / dry_run=true（裁决 5）
+        reason: 因变量是分析准确率/效率/成本而非执行安全性；门禁不得要求任何写执行
+    note: >-
+      判据 = 断言既有门禁结论仍成立。默认对**已留档读数 + 脚本 sha256 做 pin 复核**
+      （pin 失效即 BLOCKED，不静默 PASS）；带 --run-dependent-gates 时逐条真重跑并比对真退出码。
+
+# ---------------------------------------------------------------------------
+# 反例计划（判别力自证）：门禁必须在**影子树**上 FAIL，而真树 PASS
+#   ——影子树建在 tmp\ 下，真树一个字都不改（selftest S20 以 sha256 前后比对自证）
+# ---------------------------------------------------------------------------
+counterexample_plan:
+  shadow_sandbox: tmp\（tempfile.mkdtemp(prefix="_w28_selftest_")）
+  cases:
+    - id: S01
+      kind: positive-control
+      expect_exit: 0
+      action: 真树直接跑门禁（六面全 PASS 才算正控成立）
+    - id: S02
+      kind: negative
+      expect_exit: 1
+      action: scheme1-kg/project\ 注入 requests.post('http://127.0.0.1:7200/repositories/cc-ops')，即真运行期 GraphDB 调用
+    - id: S03
+      kind: negative
+      expect_exit: 1
+      action: scheme2-onto/project\ 注入 GraphDatabase.driver('bolt://127.0.0.1:7688') 与 session.run('MATCH ...')，即真运行期 Neo4j 调用
+    - id: S04
+      kind: negative
+      expect_exit: 1
+      action: KG 侧代码头追加 CC_GRAPHDB_URL，即配置面泄漏
+    - id: S05
+      kind: blocked
+      expect_exit: 2
+      action: 删除拨号见证证据 ⇒ 运行期面没有观测
+    - id: S06
+      kind: negative
+      expect_exit: 1
+      action: 篡改证据使 ONTO 进程出现对 7475 的活动连接
+    - id: S07
+      kind: negative
+      expect_exit: 1
+      action: 抽掉 cc-action.ttl 的 owl:hasKey 公理，语义面退化
+    - id: S08
+      kind: negative
+      expect_exit: 1
+      action: 把声明的 OWL 公理出处改指 .py，即 Python 断言冒充 OWL
+    - id: S09
+      kind: blocked
+      expect_exit: 2
+      action: 拆掉既有闸的 banned_words ⇒ 词表面机制不存在
+    - id: S10
+      kind: negative
+      expect_exit: 1
+      action: 掏空 banned_words 只剩 [Cypher] ⇒ 拦截力丢失
+    - id: S11
+      kind: negative
+      expect_exit: 1
+      action: shared/model\ 放入 zz-inferred-ontology.ttl，即推理产物物化
+    - id: S12
+      kind: negative
+      expect_exit: 1
+      action: shared/model\ 放入未登记的 zz-carrier-leak.yaml
+    - id: S13
+      kind: negative
+      expect_exit: 1
+      action: 让一条已登记命中在盘上不复现 ⇒ 陈旧豁免
+    - id: S14
+      kind: negative
+      expect_exit: 1
+      action: 把 max_allowlist_entries 调到低于登记条数（锚点取自契约现值）⇒ 豁免超上限
+    - id: S15
+      kind: negative
+      expect_exit: 1
+      action: 把某条豁免的 class 从 comment 改成 declaration ⇒ 分类与实测不符
+    - id: S16
+      kind: blocked
+      expect_exit: 2
+      action: 契约删 faces.P3 ⇒ 契约缺字段
+    - id: S17
+      kind: blocked
+      expect_exit: 2
+      action: 删契约文件
+    - id: S18
+      kind: blocked
+      expect_exit: 2
+      action: 改动 P6 依赖的既有门禁脚本字节（契约里的 sha256 未回写）⇒ pin 失效
+    - id: S19
+      kind: blocked
+      expect_exit: 2
+      action: 删 shared/verify/f5_kgt_gate.py ⇒ 依赖的既有门禁缺失
+    - id: S20
+      kind: invariant
+      expect_exit: 0
+      action: 自检前后真树 sha256 不变，证明反例只动影子树

@@ -1,0 +1,456 @@
+# ============================================================================
+# scheme2-onto/ontology/cc-topology.ttl  ·  方案2 拓扑本体（cc:）
+# ----------------------------------------------------------------------------
+# 职责（docs/04 §3 模块表）：14 个类（12 可实例化 + 抽象 ConnectionPool + 派生
+#   Evidence）+ 15 条关系（14 断言 + 派生 HAS_EVIDENCE）+ 公理。
+# 上游契约：shared/model/topology.yaml v1.1.0（类型/关系/互斥/跳数唯一权威）
+#           shared/mapping/type-map.yaml（onto_class / attrs → 数据属性）
+#           shared/mapping/rel-map.yaml（onto_property / onto_inverse_property / domain / range）
+# 命名空间（逐字取自 type-map.yaml#namespaces.onto）：cc = .../onto/topology#
+#
+# ★ 诚实边界（docs/04 §4 D6 要求「OWL 原生」与「SHACL 补足」分开计）
+#   OWL 2 RL **原生**可推理：owl:inverseOf（prp-inv1/2）、owl:disjointWith（cax-dw）、
+#     rdfs:domain/range（prp-dom/prp-rng）、rdfs:subClassOf（cax-sco）、
+#     owl:hasKey（prp-key，由相同键推出 owl:sameAs、由不同键推出 owl:differentFrom）、
+#     owl:FunctionalProperty（prp-fp）、owl:propertyChainAxiom（prp-spo2）、
+#     owl:cardinality 的 **max 侧**（cls-maxc1/cls-maxc2）。
+#   RL **不支持**：owl:cardinality 的 min 侧、owl:oneOf 枚举、封闭世界。
+#     ⇒ min 侧与枚举由 shapes\shacl-constraints.ttl 兜底，本文件用 cco:enforcement
+#       逐条标注，不把 SHACL 的能力算作 OWL 的能力。
+# ============================================================================
+@prefix cc:      <https://credit-card-ops.ai/onto/topology#> .
+@prefix cco:     <https://credit-card-ops.ai/onto/core#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix dcat:    <http://www.w3.org/ns/dcat#> .
+@prefix vann:    <http://purl.org/vocab/vann/> .
+
+cc: a owl:Ontology ;
+    dcterms:title "信用卡跨层运维本体 · 拓扑模块（cc-topology）"@zh ;
+    dcterms:description "14 类 / 15 关系 / 跨层与互斥公理。逐条对应 shared\\model\\topology.yaml 的 types 与 relations。"@zh ;
+    dcterms:issued "2026-10-06"^^xsd:date ;
+    owl:versionIRI <https://credit-card-ops.ai/onto/topology/1.0.0> ;
+    owl:versionInfo "1.0.0" ;
+    vann:preferredNamespacePrefix "cc" ;
+    vann:preferredNamespaceUri "https://credit-card-ops.ai/onto/topology#" ;
+    cco:moduleDependsOn cco: ;
+    dcat:landingPage <https://credit-card-ops.ai/onto/topology> .
+
+# ===========================================================================
+# 1) 14 个类（对应 topology.yaml#types 的 14 个 code，逐条可追溯）
+#    OntoClean 元属性：+R 刚性 / +I 同一性 / +U 统一性 / +D 依赖
+# ===========================================================================
+
+# ---- L1 应用层 -----------------------------------------------------------
+cc:CreditCardApp a owl:Class ;
+    rdfs:subClassOf cco:ApplicationEntity ;
+    rdfs:label "信用卡系统应用"@zh ;
+    cco:rigidity "+R" ; cco:identity "+I" ; cco:unity "+U" ; cco:dependence "-D" ;
+    cco:identityCriterion cc:appCode ;
+    owl:hasKey ( cc:appCode ) ;
+    cco:contractSource "shared/model/topology.yaml#/types[code=CreditCardApp]" ;
+    rdfs:comment "契约：layer App、key_attrs [appCode]。★ owl:hasKey 是 OWL 2 原生手段：appCode 不同的两个个体被推理器判为 owl:differentFrom —— 这在「无唯一命名假设」（docs\\04 §4 D4）下是唯一无需 O(N²) owl:AllDifferent 就能获得差异性的写法（RL 规则 prp-key）。"@zh .
+
+cc:AppInstance a owl:Class ;
+    rdfs:subClassOf cco:ApplicationEntity , cco:DependentEntity ;
+    rdfs:label "应用实例"@zh ;
+    cco:rigidity "+R" ; cco:identity "+I" ; cco:unity "+U" ; cco:dependence "+D" ;
+    cco:identityCriterion cc:instanceId ;
+    cco:dependenceCriterion cc:runsIn ;
+    owl:hasKey ( cc:instanceId ) ;
+    # 依赖实体必须有承载（docs/04 §3.1 原文）
+    rdfs:subClassOf [ a owl:Restriction ; owl:onProperty cc:runsIn ;
+                      owl:cardinality "1"^^xsd:nonNegativeInteger ] ;
+    cco:enforcement "owl2-rl-native:max 侧（cls-maxc2）；min 侧 shacl-only（ccs:AppInstanceShape）" ;
+    cco:contractSource "shared/model/topology.yaml#/types[code=AppInstance]" ;
+    rdfs:comment "契约：layer App、key_attrs [instanceId]、关系 RUNS_IN 基数 N:1。"@zh .
+
+cc:AppEndpoint a owl:Class ;
+    rdfs:subClassOf cco:InformationEntity , cco:DependentEntity ;
+    rdfs:label "应用服务端点"@zh ;
+    cco:rigidity "+R" ; cco:identity "+I" ; cco:unity "+U" ; cco:dependence "+D" ;
+    cco:identityCriterion cc:path ;
+    owl:hasKey ( cc:path cc:protocol ) ;
+    cco:contractSource "shared/model/topology.yaml#/types[code=AppEndpoint]" ;
+    rdfs:comment "契约：layer App、key_attrs [path, protocol]（复合键 ⇒ owl:hasKey 双元素列表）。"@zh .
+
+# ★ 一等对象（裁决 §5.2）：既是配置实体，又语义上是「应用侧连接池」
+cc:JdbcDataSource a owl:Class ;
+    rdfs:subClassOf cco:ConfigurationEntity , cc:ConnectionPool ;
+    rdfs:label "JDBC/ODBC 数据源（应用侧连接池）"@zh ;
+    cco:rigidity "+R" ; cco:identity "+I" ; cco:unity "+U" ; cco:dependence "+D" ;
+    cco:identityCriterion cc:dsCode ;
+    cco:dependenceCriterion cc:connectsTo ;
+    owl:hasKey ( cc:dsCode ) ;
+    owl:disjointWith cc:DatabaseSessionPool ;
+    cco:enforcement "owl2-rl-native（cax-dw：同个体同时属两侧 ⇒ 推出 owl:Nothing）" ;
+    cco:contractSource "shared/model/topology.yaml#/types[code=JdbcDataSource]" ;
+    rdfs:comment "★ 刻意跨层父子：layer=App 却挂在 Data 层的抽象类 ConnectionPool 下（topology.yaml:146 原话「应用侧池在语义上也是一种连接池，不是拓扑包含」）。与 DatabaseSessionPool 互斥 —— 见 §3.3 与 docs\\04 §3.1/§3.2。"@zh .
+
+# ---- L2 承载层 -----------------------------------------------------------
+cc:Container a owl:Class ;
+    rdfs:subClassOf cco:RuntimeEntity , cco:DependentEntity ;
+    rdfs:label "容器"@zh ;
+    cco:rigidity "+R" ; cco:identity "+I" ; cco:unity "+U" ; cco:dependence "+D" ;
+    cco:identityCriterion cc:containerId ;
+    cco:dependenceCriterion cc:deployedOn ;
+    owl:hasKey ( cc:containerId ) ;
+    rdfs:subClassOf [ a owl:Restriction ; owl:onProperty cc:deployedOn ;
+                      owl:cardinality "1"^^xsd:nonNegativeInteger ] ;
+    cco:enforcement "owl2-rl-native:max 侧；min 侧 shacl-only（ccs:ContainerShape）；OntoClean 依赖义务见 cc-core.ttl 的 C-DEP 注" ;
+    cco:contractSource "shared/model/topology.yaml#/types[code=Container]" ;
+    rdfs:comment "契约：layer Runtime、key_attrs [containerId]、关系 DEPLOYED_ON 基数 N:1。"@zh .
+
+cc:Host a owl:Class ;
+    rdfs:subClassOf cco:PhysicalEntity ;
+    rdfs:label "宿主机"@zh ;
+    cco:rigidity "+R" ; cco:identity "+I" ; cco:unity "+U" ; cco:dependence "-D" ;
+    cco:identityCriterion cc:hostname ;
+    owl:hasKey ( cc:hostname ) ;
+    cco:contractSource "shared/model/topology.yaml#/types[code=Host]" ;
+    rdfs:comment "契约：layer Runtime、key_attrs [hostname]。"@zh .
+
+# ---- L3 数据层 -----------------------------------------------------------
+cc:GaussDBCluster a owl:Class ;
+    rdfs:subClassOf cco:DataEntity ;
+    rdfs:label "GaussDB 集群"@zh ;
+    cco:rigidity "+R" ; cco:identity "+I" ; cco:unity "+U" ; cco:dependence "-D" ;
+    cco:identityCriterion cc:clusterName ;
+    owl:hasKey ( cc:clusterName ) ;
+    cco:contractSource "shared/model/topology.yaml#/types[code=GaussDBCluster]" ;
+    rdfs:comment "契约：layer Data、key_attrs [clusterName]。"@zh .
+
+cc:GaussDBInstance a owl:Class ;
+    rdfs:subClassOf cco:DataEntity , cco:DependentEntity ;
+    rdfs:label "GaussDB 实例"@zh ;
+    cco:rigidity "+R" ; cco:identity "+I" ; cco:unity "+U" ; cco:dependence "+D" ;
+    cco:identityCriterion cc:instanceId ;
+    cco:dependenceCriterion cc:hosts ;
+    owl:hasKey ( cc:instanceId ) ;
+    rdfs:subClassOf [ a owl:Restriction ; owl:onProperty cc:hasSessionPool ;
+                      owl:cardinality "1"^^xsd:nonNegativeInteger ] ;
+    cco:enforcement "owl2-rl-native:max 侧；min 侧 shacl-only（ccs:GaussDBInstanceShape）" ;
+    cco:contractSource "shared/model/topology.yaml#/types[code=GaussDBInstance]" ;
+    rdfs:comment "契约：layer Data、key_attrs [instanceId]、关系 HAS_SESSION_POOL 基数 1:1。"@zh .
+
+cc:ConnectionPool a owl:Class ;
+    rdfs:subClassOf cco:DataEntity ;
+    rdfs:label "连接池（抽象）"@zh ;
+    cco:rigidity "+R" ; cco:identity "-I" ; cco:unity "+U" ; cco:dependence "-D" ;
+    cco:isAbstract true ;
+    cco:contractSource "shared/model/topology.yaml#/types[code=ConnectionPool]" ;
+    rdfs:comment "★ 抽象类（topology.yaml abstract: true）：不直接实例化，且 OWL 无「抽象」原语 —— 用注解 cco:isAbstract + SHACL sh:or (JdbcDataSource DatabaseSessionPool) 落地（ccs:ConnectionPoolShape）。"@zh .
+
+cc:DatabaseSessionPool a owl:Class ;
+    rdfs:subClassOf cc:ConnectionPool ;
+    rdfs:label "数据库侧会话池"@zh ;
+    cco:rigidity "+R" ; cco:identity "+I" ; cco:unity "+U" ; cco:dependence "+D" ;
+    cco:identityCriterion cc:poolId ;
+    cco:dependenceCriterion cc:hasSessionPool ;
+    owl:hasKey ( cc:poolId ) ;
+    owl:disjointWith cc:JdbcDataSource ;
+    cco:contractSource "shared/model/topology.yaml#/types[code=DatabaseSessionPool]" ;
+    rdfs:comment "契约：layer Data、parent ConnectionPool、key_attrs [poolId]。"@zh .
+
+cc:Session a owl:Class ;
+    rdfs:subClassOf cco:DataEntity , cco:DependentEntity ;
+    rdfs:label "会话"@zh ;
+    cco:rigidity "+R" ; cco:identity "+I" ; cco:unity "+U" ; cco:dependence "+D" ;
+    cco:identityCriterion cc:sessionId ;
+    cco:dependenceCriterion cc:hasSession ;
+    owl:hasKey ( cc:sessionId ) ;
+    cco:contractSource "shared/model/topology.yaml#/types[code=Session]" ;
+    rdfs:comment "契约：layer Data、key_attrs [sessionId]。★ topology.yaml:168-173 明确 state/waitEvent 不由本类属性承载（同事实只由指标码 db.session.state / db.session.wait_event 承载）。"@zh .
+
+cc:Query a owl:Class ;
+    rdfs:subClassOf cco:DataEntity , cco:DependentEntity ;
+    rdfs:label "查询"@zh ;
+    cco:rigidity "+R" ; cco:identity "+I" ; cco:unity "+U" ; cco:dependence "+D" ;
+    cco:identityCriterion cc:queryId ;
+    cco:dependenceCriterion cc:runsQuery ;
+    owl:hasKey ( cc:queryId ) ;
+    cco:contractSource "shared/model/topology.yaml#/types[code=Query]" ;
+    rdfs:comment "契约：layer Data、key_attrs [queryId]。"@zh .
+
+cc:Table a owl:Class ;
+    rdfs:subClassOf cco:DataEntity , cco:DependentEntity ;
+    rdfs:label "表"@zh ;
+    cco:rigidity "+R" ; cco:identity "+I" ; cco:unity "+U" ; cco:dependence "+D" ;
+    cco:identityCriterion cc:schemaName ;
+    cco:dependenceCriterion cc:accesses ;
+    owl:hasKey ( cc:schemaName cc:tableName ) ;
+    cco:contractSource "shared/model/topology.yaml#/types[code=Table]" ;
+    rdfs:comment "契约：layer Data、key_attrs [schemaName, tableName]。"@zh .
+
+# ★ 派生注释型（M1.5c）：不是 CCF 的对象类型，由 observations[] 逐条派生
+cc:Evidence a owl:Class ;
+    rdfs:subClassOf cco:InformationEntity , cco:DependentEntity ;
+    rdfs:label "观测证据"@zh ;
+    cco:rigidity "+R" ; cco:identity "+I" ; cco:unity "+U" ; cco:dependence "+D" ;
+    cco:identityCriterion cc:recordId ;
+    owl:hasKey ( cc:recordId ) ;
+    cco:contractSource "shared/model/topology.yaml#/types[code=Evidence]" ;
+    rdfs:comment "★ layer = null（不属 App/Runtime/Data 三层的任一层）⇒ 投影器**不得**为它写 cc:ccfLayer；SHACL 不为它建形状（docs\\04 §5 原文），其审计语义由 cc-audit.ttl / PROV-O 承担。粒度 = 每条 CCF 观测一个个体（U6 结案 = 方案 A）。"@zh .
+
+# ===========================================================================
+# 2) 对象属性：19 条（15 契约关系 + 4 派生反向关系）+ 1 条辅助属性
+#    domain/range 逐字取自 shared/mapping/rel-map.yaml
+# ===========================================================================
+
+cc:hasAppInstance a owl:ObjectProperty ;
+    rdfs:domain cc:CreditCardApp ; rdfs:range cc:AppInstance ;
+    owl:inverseOf cc:instanceOf ;
+    cco:contractSource "shared/mapping/rel-map.yaml#relations.HAS_APP_INSTANCE" ;
+    rdfs:comment "契约 cardinality 1:N。inverse 名 INSTANCE_OF 见 topology.yaml#inverse_relations。"@zh .
+
+cc:instanceOf a owl:ObjectProperty ;
+    rdfs:domain cc:AppInstance ; rdfs:range cc:CreditCardApp ;
+    cco:contractSource "shared/mapping/rel-map.yaml#inverse_relations.INSTANCE_OF" ;
+    rdfs:comment "派生反向关系（asserted: false）：契约要求两侧均不显式建边，由 owl:inverseOf 让推理器免费补出反向三元组。"@zh .
+
+cc:exposes a owl:ObjectProperty ;
+    rdfs:domain cc:CreditCardApp ; rdfs:range cc:AppEndpoint ;
+    cco:contractSource "shared/mapping/rel-map.yaml#relations.EXPOSES" ;
+    rdfs:comment "契约 cardinality 1:N。"@zh .
+
+cc:runsIn a owl:ObjectProperty ;
+    rdfs:domain cc:AppInstance ; rdfs:range cc:Container ;
+    owl:inverseOf cc:runs ;
+    cco:contractSource "shared/mapping/rel-map.yaml#relations.RUNS_IN" ;
+    rdfs:comment "★ 跨层关系（cross_layer: true）。契约 cardinality N:1。"@zh .
+
+cc:runs a owl:ObjectProperty ;
+    rdfs:domain cc:Container ; rdfs:range cc:AppInstance ;
+    cco:contractSource "shared/mapping/rel-map.yaml#inverse_relations.RUNS" ;
+    rdfs:comment "派生反向关系（asserted: false）。"@zh .
+
+cc:deployedOn a owl:ObjectProperty ;
+    rdfs:domain cc:Container ; rdfs:range cc:Host ;
+    owl:inverseOf cc:hostsContainer ;
+    cco:contractSource "shared/mapping/rel-map.yaml#relations.DEPLOYED_ON" ;
+    rdfs:comment "契约 cardinality N:1、cross_layer: false（契约修正：Container 与 Host 同属 Runtime 层）。"@zh .
+
+cc:hostsContainer a owl:ObjectProperty ;
+    rdfs:domain cc:Host ; rdfs:range cc:Container ;
+    cco:contractSource "shared/mapping/rel-map.yaml#inverse_relations.HOSTS_CONTAINER" ;
+    rdfs:comment "派生反向关系（asserted: false）。"@zh .
+
+cc:usesDataSource a owl:ObjectProperty ;
+    rdfs:domain cc:AppInstance ; rdfs:range cc:JdbcDataSource ;
+    cco:contractSource "shared/mapping/rel-map.yaml#relations.USES_DATASOURCE" ;
+    rdfs:comment "契约 cardinality N:1。"@zh .
+
+cc:connectsTo a owl:ObjectProperty ;
+    rdfs:domain cc:JdbcDataSource ; rdfs:range cc:GaussDBCluster ;
+    owl:inverseOf cc:acceptsConnectionFrom ;
+    cco:contractSource "shared/mapping/rel-map.yaml#relations.CONNECTS_TO" ;
+    rdfs:comment "★★ 跨层边界（应用→数据），F5/F6 的唯一区分点所在边（topology.yaml:268）。契约 cardinality N:1。"@zh .
+
+cc:acceptsConnectionFrom a owl:ObjectProperty ;
+    rdfs:domain cc:GaussDBCluster ; rdfs:range cc:JdbcDataSource ;
+    cco:contractSource "shared/mapping/rel-map.yaml#inverse_relations.ACCEPTS_CONNECTION_FROM" ;
+    rdfs:comment "派生反向关系（asserted: false）。"@zh .
+
+cc:resolvesTo a owl:ObjectProperty ;
+    rdfs:domain cc:JdbcDataSource ; rdfs:range cc:GaussDBInstance ;
+    cco:contractSource "shared/mapping/rel-map.yaml#relations.RESOLVES_TO" ;
+    rdfs:comment "跨层关系；主备切换时此边会变（F7）。契约 cardinality N:1。"@zh .
+
+cc:hasDbInstance a owl:ObjectProperty ;
+    rdfs:domain cc:GaussDBCluster ; rdfs:range cc:GaussDBInstance ;
+    cco:contractSource "shared/mapping/rel-map.yaml#relations.HAS_DB_INSTANCE" ;
+    rdfs:comment "契约 cardinality 1:N。★ 契约修正：与 hasAppInstance 必须是两个 IRI（原先共用 HAS_INSTANCE 会退化成 union range）。无 inverse（契约未登记）。"@zh .
+
+cc:hosts a owl:ObjectProperty ;
+    rdfs:domain cc:Host ; rdfs:range cc:GaussDBInstance ;
+    cco:contractSource "shared/mapping/rel-map.yaml#relations.HOSTS" ;
+    rdfs:comment "★ 跨层关系（承载→数据）。契约 cardinality 1:N。★ 与 cc:hostsContainer 是两个不同 IRI（一个指容器、一个指 DB 实例）；契约刻意不给它 inverse。"@zh .
+
+cc:hasSessionPool a owl:ObjectProperty ;
+    rdfs:domain cc:GaussDBInstance ; rdfs:range cc:DatabaseSessionPool ;
+    cco:contractSource "shared/mapping/rel-map.yaml#relations.HAS_SESSION_POOL" ;
+    cco:enforcement "owl2-rl-native: max 侧（类上 owl:cardinality 1 ⇒ 至多一个）；min 侧 shacl-only" ;
+    rdfs:comment "契约 cardinality 1:1（两侧各 1）。★ 只把「实例→池」一侧写成 owl:cardinality 1：契约未提供该关系的反向名，且若对池侧断言 owl:InverseFunctionalProperty，会对真实多实例共享池的拓扑报不一致 —— 保守处理，差额由 SHACL maxCount 兜底。"@zh .
+
+cc:hasSession a owl:ObjectProperty ;
+    rdfs:domain cc:DatabaseSessionPool ; rdfs:range cc:Session ;
+    cco:contractSource "shared/mapping/rel-map.yaml#relations.HAS_SESSION" ;
+    rdfs:comment "契约 cardinality 1:N。"@zh .
+
+cc:runsQuery a owl:ObjectProperty ;
+    rdfs:domain cc:Session ; rdfs:range cc:Query ;
+    cco:contractSource "shared/mapping/rel-map.yaml#relations.RUNS_QUERY" ;
+    rdfs:comment "契约 cardinality 1:N。"@zh .
+
+cc:accesses a owl:ObjectProperty ;
+    rdfs:domain cc:Query ; rdfs:range cc:Table ;
+    cco:contractSource "shared/mapping/rel-map.yaml#relations.ACCESSES" ;
+    rdfs:comment "契约 cardinality N:M（多对多 ⇒ 不施加任何基数公理）。"@zh .
+
+cc:replicatesTo a owl:ObjectProperty ;
+    rdfs:domain cc:GaussDBInstance ; rdfs:range cc:GaussDBInstance ;
+    a owl:FunctionalProperty ;
+    cco:contractSource "shared/mapping/rel-map.yaml#relations.REPLICATES_TO" ;
+    rdfs:comment "契约 cardinality 1:1。★ 只声明 FunctionalProperty（一个实例至多指向一个复制目标，RL prp-fp 原生可推）。未声明 InverseFunctionalProperty：真实主备部署可能多备库指向同一目标，断言逆函数性会产生假不一致。"@zh .
+
+# ★ 派生关系：域不受限（不声明 rdfs:domain），range = Evidence
+cc:hasEvidence a owl:ObjectProperty ;
+    rdfs:range cc:Evidence ;
+    cco:contractSource "shared/mapping/rel-map.yaml#relations.HAS_EVIDENCE" ;
+    rdfs:comment "★ 契约 from: \"*\" ⇒ **刻意不声明 rdfs:domain**（topology.yaml:320 原话）。若写多个 domain，OWL 2 RL 的 prp-dom 会把它们推成交集，域就不再是「任意类型」。"@zh .
+
+# ★ 属性链：表达「传递但不声明 TransitiveProperty」（docs/04 §3.2 / §4 D5）
+cc:indirectlyHostedOn a owl:ObjectProperty ;
+    rdfs:domain cc:AppInstance ; rdfs:range cc:Host ;
+    owl:propertyChainAxiom ( cc:runsIn cc:deployedOn ) ;
+    cco:contractSource "docs/04-方案2设计（本体+LLM）.md §3.2" ;
+    rdfs:comment "★ 契约**没有**这条关系（无对应 code）—— 它是 docs\\04 §3.2 明确要求的 OWL 独有表达：AppInstance→Container→Host 的传递性用属性链表达，而不是 owl:TransitiveProperty。理由：属性链只对**无环**的拓扑关系使用；因果图成环（causal-edges.yaml#meta.transitive: false）绝不这样表达。推理闭包新增 1 条属性，计入成本口径。"@zh .
+
+# ===========================================================================
+# 3) 数据属性（类自有属性，逐条来自 type-map.yaml#types[*].attrs）
+#    ★ 4 条属性被多个类共享（unionDomain 陷阱）⇒ 用 owl:unionOf 联合 domain，
+#      否则 OWL 2 RL 的 prp-dom 会把多个 domain 推成交集，属性变得「无处可挂」。
+# ===========================================================================
+
+# ---- 应用层 --------------------------------------------------------------
+cc:appCode a owl:DatatypeProperty ; rdfs:domain cc:CreditCardApp ; rdfs:range xsd:string .
+cc:appName a owl:DatatypeProperty ; rdfs:domain cc:CreditCardApp ; rdfs:range xsd:string .
+cc:techStack a owl:DatatypeProperty ; rdfs:domain cc:CreditCardApp ; rdfs:range xsd:string .
+cc:instanceId a owl:DatatypeProperty ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( cc:AppInstance cc:GaussDBInstance ) ] ;
+    rdfs:range xsd:string ;
+    rdfs:comment "★ 共享属性（AppInstance.instanceId 与 GaussDBInstance.instanceId 同名同义）。契约 topology.yaml 两边都把它列为 key_attrs，故必须联合 domain；只写两个 rdfs:domain 会被 prp-dom 推成交集（空集）。"@zh .
+cc:jvmVersion a owl:DatatypeProperty ; rdfs:domain cc:AppInstance ; rdfs:range xsd:string .
+cc:pid a owl:DatatypeProperty ; rdfs:domain cc:AppInstance ; rdfs:range xsd:integer .
+cc:startTime a owl:DatatypeProperty ; rdfs:domain cc:AppInstance ; rdfs:range xsd:dateTime .
+cc:path a owl:DatatypeProperty ; rdfs:domain cc:AppEndpoint ; rdfs:range xsd:string .
+cc:protocol a owl:DatatypeProperty ; rdfs:domain cc:AppEndpoint ; rdfs:range xsd:string .
+cc:sloP99Ms a owl:DatatypeProperty ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( cc:AppEndpoint cc:CreditCardApp ) ] ;
+    rdfs:range xsd:decimal ;
+    rdfs:comment "★ 共享属性：契约在 CreditCardApp 与 AppEndpoint 两个类型上都定义了 sloP99Ms（同义）。"@zh .
+cc:dsCode a owl:DatatypeProperty ; rdfs:domain cc:JdbcDataSource ; rdfs:range xsd:string .
+cc:driverName a owl:DatatypeProperty ; rdfs:domain cc:JdbcDataSource ; rdfs:range xsd:string .
+cc:driverVersion a owl:DatatypeProperty ; rdfs:domain cc:JdbcDataSource ; rdfs:range xsd:string .
+cc:jdbcUrlMasked a owl:DatatypeProperty ; rdfs:domain cc:JdbcDataSource ; rdfs:range xsd:string ;
+    rdfs:comment "脱敏值（不含口令）。"@zh .
+cc:authMode a owl:DatatypeProperty ; rdfs:domain cc:JdbcDataSource ; rdfs:range xsd:string ;
+    rdfs:comment "契约取值域 password | md5 | sha256 | sasl。★ 枚举的**强制**形式在 SHACL sh:in（RL 不支持 owl:oneOf）。"@zh .
+cc:sslEnabled a owl:DatatypeProperty ; rdfs:domain cc:JdbcDataSource ; rdfs:range xsd:boolean .
+cc:poolImpl a owl:DatatypeProperty ; rdfs:domain cc:JdbcDataSource ; rdfs:range xsd:string ;
+    rdfs:comment "契约取值域 HikariCP | Druid | DBCP。"@zh .
+cc:maxPoolSize a owl:DatatypeProperty ; rdfs:domain cc:JdbcDataSource ; rdfs:range xsd:integer ;
+    rdfs:comment "★ 被 FM-APP-POOL-EXHAUSTED 的判据以 entity_property:JdbcDataSource.maxPoolSize 引用 —— **值只从这里取，规则里不得内联数字**。"@zh .
+cc:minIdle a owl:DatatypeProperty ; rdfs:domain cc:JdbcDataSource ; rdfs:range xsd:integer .
+cc:connectionTimeoutMs a owl:DatatypeProperty ; rdfs:domain cc:JdbcDataSource ; rdfs:range xsd:integer ;
+    rdfs:comment "★ 被 FM-CTR-NET-UNREACHABLE 的判据以 entity_property 引用（超时判定）。"@zh .
+cc:idleTimeoutMs a owl:DatatypeProperty ; rdfs:domain cc:JdbcDataSource ; rdfs:range xsd:integer .
+cc:validationQuery a owl:DatatypeProperty ; rdfs:domain cc:JdbcDataSource ; rdfs:range xsd:string .
+
+# ---- 承载层 --------------------------------------------------------------
+cc:containerId a owl:DatatypeProperty ; rdfs:domain cc:Container ; rdfs:range xsd:string .
+cc:image a owl:DatatypeProperty ; rdfs:domain cc:Container ; rdfs:range xsd:string .
+cc:imageDigest a owl:DatatypeProperty ; rdfs:domain cc:Container ; rdfs:range xsd:string .
+cc:restartCount a owl:DatatypeProperty ; rdfs:domain cc:Container ; rdfs:range xsd:integer .
+cc:cpuLimitCores a owl:DatatypeProperty ; rdfs:domain cc:Container ; rdfs:range xsd:decimal .
+cc:memLimitMb a owl:DatatypeProperty ; rdfs:domain cc:Container ; rdfs:range xsd:integer ;
+    rdfs:comment "★ 被因果边 E12 的条件以 entity_property:Container.memLimitMb 引用。"@zh .
+cc:state a owl:DatatypeProperty ; rdfs:domain cc:Container ; rdfs:range xsd:string ;
+    rdfs:comment "契约取值域 Running | Waiting | Terminated | Unknown（结构性封闭：上游 service/probes/container_probe.py L267-274 由 Prometheus kube-state-metrics 的 running/waiting/terminated 三分支 + else 兜底决定，原样透传；历史小写三值已随 M2.27 收敛删除。与指标码 container.status 并存：本属性是低基数状态属性，指标是观测值 —— 契约同时定义了二者）。"@zh .
+cc:hostname a owl:DatatypeProperty ; rdfs:domain cc:Host ; rdfs:range xsd:string .
+cc:ip a owl:DatatypeProperty ; rdfs:domain cc:Host ; rdfs:range xsd:string .
+cc:cpuCores a owl:DatatypeProperty ; rdfs:domain cc:Host ; rdfs:range xsd:integer ;
+    rdfs:comment "★ threshold load1_per_core_light 的 rationale 要求「按 Host.cpuCores 归一化」—— 归一化基准就是这个属性（不是数字）。"@zh .
+cc:memTotalGb a owl:DatatypeProperty ; rdfs:domain cc:Host ; rdfs:range xsd:decimal .
+cc:osVersion a owl:DatatypeProperty ; rdfs:domain cc:Host ; rdfs:range xsd:string .
+cc:kernelVersion a owl:DatatypeProperty ; rdfs:domain cc:Host ; rdfs:range xsd:string .
+cc:role a owl:DatatypeProperty ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( cc:GaussDBInstance cc:Host ) ] ;
+    rdfs:range xsd:string ;
+    rdfs:comment "★ 共享属性：GaussDBInstance 取值域 primary|standby|datanode，Host 取值域 app-node|db-node|mixed（同名字段、不同取值域 ⇒ SHACL 两侧形状各写各的 sh:in）。"@zh .
+
+# ---- 数据层 --------------------------------------------------------------
+cc:clusterName a owl:DatatypeProperty ; rdfs:domain cc:GaussDBCluster ; rdfs:range xsd:string .
+cc:version a owl:DatatypeProperty ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( cc:CreditCardApp cc:GaussDBCluster ) ] ;
+    rdfs:range xsd:string ;
+    rdfs:comment "★ 共享属性：应用版本与集群版本同名字段。"@zh .
+cc:mode a owl:DatatypeProperty ; rdfs:domain cc:GaussDBCluster ; rdfs:range xsd:string ;
+    rdfs:comment "契约取值域 primary-standby | distributed。"@zh .
+cc:nodeCount a owl:DatatypeProperty ; rdfs:domain cc:GaussDBCluster ; rdfs:range xsd:integer .
+cc:hostName a owl:DatatypeProperty ; rdfs:domain cc:GaussDBInstance ; rdfs:range xsd:string .
+cc:port a owl:DatatypeProperty ; rdfs:domain cc:GaussDBInstance ; rdfs:range xsd:integer .
+cc:datanodeId a owl:DatatypeProperty ; rdfs:domain cc:GaussDBInstance ; rdfs:range xsd:string .
+cc:poolId a owl:DatatypeProperty ; rdfs:domain cc:DatabaseSessionPool ; rdfs:range xsd:string .
+cc:maxConnections a owl:DatatypeProperty ; rdfs:domain cc:DatabaseSessionPool ; rdfs:range xsd:integer .
+cc:superuserReserved a owl:DatatypeProperty ; rdfs:domain cc:DatabaseSessionPool ; rdfs:range xsd:integer .
+cc:sessionId a owl:DatatypeProperty ; rdfs:domain cc:Session ; rdfs:range xsd:string .
+cc:user a owl:DatatypeProperty ; rdfs:domain cc:Session ; rdfs:range xsd:string .
+cc:clientAddr a owl:DatatypeProperty ; rdfs:domain cc:Session ; rdfs:range xsd:string .
+cc:xactStart a owl:DatatypeProperty ; rdfs:domain cc:Session ; rdfs:range xsd:dateTime .
+cc:queryId a owl:DatatypeProperty ; rdfs:domain cc:Query ; rdfs:range xsd:string .
+cc:sqlFingerprint a owl:DatatypeProperty ; rdfs:domain cc:Query ; rdfs:range xsd:string .
+cc:planHash a owl:DatatypeProperty ; rdfs:domain cc:Query ; rdfs:range xsd:string .
+cc:accessMode a owl:DatatypeProperty ; rdfs:domain cc:Query ; rdfs:range xsd:string ;
+    rdfs:comment "契约取值域 seq_scan | index_scan。"@zh .
+cc:schemaName a owl:DatatypeProperty ; rdfs:domain cc:Table ; rdfs:range xsd:string .
+cc:tableName a owl:DatatypeProperty ; rdfs:domain cc:Table ; rdfs:range xsd:string .
+
+# ---- 证据型（契约 8 属性，逐字来自 type-map.yaml#observation_projection.evidence.attrs；
+#      末尾 3 条 delta/deltaWindowS/counterReset 是 v1.0.3（X-7）新增的**超集增补**，
+#      映射表尚未收录 ⇒ 只在本模块声明，不改映射表）
+cc:recordId a owl:DatatypeProperty ; rdfs:domain cc:Evidence ; rdfs:range xsd:string ;
+    rdfs:comment "= CCF observation.id（obs-000001）。"@zh .
+cc:metricCode a owl:DatatypeProperty ; rdfs:domain cc:Evidence ; rdfs:range xsd:string .
+cc:status a owl:DatatypeProperty ; rdfs:domain cc:Evidence ; rdfs:range xsd:string ;
+    rdfs:comment "契约取值域 collected | notCollected | collectedEmpty。★ 三态语义不同：只有 notCollected 能否定事实。"@zh .
+cc:rawValue a owl:DatatypeProperty ; rdfs:domain cc:Evidence ; rdfs:range xsd:string .
+cc:rawUnit a owl:DatatypeProperty ; rdfs:domain cc:Evidence ; rdfs:range xsd:string .
+cc:reason a owl:DatatypeProperty ; rdfs:domain cc:Evidence ; rdfs:range xsd:string .
+cc:probe a owl:DatatypeProperty ; rdfs:domain cc:Evidence ; rdfs:range xsd:string .
+cc:capturedAt a owl:DatatypeProperty ; rdfs:domain cc:Evidence ; rdfs:range xsd:dateTime .
+
+# ---- ★ v1.0.3（X-7）新增：窗口基线三属性。锚点 = shared/model/ccf.schema.json#/$defs/observation
+#      （delta :433-436、deltaWindowS :437-440、counterReset :429-432 的 description）。
+#      采集侧由 CCF 观测字段承载（本方案不实现采集）；规则层据此实现 increased/decreased 三值。
+cc:delta a owl:DatatypeProperty ; rdfs:domain cc:Evidence ; rdfs:range xsd:decimal ;
+    rdfs:comment "★ v1.0.3（X-7）：窗口内变化量（observation.delta）。**可选**：缺失 ⇒ 依赖它的判据 unjudgeable（既不成立也不证伪），规则不得据此判故障成立，须登记 ccf:unjudgeablePolicy 所指台账；严禁静默当 false。"@zh .
+cc:deltaWindowS a owl:DatatypeProperty ; rdfs:domain cc:Evidence ; rdfs:range xsd:integer ;
+#   ★ 2026-10-13 端到端修复：range 原写 xsd:decimal，但 shared/model/ccf.schema.json 的
+#     deltaWindowS 声明为 type="integer"（minimum=1）⇒ 两侧不一致，被 C5.1 抓出。
+#     窗口秒数本就是整数（gaussdb 探针用 int(round(now-pts))）⇒ 改为 xsd:integer。
+    rdfs:comment "★ v1.0.3（X-7）：delta 的窗口秒数。契约 ccf.schema.json 规定「出现 delta 时必须同时出现 deltaWindowS」（if/then 约束）。"@zh .
+cc:counterReset a owl:DatatypeProperty ; rdfs:domain cc:Evidence ; rdfs:range xsd:boolean ;
+    rdfs:comment "★ v1.0.3（X-7）：累计型计数器在窗口内是否重置。为 true 时速率不可计算 ⇒ **规则层必须放弃该证据**（不得据此判 increased/decreased）。"@zh .
+
+# ---- 三方案共用的中性属性（type-map.yaml#common_properties.onto，逐字）
+cc:ccfId a owl:DatatypeProperty ; rdfs:range xsd:string ;
+    rdfs:comment "中性实例 id（两侧逐字同名）。**不声明 domain**：它写在所有业务个体上，声明 domain 会引入不必要的类归属约束。"@zh .
+cc:ccfSnapshotId a owl:DatatypeProperty ; rdfs:range xsd:string ;
+    rdfs:comment "快照冻结标识（= graph_iri_template 的 {snapshotId}）。★ F7 的「时间对齐」在单期数据下就靠它：同一 snapshotId ⇒ 同一采集窗口（docs\\01 §8 已裁定不引入 OWL-Time）。"@zh .
+cc:ccfLayer a owl:DatatypeProperty ; rdfs:range xsd:string ;
+    rdfs:comment "层标记（App|Runtime|Data）。cc:Evidence **不得**有该属性（layer: null）。枚举强制在 SHACL ccs:LayerEnumShape。"@zh .
+cc:ccfType a owl:DatatypeProperty ; rdfs:range xsd:string ;
+    rdfs:comment "中性类型名（= topology.yaml 的 code）。"@zh .
+
+# ===========================================================================
+# 4) 契约缺陷与偏差（只报告，不就地改契约；供报告「诚实清单」引用）
+# ===========================================================================
+# X-1  docs/04 §6 的 r02 示例 prologue 声明了两条**映射表里不存在**的前缀：
+#        cct: <https://credit-card-ops.ai/onto/threshold#>  （映射表无 threshold 基址）
+#        cco: <https://credit-card-ops.ai/onto/obs#>        （映射表里 cco = .../core#）
+#      ⇒ 本实现把**阈值个体**放进 ccm:（指标/阈值同属 metrics.yaml 契约命名空间），
+#        即 ccm:t_<阈值名>；不新造命名空间。见 cc-metric.ttl。
+# X-2  docs/04 §6 的 r02 示例 WHERE 里既写 `FILTER (... > 0)`（数字字面量），
+#        又引用了 db.table.dead_tuple_ratio —— 而它在 fault-modes.yaml 里**不属于**
+#        FM-DB-SLOW-QUERY 的 detect 条件。⇒ 本实现严格按 fault-modes.yaml 的
+#        detect 逐条实现，不加契约外条件。见 scheme2-onto/rules/r02.rq。
+# X-3  docs/04 §4.5 示例把阈值内联成 `ccc:condValue "0.9"^^xsd:decimal`，
+#        而契约条件写的是 `threshold:cpu_usage_ratio_severe#critical`（引用式）。
+#        ⇒ 两处口径冲突：本实现统一走**引用式**（ccc:condThreshold → ccm:t_* +
+#        ccc:condTier），零内联数值。见 cc-causal.ttl。
+# X-4  docs/04 §4.5 示例写 `ccc:CausalLink-E7 a owl:Class .` —— 把**个体**名声明成了类。
+#        本实现按文件自身意图修正为 `ccc:CausalLink a owl:Class` 并只在 §4.5 注记该笔误。

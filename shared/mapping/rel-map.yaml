@@ -1,0 +1,193 @@
+# ============================================================================
+# rel-map.yaml · 关系的中性名 → KG 名 / ONTO 名**显式映射表**（是数据不是代码）
+# ----------------------------------------------------------------------------
+# 权威出处：docs/01-场景建模与范围定义.md §1.1、docs/00 §6.3、裁决 13
+# 输入契约：shared/model/topology.yaml
+# 消费者：  投影器 P1（Neo4j）/ P2（GraphDB）——**只读本表**
+# ----------------------------------------------------------------------------
+# ★ OWL 对象属性名**不是** relationCode 的机械小驼峰变换：
+#   `USES_DATASOURCE` 的 OWL 名是 `cc:usesDataSource`（不是 usesDatasource），
+#   所以这 19 个名字必须**显式冻结**在表里，不得由代码推导。
+# ★ M1.5c 追加：`HAS_EVIDENCE`（派生注释关系）——不由 CCF `relations[]` 断言，
+#   由投影器从 `observations[]` 派生（`derived_from: observations`）后写入两库。
+# ============================================================================
+
+meta:
+  version: "1.1.0"
+  date: "2026-10-05"
+  generated_from:
+    - shared/model/topology.yaml
+  counts:
+    relations: 15
+    inverse_relations: 4
+    asserted_kg: 14
+    derived: 1
+  rules:
+    - "投影器只投影 relations[]（asserted: true）；inverse_relations 一律不写入 CCF 的 relations[]"
+    - "KG 侧 4 条反向关系同样不建边（运行时靠 Cypher 反向匹配），保证两侧实例数可直接对账"
+    - "ONTO 侧反向属性由 owl:inverseOf 声明，推理器免费获得，不显式断言"
+
+relations:
+  ACCESSES:
+    from: "Query"
+    to: "Table"
+    cardinality: "N:M"
+    cross_layer: false
+    kg_reltype: "CC_ACCESSES"
+    onto_property: "cc:accesses"
+    asserted: true
+  CONNECTS_TO:
+    from: "JdbcDataSource"
+    to: "GaussDBCluster"
+    cardinality: "N:1"
+    cross_layer: true
+    kg_reltype: "CC_CONNECTS_TO"
+    onto_property: "cc:connectsTo"
+    asserted: true
+    inverse_code: ACCEPTS_CONNECTION_FROM
+    onto_inverse_property: "cc:acceptsConnectionFrom"
+  DEPLOYED_ON:
+    from: "Container"
+    to: "Host"
+    cardinality: "N:1"
+    cross_layer: false
+    kg_reltype: "CC_DEPLOYED_ON"
+    onto_property: "cc:deployedOn"
+    asserted: true
+    inverse_code: HOSTS_CONTAINER
+    onto_inverse_property: "cc:hostsContainer"
+  EXPOSES:
+    from: "CreditCardApp"
+    to: "AppEndpoint"
+    cardinality: "1:N"
+    cross_layer: false
+    kg_reltype: "CC_EXPOSES"
+    onto_property: "cc:exposes"
+    asserted: true
+  HAS_APP_INSTANCE:
+    from: "CreditCardApp"
+    to: "AppInstance"
+    cardinality: "1:N"
+    cross_layer: false
+    kg_reltype: "CC_HAS_APP_INSTANCE"
+    onto_property: "cc:hasAppInstance"
+    asserted: true
+    inverse_code: INSTANCE_OF
+    onto_inverse_property: "cc:instanceOf"
+  HAS_DB_INSTANCE:
+    from: "GaussDBCluster"
+    to: "GaussDBInstance"
+    cardinality: "1:N"
+    cross_layer: false
+    kg_reltype: "CC_HAS_DB_INSTANCE"
+    onto_property: "cc:hasDbInstance"
+    asserted: true
+  HAS_EVIDENCE:
+    from: "*"
+    to: "Evidence"
+    cardinality: "1:N"
+    cross_layer: false
+    kg_reltype: "CC_HAS_EVIDENCE"
+    onto_property: "cc:hasEvidence"
+    asserted: false
+    derived_from: observations
+  HAS_SESSION:
+    from: "DatabaseSessionPool"
+    to: "Session"
+    cardinality: "1:N"
+    cross_layer: false
+    kg_reltype: "CC_HAS_SESSION"
+    onto_property: "cc:hasSession"
+    asserted: true
+  HAS_SESSION_POOL:
+    from: "GaussDBInstance"
+    to: "DatabaseSessionPool"
+    cardinality: "1:1"
+    cross_layer: false
+    kg_reltype: "CC_HAS_SESSION_POOL"
+    onto_property: "cc:hasSessionPool"
+    asserted: true
+  HOSTS:
+    from: "Host"
+    to: "GaussDBInstance"
+    cardinality: "1:N"
+    cross_layer: true
+    kg_reltype: "CC_HOSTS"
+    onto_property: "cc:hosts"
+    asserted: true
+  REPLICATES_TO:
+    from: "GaussDBInstance"
+    to: "GaussDBInstance"
+    cardinality: "1:1"
+    cross_layer: false
+    kg_reltype: "CC_REPLICATES_TO"
+    onto_property: "cc:replicatesTo"
+    asserted: true
+  RESOLVES_TO:
+    from: "JdbcDataSource"
+    to: "GaussDBInstance"
+    cardinality: "N:1"
+    cross_layer: true
+    kg_reltype: "CC_RESOLVES_TO"
+    onto_property: "cc:resolvesTo"
+    asserted: true
+  RUNS_IN:
+    from: "AppInstance"
+    to: "Container"
+    cardinality: "N:1"
+    cross_layer: true
+    kg_reltype: "CC_RUNS_IN"
+    onto_property: "cc:runsIn"
+    asserted: true
+    inverse_code: RUNS
+    onto_inverse_property: "cc:runs"
+  RUNS_QUERY:
+    from: "Session"
+    to: "Query"
+    cardinality: "1:N"
+    cross_layer: false
+    kg_reltype: "CC_RUNS_QUERY"
+    onto_property: "cc:runsQuery"
+    asserted: true
+  USES_DATASOURCE:
+    from: "AppInstance"
+    to: "JdbcDataSource"
+    cardinality: "N:1"
+    cross_layer: false
+    kg_reltype: "CC_USES_DATASOURCE"
+    onto_property: "cc:usesDataSource"
+    asserted: true
+
+inverse_relations:
+  ACCEPTS_CONNECTION_FROM:
+    from: "GaussDBCluster"
+    to: "JdbcDataSource"
+    inverse_code: CONNECTS_TO
+    kg_reltype: "CC_ACCEPTS_CONNECTION_FROM"
+    onto_property: "cc:acceptsConnectionFrom"
+    asserted: false
+    note: "OWL 侧由 owl:inverseOf 声明；两侧均不显式建边"
+  HOSTS_CONTAINER:
+    from: "Host"
+    to: "Container"
+    inverse_code: DEPLOYED_ON
+    kg_reltype: "CC_HOSTS_CONTAINER"
+    onto_property: "cc:hostsContainer"
+    asserted: false
+    note: "OWL 侧由 owl:inverseOf 声明；两侧均不显式建边"
+  INSTANCE_OF:
+    from: "AppInstance"
+    to: "CreditCardApp"
+    inverse_code: HAS_APP_INSTANCE
+    kg_reltype: "CC_INSTANCE_OF"
+    onto_property: "cc:instanceOf"
+    asserted: false
+    note: "OWL 侧由 owl:inverseOf 声明；两侧均不显式建边"
+  RUNS:
+    from: "Container"
+    to: "AppInstance"
+    inverse_code: RUNS_IN
+    kg_reltype: "CC_RUNS"
+    onto_property: "cc:runs"
+    asserted: false
+    note: "OWL 侧由 owl:inverseOf 声明；两侧均不显式建边"

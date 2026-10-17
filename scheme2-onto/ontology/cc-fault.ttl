@@ -1,0 +1,780 @@
+# ============================================================================
+# scheme2-onto/ontology/cc-fault.ttl  ·  方案2 故障域模块（ccf:）
+# ----------------------------------------------------------------------------
+# 职责（docs/04 §3 模块表）：23 个故障模式 + 判据公理（detect 的 all_of/any_of
+#   结构 + distinguishing_evidence 否定性证据 + 叶子根因的排除法判据）。
+# 命名空间（逐字取自 type-map.yaml#namespaces.onto）：ccf = .../onto/fault#
+# 上游契约：shared/model/fault-modes.yaml（14 模式 + meta.predicate_enum）
+#           —— 每条断言都带 cco:contractSource，逐条可追溯。
+#
+# ★ 故障域词表镜像（父代理追加规格；docs/03:187-211 已定方案1 侧词表）：
+#   ccf:judgedBy  ←→ CC_JUDGED_BY   边属性 op / operandKind / operandValue / role
+#   ccf:affects   ←→ CC_AFFECTS     边属性 severity
+#   上述「边属性」在 RDF 里没有边，故**物化到 ccf:Judgment 个体**上：
+#     ccf:jOp / ccf:jOperandKind / ccf:jOperandValue / ccf:jRole / ccf:affectsSeverity
+#   ★ 诚实标注：docs/04 未给出 ccf:fmComponentType / ccf:fmDetectionMode 的规格
+#     （§3 模块表与 §5 形状清单都没写这两个属性名）。本实现按与方案1 **同形的
+#     lowerCamel** 取名，值域与判定口径见下（属自定，已进末条报告的诚实清单）：
+#       ccf:fmComponentType  取值 = cc: 类 IRI（来自契约 component_type）
+#       ccf:fmDetectionMode  取值 ∈ threshold | predicate | mixed | exclusion
+#         （threshold=判据全部为「与数值参照比较」；predicate=全部为符号/状态谓词；
+#          mixed=混合；exclusion=叶子根因的排除法）
+#
+# ★ 这些是**故障域原生关系**（来自契约 code），**不在** shared/mapping/rel-map.yaml
+#   里 —— 不得把它们当作 ABox 投影关系；映射表未增补任何关系。
+#
+# ★ X-5（契约缺陷 → **v1.0.3 已裁定**；依据 shared/model/fault-modes.yaml#meta.detect_semantics）：
+#   FM-APP-INSTANCE-RESTART / FM-CTR-NET-UNREACHABLE 的 detect 里 any_of 与 all_of
+#   是**同级并列键**（另有 FM-DB-INSTANCE-DOWN 只含 any_of 组）。裁定后的语义：
+#   **组内** all_of 全部成立、any_of 至少一条成立；**组间 AND**（all_of 组成立 ∧
+#   any_of 组成立）；缺省组视为中性成立。★ 禁止组间 OR（会把 all_of 承载的
+#   「必需条件」降级为可选，单条弱证据即可触发）。本模块把两个算子都落成
+#   **显式公理**：每个组个体带 ccf:groupOp（all_of ⇒ AND、any_of ⇒ OR），
+#   每个模式个体带 ccf:betweenGroupsOp "AND"，使分组语义可机检、不靠默认值。
+#
+# ★ X-7（v1.0.3 裁定）：符号谓词中的 increased / decreased **需要窗口基线**
+#   （判定落在 observation.delta）：delta 缺失 ⇒ 该判据 **unjudgeable**（既不成立
+#   也不证伪）；规则不得据此判故障成立，须按 WARN「待标定/不可机判」登记台账；
+#   **严禁静默转为 false**。本模块给每条带 ccf:jPredicate 的判据补
+#   ccf:jPredicateSemantics（逐字取自 fault-modes.yaml#meta.predicate_semantics），
+#   increased / decreased 另加 ccf:jBaselineRequired true 与 ccf:unjudgeablePolicy
+#   （契约原文）；规则体（rules\r03,r04,r06,r07.rq）实现「成立 / 不可判」三值分支。
+#
+# ★ 判定口径：ccf:FaultMode 的**个体**是 14 个（与契约集合相等，不多不少）；
+#   F5 的叶子根因按契约 causal-edges.yaml#leaf_root_causes 落成 ccf:RootCause
+#   个体（ccf:FM-APP-AUTH-INCOMPATIBLE），**不计入** 14 —— 因为它在契约里是
+#   leaf_root_causes.subtype，而不是 fault_modes 条目。
+#
+# ★ OWL 原生 vs SHACL 补足（docs/04 §D6，分开计）：
+#   OWL 原生（本模块）：rdfs:subClassOf / rdfs:domain / rdfs:range / owl:inverseOf /
+#     owl:disjointWith / 个体的类型断言。**disjointness 用 OWL 原生表达**：
+#     23 个故障模式声明为**互斥个体**（owl:AllDifferent）——这是方案1（LPG 无
+#     互斥语义）无法表达、只能靠代码断言的公理（见报告「真正的强于」）。
+#   SHACL 补足（ccs:，不在本模块）：severity 枚举、chain code 枚举、judgment 必须
+#     有 metric 或 metricCode、anchor 成对（op 与 operandValue 同现）等 CWA 约束。
+# ============================================================================
+@prefix ccf:     <https://credit-card-ops.ai/onto/fault#> .
+@prefix cc:      <https://credit-card-ops.ai/onto/topology#> .
+@prefix ccm:     <https://credit-card-ops.ai/onto/metric#> .
+@prefix cco:     <https://credit-card-ops.ai/onto/core#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix dcat:    <http://www.w3.org/ns/dcat#> .
+
+ccf: a owl:Ontology , dcat:Dataset ;
+    dcterms:title "信用卡跨层运维本体 · 故障域模块（cc-fault）"@zh ;
+    dcterms:description "14 故障模式 + 23 条判据 + 16 个判据组 + 1 条叶子根因（排除法）+ 否定性证据。"@zh ;
+    cco:contractSource "shared/model/fault-modes.yaml + shared/model/causal-edges.yaml#/leaf_root_causes" ;
+    skos:note "判据的 all_of/any_of 分组语义、否定性证据（distinguishing_evidence）与叶子根因的排除法判据都在本模块内以个体+公理表达，不用代码硬编码。"@zh .
+
+# ===========================================================================
+# 1) 类
+# ===========================================================================
+ccf:FaultMode a owl:Class ;
+    rdfs:subClassOf cco:Occurrent ;
+    rdfs:label "故障模式"@zh ;
+    rdfs:comment "一次具体的故障发生（反刚性：同一对象可以此刻故障、彼时正常）。14 个个体与契约 fault_modes 一一对应。"@zh ;
+    cco:rigidity "-R" ; cco:identity "-I" ; cco:unity "-U" ; cco:dependence "-D" ;
+    cco:contractSource "fault-modes.yaml#/fault_modes" .
+
+ccf:RootCause a owl:Class ;
+    rdfs:subClassOf cco:Occurrent ;
+    rdfs:label "根因（叶子）"@zh ;
+    rdfs:comment "契约 leaf_root_causes 定义的**叶子歧义点**：多个链共享同一故障节点时，靠排除法（否定性证据）收敛到的根因。"@zh ;
+    cco:rigidity "-R" ; cco:identity "-I" ; cco:unity "-U" ; cco:dependence "-D" ;
+    cco:contractSource "causal-edges.yaml#/leaf_root_causes" .
+
+ccf:Judgment a owl:Class ;
+    rdfs:subClassOf cco:InformationEntity ;
+    rdfs:label "判据"@zh ;
+    rdfs:comment "一条判据 = 「某指标满足某条件」。镜像方案1 的 CC_JUDGED_BY 边属性（op/operandKind/operandValue/role）。"@zh ;
+    cco:rigidity "+R" ; cco:identity "-I" ; cco:unity "+U" ; cco:dependence "-D" ;
+    cco:contractSource "fault-modes.yaml#/fault_modes/detect + docs/03:187-211（方案1 词表镜像）" .
+
+ccf:JudgmentGroup a owl:Class ;
+    rdfs:subClassOf cco:InformationEntity ;
+    rdfs:label "判据组"@zh ;
+    rdfs:comment "all_of / any_of 分组（X-5，v1.0.3 裁定：组内 AND/OR、组间 AND、缺省组中性成立；两个算子分别物化为 ccf:groupOp 与 ccf:betweenGroupsOp）。"@zh ;
+    cco:rigidity "+R" ; cco:identity "-I" ; cco:unity "+U" ; cco:dependence "-D" .
+
+ccf:Finding a owl:Class ;
+    rdfs:subClassOf cco:InformationEntity ;
+    rdfs:label "诊断发现"@zh ;
+    rdfs:comment "规则命中后产出的结论（cc-audit 模块把本类挂到 prov:Entity）。"@zh ;
+    cco:rigidity "+R" ; cco:identity "-I" ; cco:unity "+U" ; cco:dependence "-D" .
+
+# ===========================================================================
+# 2) 对象属性（含 2 条 owl:inverseOf —— 方案1 的边属性无法表达的方向性）
+# ===========================================================================
+ccf:fmComponentType a owl:ObjectProperty ; rdfs:domain ccf:FaultMode ; rdfs:range owl:Class ;
+    rdfs:label "故障组件类型"@zh ;
+    rdfs:comment "来自契约 component_type；取值是 cc: 类 IRI。★ docs\\04 未给规格 ⇒ 按方案1 对称性取 lowerCamel。"@zh .
+ccf:affects a owl:ObjectProperty ; rdfs:domain ccf:FaultMode ; rdfs:range owl:Class ;
+    rdfs:label "影响（组件类型）"@zh ;
+    rdfs:comment "镜像方案1 的 CC_AFFECTS（副作用属性 severity 物化为 ccf:affectsSeverity）。T3 校验其目标 == ccf:fmComponentType 的目标。"@zh .
+ccf:judgedBy a owl:ObjectProperty ; rdfs:domain ccf:FaultMode ; rdfs:range ccf:Judgment ;
+    owl:inverseOf ccf:judges ;
+    rdfs:label "判定依据"@zh ;
+    rdfs:comment "镜像方案1 的 CC_JUDGED_BY。T2 校验每条故障模式 ≥1 条本断言。"@zh .
+ccf:judges a owl:ObjectProperty ; rdfs:domain ccf:Judgment ; rdfs:range ccf:FaultMode ;
+    rdfs:label "判据所属故障模式"@zh .
+ccf:hasJudgmentGroup a owl:ObjectProperty ; rdfs:domain ccf:FaultMode ; rdfs:range ccf:JudgmentGroup ;
+    rdfs:label "判据组"@zh .
+ccf:hasJudgment a owl:ObjectProperty ; rdfs:domain ccf:JudgmentGroup ; rdfs:range ccf:Judgment ;
+    owl:inverseOf ccf:judgmentGroupOf ;
+    rdfs:label "组内判据"@zh .
+ccf:judgmentGroupOf a owl:ObjectProperty ; rdfs:domain ccf:Judgment ; rdfs:range ccf:JudgmentGroup ;
+    rdfs:label "判据所属组"@zh .
+ccf:hasDistinguishingEvidence a owl:ObjectProperty ; rdfs:domain ccf:FaultMode ; rdfs:range ccf:Judgment ;
+    rdfs:label "否定性证据判据"@zh ;
+    rdfs:comment "distinguishing_evidence：靠「某指标正常」定罪（契约里带 note 的排除项）。"@zh .
+ccf:jMetric a owl:ObjectProperty ; rdfs:domain ccf:Judgment ; rdfs:range ccm:Metric ;
+    rdfs:label "判据指标件"@zh ;
+    rdfs:comment "指向 cc-metric 的指标个体 ⇒ 通过 ccm:metricProperty 既能找到数据属性、又能找到阈值档。契约 code 与本体 IRI 的双向可追溯。★ 方案1 只有字符串 code，没有这条可推理的链接。"@zh .
+ccf:jThreshold a owl:ObjectProperty ; rdfs:domain ccf:Judgment ; rdfs:range ccm:Threshold ;
+    rdfs:label "判据阈值档"@zh ;
+    rdfs:comment "★ 引用式阈值（零硬编码）：比较的参照是本体里的档位个体，不是字面量。"@zh .
+ccf:jOperandEntityProperty a owl:ObjectProperty ; rdfs:domain ccf:Judgment ; rdfs:range owl:DatatypeProperty ;
+    rdfs:label "判据参照的实体属性"@zh ;
+    rdfs:comment "operand 形如 entity_property:JdbcDataSource.maxPoolSize ⇒ 指向本体属性 IRI。"@zh .
+ccf:rootCauseOf a owl:ObjectProperty ; rdfs:domain ccf:RootCause ; rdfs:range ccf:FaultMode ;
+    owl:inverseOf ccf:hasRootCause ;
+    rdfs:label "叶子根因所指故障模式"@zh .
+ccf:hasRootCause a owl:ObjectProperty ; rdfs:domain ccf:FaultMode ; rdfs:range ccf:RootCause ;
+    rdfs:label "故障模式的叶子根因"@zh .
+ccf:rootCauseRequirement a owl:ObjectProperty ; rdfs:domain ccf:RootCause ; rdfs:range ccf:Judgment ;
+    rdfs:label "排除法前提"@zh ;
+    rdfs:comment "exclusion_requirements 逐条物化：全部成立于「其他候选被排除」时才收敛到本根因。"@zh .
+
+# ===========================================================================
+# 3) 数据属性
+# ===========================================================================
+ccf:faultModeCode a owl:DatatypeProperty ; rdfs:domain ccf:FaultMode ; rdfs:range xsd:string .
+ccf:displayName a owl:DatatypeProperty ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( ccf:FaultMode ccf:RootCause ) ] ; rdfs:range xsd:string .
+ccf:faultLayer a owl:DatatypeProperty ; rdfs:domain ccf:FaultMode ; rdfs:range xsd:string ;
+    rdfs:comment "App | Runtime | Data（契约 layer）。"@zh .
+ccf:severity a owl:DatatypeProperty ; rdfs:domain ccf:FaultMode ; rdfs:range xsd:string ;
+    rdfs:comment "契约 severity ∈ info | warning | major | critical。"@zh .
+ccf:affectsSeverity a owl:DatatypeProperty ; rdfs:domain ccf:FaultMode ; rdfs:range xsd:string ;
+    rdfs:comment "镜像方案1 CC_AFFECTS 的边属性 severity。"@zh .
+ccf:reversible a owl:DatatypeProperty ; rdfs:domain ccf:FaultMode ; rdfs:range xsd:boolean .
+ccf:chainCode a owl:DatatypeProperty ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( ccf:FaultMode ccf:RootCause ) ] ; rdfs:range xsd:string ;
+    rdfs:comment "契约 chain（F1..F7，可多个）。"@zh .
+ccf:fmDetectionMode a owl:DatatypeProperty ; rdfs:domain ccf:FaultMode ; rdfs:range xsd:string ;
+    rdfs:comment "★ docs\\04 未给规格 ⇒ 自定取值集 threshold | predicate | mixed | exclusion，判定口径见文件头。"@zh .
+ccf:note a owl:DatatypeProperty ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( ccf:FaultMode ccf:RootCause ) ] ; rdfs:range xsd:string .
+ccf:groupKind a owl:DatatypeProperty ; rdfs:domain ccf:JudgmentGroup ; rdfs:range xsd:string ;
+    rdfs:comment "all_of | any_of。"@zh .
+ccf:groupOp a owl:DatatypeProperty ; rdfs:domain ccf:JudgmentGroup ; rdfs:range xsd:string ;
+    rdfs:comment "★ v1.0.3（X-5）：**组内**合并算子，all_of ⇒ AND、any_of ⇒ OR（依据 fault-modes.yaml#meta.detect_semantics.within_all_of / within_any_of）。"@zh .
+ccf:betweenGroupsOp a owl:DatatypeProperty ; rdfs:domain ccf:FaultMode ; rdfs:range xsd:string ;
+    rdfs:comment "★ v1.0.3（X-5）：detect 并列组的**组间**合并算子，契约裁定恒为 AND（all_of 组成立 ∧ any_of 组成立；缺省组中性成立；禁止 OR）。依据 fault-modes.yaml#meta.detect_semantics.between_groups。"@zh .
+ccf:jPredicateSemantics a owl:DatatypeProperty ; rdfs:domain ccf:Judgment ; rdfs:range xsd:string ;
+    rdfs:comment "★ v1.0.3（X-7）：ccf:jPredicate 的判定口径，逐字取自 fault-modes.yaml#meta.predicate_semantics。"@zh .
+ccf:jBaselineRequired a owl:DatatypeProperty ; rdfs:domain ccf:Judgment ; rdfs:range xsd:boolean ;
+    rdfs:comment "★ v1.0.3（X-7）：该谓词是否必须带窗口基线（observation.delta）；契约 baseline_required 记为 [increased, decreased]，故只有这两类为 true。"@zh .
+ccf:unjudgeablePolicy a owl:DatatypeProperty ; rdfs:domain ccf:Judgment ; rdfs:range xsd:string ;
+    rdfs:comment "★ v1.0.3（X-7）：基线缺失时的处置，逐字取自 fault-modes.yaml#meta.predicate_semantics.unjudgeable_policy。"@zh .
+ccf:jRole a owl:DatatypeProperty ; rdfs:domain ccf:Judgment ; rdfs:range xsd:string ;
+    rdfs:comment "镜像方案1 CC_JUDGED_BY 的 role：detect | distinguishing | exclusion。"@zh .
+ccf:jMetricCode a owl:DatatypeProperty ; rdfs:domain ccf:Judgment ; rdfs:range xsd:string .
+ccf:jOp a owl:DatatypeProperty ; rdfs:domain ccf:Judgment ; rdfs:range xsd:string ;
+    rdfs:comment "镜像方案1 的 op：> | >= | <。"@zh .
+ccf:jOperandKind a owl:DatatypeProperty ; rdfs:domain ccf:Judgment ; rdfs:range xsd:string ;
+    rdfs:comment "镜像方案1 的 operandKind：metric_value | threshold_reference | entity_property | enum_value。"@zh .
+ccf:jOperandValue a owl:DatatypeProperty ; rdfs:domain ccf:Judgment ; rdfs:range xsd:string ;
+    rdfs:comment "镜像方案1 的 operandValue：逐字取自契约（如 \"threshold:acquire_wait_ms_light#warning\"）。"@zh .
+ccf:jPredicate a owl:DatatypeProperty ; rdfs:domain ccf:Judgment ; rdfs:range xsd:string ;
+    rdfs:comment "契约 meta.predicate_enum：increased | decreased | non_zero | is_true | is_false | in_enum。"@zh .
+ccf:jEnumValue a owl:DatatypeProperty ; rdfs:domain ccf:Judgment ; rdfs:range xsd:string .
+ccf:jThresholdReference a owl:DatatypeProperty ; rdfs:domain ccf:Judgment ; rdfs:range xsd:string ;
+    rdfs:comment "★ 档位必填的引用键：threshold:<阈值名>#<warning|critical>。"@zh .
+ccf:jNote a owl:DatatypeProperty ; rdfs:domain ccf:Judgment ; rdfs:range xsd:string .
+ccf:rootCauseCode a owl:DatatypeProperty ; rdfs:domain ccf:RootCause ; rdfs:range xsd:string .
+ccf:detectionMode a owl:DatatypeProperty ; rdfs:domain ccf:RootCause ; rdfs:range xsd:string ;
+    rdfs:comment "契约 leaf_root_causes.detection_mode（本契约里取值 exclusion）。"@zh .
+ccf:exclusionRequirementText a owl:DatatypeProperty ; rdfs:domain ccf:Judgment ; rdfs:range xsd:string ;
+    rdfs:comment "契约 exclusion_requirements 原文逐条保留（人类可读的排除条件）。"@zh .
+ccf:findingCode a owl:DatatypeProperty ; rdfs:domain ccf:Finding ; rdfs:range xsd:string ;
+    rdfs:comment "F-001..F-007（docs\\04 §6 规则表）。"@zh .
+
+# ===========================================================================
+# 4) 23 个故障模式个体（与契约 fault_modes 集合相等）
+# ===========================================================================
+ccf:FM-APP-POOL-EXHAUSTED a ccf:FaultMode ;
+    ccf:faultModeCode "FM-APP-POOL-EXHAUSTED" ; cco:neutralCode "FM-APP-POOL-EXHAUSTED" ;
+    ccf:displayName "应用侧连接池耗尽" ; ccf:faultLayer "App" ; ccf:severity "critical" ;
+    ccf:reversible true ; ccf:chainCode "F1" , "F2" ; ccf:fmDetectionMode "mixed" ;
+    ccf:fmComponentType cc:JdbcDataSource ; ccf:affects cc:JdbcDataSource ; ccf:affectsSeverity "critical" ;
+    ccf:judgedBy ccf:J-pool-1 , ccf:J-pool-2 , ccf:J-pool-3 ;
+    ccf:hasJudgmentGroup ccf:G-pool-all ;
+    ccf:hasDistinguishingEvidence ccf:J-pool-dist ;
+    ccf:betweenGroupsOp "AND" ;
+    cco:contractSource "shared/model/fault-modes.yaml#/fault_modes[code=FM-APP-POOL-EXHAUSTED]" ;
+    rdfs:label "应用侧连接池耗尽"@zh .
+
+ccf:FM-APP-DS-CONNECT-FAIL a ccf:FaultMode ;
+    ccf:faultModeCode "FM-APP-DS-CONNECT-FAIL" ; cco:neutralCode "FM-APP-DS-CONNECT-FAIL" ;
+    ccf:displayName "数据源连接建立失败" ; ccf:faultLayer "App" ; ccf:severity "critical" ;
+    ccf:reversible false ; ccf:chainCode "F5" , "F6" , "F7" ; ccf:fmDetectionMode "predicate" ;
+    ccf:fmComponentType cc:JdbcDataSource ; ccf:affects cc:JdbcDataSource ; ccf:affectsSeverity "critical" ;
+    ccf:judgedBy ccf:J-dscf-1 ; ccf:hasJudgmentGroup ccf:G-dscf-all ;
+    ccf:hasRootCause ccf:FM-APP-AUTH-INCOMPATIBLE ;
+    ccf:note "★ 叶子歧义点：F5(认证)/F6(网络)/F7(切换) 共享此节点，靠子判据区分" ;
+    ccf:betweenGroupsOp "AND" ;
+    cco:contractSource "shared/model/fault-modes.yaml#/fault_modes[code=FM-APP-DS-CONNECT-FAIL]" ;
+    rdfs:label "数据源连接建立失败"@zh .
+
+ccf:FM-APP-ENDPOINT-SLOW a ccf:FaultMode ;
+    ccf:faultModeCode "FM-APP-ENDPOINT-SLOW" ; cco:neutralCode "FM-APP-ENDPOINT-SLOW" ;
+    ccf:displayName "应用端点响应劣化" ; ccf:faultLayer "App" ; ccf:severity "major" ;
+    ccf:reversible true ; ccf:chainCode "F1" , "F2" , "F3" , "F4" , "F5" , "F6" , "F7" ;
+    ccf:fmDetectionMode "threshold" ;
+    ccf:fmComponentType cc:AppEndpoint ; ccf:affects cc:AppEndpoint ; ccf:affectsSeverity "major" ;
+    ccf:judgedBy ccf:J-eps-1 ; ccf:hasJudgmentGroup ccf:G-eps-all ;
+    ccf:note "最上层症状，7 条链的共同出口" ;
+    ccf:betweenGroupsOp "AND" ;
+    cco:contractSource "shared/model/fault-modes.yaml#/fault_modes[code=FM-APP-ENDPOINT-SLOW]" ;
+    rdfs:label "应用端点响应劣化"@zh .
+
+ccf:FM-APP-INSTANCE-RESTART a ccf:FaultMode ;
+    ccf:faultModeCode "FM-APP-INSTANCE-RESTART" ; cco:neutralCode "FM-APP-INSTANCE-RESTART" ;
+    ccf:displayName "应用实例重启" ; ccf:faultLayer "App" ; ccf:severity "major" ;
+    ccf:reversible true ; ccf:chainCode "F4" ; ccf:fmDetectionMode "predicate" ;
+    ccf:fmComponentType cc:AppInstance ; ccf:affects cc:AppInstance ; ccf:affectsSeverity "major" ;
+    ccf:judgedBy ccf:J-restart-a1 , ccf:J-restart-b1 ;
+    ccf:hasJudgmentGroup ccf:G-restart-any , ccf:G-restart-all ;
+    ccf:note "★ X-5（v1.0.3 裁定）：契约 detect 同级并列 any_of 与 all_of ⇒ 组内 AND/OR、**组间 AND**、缺省组中性成立" ;
+    skos:note "契约本条**没有** note 字段；上式是方案2 侧对 X-5 的处置说明（非契约原文）。"@zh ;
+    ccf:betweenGroupsOp "AND" ;
+    cco:contractSource "shared/model/fault-modes.yaml#/fault_modes[code=FM-APP-INSTANCE-RESTART]" ;
+    rdfs:label "应用实例重启"@zh .
+
+ccf:FM-APP-HEAP-PRESSURE a ccf:FaultMode ;
+    ccf:faultModeCode "FM-APP-HEAP-PRESSURE" ; cco:neutralCode "FM-APP-HEAP-PRESSURE" ;
+    ccf:displayName "应用堆内存压力" ; ccf:faultLayer "App" ; ccf:severity "warning" ;
+    ccf:reversible true ; ccf:chainCode "F4" ; ccf:fmDetectionMode "threshold" ;
+    ccf:fmComponentType cc:AppInstance ; ccf:affects cc:AppInstance ; ccf:affectsSeverity "warning" ;
+    ccf:judgedBy ccf:J-heap-1 , ccf:J-heap-2 ; ccf:hasJudgmentGroup ccf:G-heap-all ;
+    ccf:betweenGroupsOp "AND" ;
+    cco:contractSource "shared/model/fault-modes.yaml#/fault_modes[code=FM-APP-HEAP-PRESSURE]" ;
+    rdfs:label "应用堆内存压力"@zh .
+
+ccf:FM-CTR-OOM-KILLED a ccf:FaultMode ;
+    ccf:faultModeCode "FM-CTR-OOM-KILLED" ; cco:neutralCode "FM-CTR-OOM-KILLED" ;
+    ccf:displayName "容器 OOM 被杀" ; ccf:faultLayer "Runtime" ; ccf:severity "critical" ;
+    ccf:reversible true ; ccf:chainCode "F4" ; ccf:fmDetectionMode "predicate" ;
+    ccf:fmComponentType cc:Container ; ccf:affects cc:Container ; ccf:affectsSeverity "critical" ;
+    ccf:judgedBy ccf:J-oom-1 ; ccf:hasJudgmentGroup ccf:G-oom-all ;
+    ccf:note "F4 唯一证据源；宿主机指标可能完全正常" ;
+    ccf:betweenGroupsOp "AND" ;
+    cco:contractSource "shared/model/fault-modes.yaml#/fault_modes[code=FM-CTR-OOM-KILLED]" ;
+    rdfs:label "容器 OOM 被杀"@zh .
+
+ccf:FM-CTR-CPU-THROTTLED a ccf:FaultMode ;
+    ccf:faultModeCode "FM-CTR-CPU-THROTTLED" ; cco:neutralCode "FM-CTR-CPU-THROTTLED" ;
+    ccf:displayName "容器被 CPU 限流" ; ccf:faultLayer "Runtime" ; ccf:severity "major" ;
+    ccf:reversible true ; ccf:chainCode "F3" ; ccf:fmDetectionMode "predicate" ;
+    ccf:fmComponentType cc:Container ; ccf:affects cc:Container ; ccf:affectsSeverity "major" ;
+    ccf:judgedBy ccf:J-throttle-1 ; ccf:hasJudgmentGroup ccf:G-throttle-all ;
+    ccf:note "★ 容器 cpu_usage_ratio 可能不高——只看容器会误判为应用自身慢" ;
+    ccf:betweenGroupsOp "AND" ;
+    cco:contractSource "shared/model/fault-modes.yaml#/fault_modes[code=FM-CTR-CPU-THROTTLED]" ;
+    rdfs:label "容器被 CPU 限流"@zh .
+
+ccf:FM-CTR-NET-UNREACHABLE a ccf:FaultMode ;
+    ccf:faultModeCode "FM-CTR-NET-UNREACHABLE" ; cco:neutralCode "FM-CTR-NET-UNREACHABLE" ;
+    ccf:displayName "容器网络不可达" ; ccf:faultLayer "Runtime" ; ccf:severity "critical" ;
+    ccf:reversible true ; ccf:chainCode "F6" ; ccf:fmDetectionMode "mixed" ;
+    ccf:fmComponentType cc:Container ; ccf:affects cc:Container ; ccf:affectsSeverity "critical" ;
+    ccf:judgedBy ccf:J-net-a1 , ccf:J-net-b1 ;
+    ccf:hasJudgmentGroup ccf:G-net-any , ccf:G-net-all ;
+    ccf:note "与 F5 的区分：超时（网络）而非立即失败（认证）" ;
+    skos:note "★ X-5（v1.0.3 裁定）：本条 detect 同级并列 any_of 与 all_of ⇒ 组内 AND/OR、**组间 AND**、缺省组中性成立。"@zh ;
+    ccf:betweenGroupsOp "AND" ;
+    cco:contractSource "shared/model/fault-modes.yaml#/fault_modes[code=FM-CTR-NET-UNREACHABLE]" ;
+    rdfs:label "容器网络不可达"@zh .
+
+ccf:FM-HOST-CPU-CONTENTION a ccf:FaultMode ;
+    ccf:faultModeCode "FM-HOST-CPU-CONTENTION" ; cco:neutralCode "FM-HOST-CPU-CONTENTION" ;
+    ccf:displayName "宿主机 CPU 争抢" ; ccf:faultLayer "Runtime" ; ccf:severity "major" ;
+    ccf:reversible true ; ccf:chainCode "F3" ; ccf:fmDetectionMode "threshold" ;
+    ccf:fmComponentType cc:Host ; ccf:affects cc:Host ; ccf:affectsSeverity "major" ;
+    ccf:judgedBy ccf:J-hostcpu-1 , ccf:J-hostcpu-2 ; ccf:hasJudgmentGroup ccf:G-hostcpu-all ;
+    ccf:betweenGroupsOp "AND" ;
+    cco:contractSource "shared/model/fault-modes.yaml#/fault_modes[code=FM-HOST-CPU-CONTENTION]" ;
+    rdfs:label "宿主机 CPU 争抢"@zh .
+
+ccf:FM-HOST-MEM-PRESSURE a ccf:FaultMode ;
+    ccf:faultModeCode "FM-HOST-MEM-PRESSURE" ; cco:neutralCode "FM-HOST-MEM-PRESSURE" ;
+    ccf:displayName "宿主机内存紧张" ; ccf:faultLayer "Runtime" ; ccf:severity "major" ;
+    ccf:reversible true ; ccf:chainCode "F4" ; ccf:fmDetectionMode "threshold" ;
+    ccf:fmComponentType cc:Host ; ccf:affects cc:Host ; ccf:affectsSeverity "major" ;
+    ccf:judgedBy ccf:J-hostmem-1 ; ccf:hasJudgmentGroup ccf:G-hostmem-all ;
+    ccf:betweenGroupsOp "AND" ;
+    cco:contractSource "shared/model/fault-modes.yaml#/fault_modes[code=FM-HOST-MEM-PRESSURE]" ;
+    rdfs:label "宿主机内存紧张"@zh .
+
+ccf:FM-DB-SLOW-QUERY a ccf:FaultMode ;
+    ccf:faultModeCode "FM-DB-SLOW-QUERY" ; cco:neutralCode "FM-DB-SLOW-QUERY" ;
+    ccf:displayName "数据库慢查询" ; ccf:faultLayer "Data" ; ccf:severity "major" ;
+    ccf:reversible true ; ccf:chainCode "F2" ; ccf:fmDetectionMode "threshold" ;
+    ccf:fmComponentType cc:Query ; ccf:affects cc:Query ; ccf:affectsSeverity "major" ;
+    ccf:judgedBy ccf:J-slowq-1 ; ccf:hasJudgmentGroup ccf:G-slowq-all ;
+    ccf:note "实测样本：平均 30.8s / TOP 51.9s（upstream-eval 真实数据）" ;
+    ccf:betweenGroupsOp "AND" ;
+    cco:contractSource "shared/model/fault-modes.yaml#/fault_modes[code=FM-DB-SLOW-QUERY]" ;
+    rdfs:label "数据库慢查询"@zh .
+
+ccf:FM-DB-SESSION-POOL-FULL a ccf:FaultMode ;
+    ccf:faultModeCode "FM-DB-SESSION-POOL-FULL" ; cco:neutralCode "FM-DB-SESSION-POOL-FULL" ;
+    ccf:displayName "数据库会话池耗尽" ; ccf:faultLayer "Data" ; ccf:severity "critical" ;
+    ccf:reversible true ; ccf:chainCode "F2" ; ccf:fmDetectionMode "mixed" ;
+    ccf:fmComponentType cc:DatabaseSessionPool ; ccf:affects cc:DatabaseSessionPool ; ccf:affectsSeverity "critical" ;
+    ccf:judgedBy ccf:J-poolfull-1 , ccf:J-poolfull-2 ; ccf:hasJudgmentGroup ccf:G-poolfull-all ;
+    ccf:note "与 FM-APP-POOL-EXHAUSTED 语义互斥，绝不可混判" ;
+    ccf:betweenGroupsOp "AND" ;
+    cco:contractSource "shared/model/fault-modes.yaml#/fault_modes[code=FM-DB-SESSION-POOL-FULL]" ;
+    rdfs:label "数据库会话池耗尽"@zh .
+
+ccf:FM-DB-LOCK-WAIT a ccf:FaultMode ;
+    ccf:faultModeCode "FM-DB-LOCK-WAIT" ; cco:neutralCode "FM-DB-LOCK-WAIT" ;
+    ccf:displayName "数据库锁等待" ; ccf:faultLayer "Data" ; ccf:severity "major" ;
+    ccf:reversible true ; ccf:chainCode "F2" ; ccf:fmDetectionMode "mixed" ;
+    ccf:fmComponentType cc:Session ; ccf:affects cc:Session ; ccf:affectsSeverity "major" ;
+    ccf:judgedBy ccf:J-lock-1 , ccf:J-lock-2 ; ccf:hasJudgmentGroup ccf:G-lock-all ;
+    ccf:betweenGroupsOp "AND" ;
+    cco:contractSource "shared/model/fault-modes.yaml#/fault_modes[code=FM-DB-LOCK-WAIT]" ;
+    rdfs:label "数据库锁等待"@zh .
+
+ccf:FM-DB-INSTANCE-DOWN a ccf:FaultMode ;
+    ccf:faultModeCode "FM-DB-INSTANCE-DOWN" ; cco:neutralCode "FM-DB-INSTANCE-DOWN" ;
+    ccf:displayName "数据库实例故障/切换" ; ccf:faultLayer "Data" ; ccf:severity "critical" ;
+    ccf:reversible true ; ccf:chainCode "F7" ; ccf:fmDetectionMode "predicate" ;
+    ccf:fmComponentType cc:GaussDBInstance ; ccf:affects cc:GaussDBInstance ; ccf:affectsSeverity "critical" ;
+    ccf:judgedBy ccf:J-down-a1 , ccf:J-down-b1 ; ccf:hasJudgmentGroup ccf:G-down-any ;
+    ccf:betweenGroupsOp "AND" ;
+    cco:contractSource "shared/model/fault-modes.yaml#/fault_modes[code=FM-DB-INSTANCE-DOWN]" ;
+    rdfs:label "数据库实例故障/切换"@zh .
+
+ccf:FM-HOST-DISK-FULL a ccf:FaultMode ;
+    ccf:faultModeCode "FM-HOST-DISK-FULL" ; cco:neutralCode "FM-HOST-DISK-FULL" ;
+    ccf:displayName "宿主磁盘空间耗尽" ; ccf:faultLayer "Runtime" ; ccf:severity "critical" ;
+    ccf:reversible true ; ccf:chainCode "F4" ; ccf:fmDetectionMode "predicate" ;
+    ccf:fmComponentType cc:Host ; ccf:affects cc:Host ; ccf:affectsSeverity "critical" ;
+    ccf:judgedBy ccf:J-hostdiskfull-1 ; ccf:hasJudgmentGroup ccf:G-hostdiskfull-all ;
+    ccf:betweenGroupsOp "AND" ;
+    cco:contractSource "shared/model/fault-modes.yaml#/fault_modes[code=FM-HOST-DISK-FULL]" ;
+    rdfs:label "宿主磁盘空间耗尽"@zh .
+
+ccf:FM-HOST-DISK-IO-ERROR a ccf:FaultMode ;
+    ccf:faultModeCode "FM-HOST-DISK-IO-ERROR" ; cco:neutralCode "FM-HOST-DISK-IO-ERROR" ;
+    ccf:displayName "宿主磁盘 I/O 错误" ; ccf:faultLayer "Runtime" ; ccf:severity "critical" ;
+    ccf:reversible true ; ccf:chainCode "F4" ; ccf:fmDetectionMode "predicate" ;
+    ccf:fmComponentType cc:Host ; ccf:affects cc:Host ; ccf:affectsSeverity "critical" ;
+    ccf:judgedBy ccf:J-hostdiskioerror-1 ; ccf:hasJudgmentGroup ccf:G-hostdiskioerror-all ;
+    ccf:betweenGroupsOp "AND" ;
+    cco:contractSource "shared/model/fault-modes.yaml#/fault_modes[code=FM-HOST-DISK-IO-ERROR]" ;
+    rdfs:label "宿主磁盘 I/O 错误"@zh .
+
+ccf:FM-HOST-NET-IFACE-DOWN a ccf:FaultMode ;
+    ccf:faultModeCode "FM-HOST-NET-IFACE-DOWN" ; cco:neutralCode "FM-HOST-NET-IFACE-DOWN" ;
+    ccf:displayName "宿主网卡 down" ; ccf:faultLayer "Runtime" ; ccf:severity "critical" ;
+    ccf:reversible true ; ccf:chainCode "F6" ; ccf:fmDetectionMode "predicate" ;
+    ccf:fmComponentType cc:Host ; ccf:affects cc:Host ; ccf:affectsSeverity "critical" ;
+    ccf:judgedBy ccf:J-hostnetifacedown-1 ; ccf:hasJudgmentGroup ccf:G-hostnetifacedown-all ;
+    ccf:betweenGroupsOp "AND" ;
+    cco:contractSource "shared/model/fault-modes.yaml#/fault_modes[code=FM-HOST-NET-IFACE-DOWN]" ;
+    rdfs:label "宿主网卡 down"@zh .
+
+ccf:FM-DB-REPLICATION-LAG a ccf:FaultMode ;
+    ccf:faultModeCode "FM-DB-REPLICATION-LAG" ; cco:neutralCode "FM-DB-REPLICATION-LAG" ;
+    ccf:displayName "主备复制延迟/中断" ; ccf:faultLayer "Data" ; ccf:severity "critical" ;
+    ccf:reversible true ; ccf:chainCode "F7" ; ccf:fmDetectionMode "predicate" ;
+    ccf:fmComponentType cc:GaussDBCluster ; ccf:affects cc:GaussDBCluster ; ccf:affectsSeverity "critical" ;
+    ccf:judgedBy ccf:J-dbreplicationlag-1 ; ccf:hasJudgmentGroup ccf:G-dbreplicationlag-all ;
+    ccf:betweenGroupsOp "AND" ;
+    cco:contractSource "shared/model/fault-modes.yaml#/fault_modes[code=FM-DB-REPLICATION-LAG]" ;
+    rdfs:label "主备复制延迟/中断"@zh .
+
+ccf:FM-DB-UNUSED-INDEX a ccf:FaultMode ;
+    ccf:faultModeCode "FM-DB-UNUSED-INDEX" ; cco:neutralCode "FM-DB-UNUSED-INDEX" ;
+    ccf:displayName "索引未使用（索引失效）" ; ccf:faultLayer "Data" ; ccf:severity "major" ;
+    ccf:reversible true ; ccf:chainCode "F2" ; ccf:fmDetectionMode "predicate" ;
+    ccf:fmComponentType cc:Table ; ccf:affects cc:Table ; ccf:affectsSeverity "major" ;
+    ccf:judgedBy ccf:J-dbunusedindex-1 ; ccf:hasJudgmentGroup ccf:G-dbunusedindex-all ;
+    ccf:betweenGroupsOp "AND" ;
+    cco:contractSource "shared/model/fault-modes.yaml#/fault_modes[code=FM-DB-UNUSED-INDEX]" ;
+    rdfs:label "索引未使用（索引失效）"@zh .
+
+ccf:FM-DB-DEADLOCK a ccf:FaultMode ;
+    ccf:faultModeCode "FM-DB-DEADLOCK" ; cco:neutralCode "FM-DB-DEADLOCK" ;
+    ccf:displayName "数据库死锁" ; ccf:faultLayer "Data" ; ccf:severity "critical" ;
+    ccf:reversible true ; ccf:chainCode "F2" ; ccf:fmDetectionMode "predicate" ;
+    ccf:fmComponentType cc:GaussDBCluster ; ccf:affects cc:GaussDBCluster ; ccf:affectsSeverity "critical" ;
+    ccf:judgedBy ccf:J-deadlock-1 ; ccf:hasJudgmentGroup ccf:G-deadlock-all ;
+    ccf:betweenGroupsOp "AND" ;
+    cco:contractSource "shared/model/fault-modes.yaml#/fault_modes[code=FM-DB-DEADLOCK]" ;
+    rdfs:label "数据库死锁"@zh .
+
+ccf:FM-DB-IDLE-IN-TX a ccf:FaultMode ;
+    ccf:faultModeCode "FM-DB-IDLE-IN-TX" ; cco:neutralCode "FM-DB-IDLE-IN-TX" ;
+    ccf:displayName "持锁不提交堆积（idle in transaction）" ; ccf:faultLayer "Data" ; ccf:severity "major" ;
+    ccf:reversible true ; ccf:chainCode "F2" ; ccf:fmDetectionMode "predicate" ;
+    ccf:fmComponentType cc:GaussDBInstance ; ccf:affects cc:GaussDBInstance ; ccf:affectsSeverity "major" ;
+    ccf:judgedBy ccf:J-idle-in-tx-1 ; ccf:hasJudgmentGroup ccf:G-idle-in-tx-all ;
+    ccf:betweenGroupsOp "AND" ;
+    cco:contractSource "shared/model/fault-modes.yaml#/fault_modes[code=FM-DB-IDLE-IN-TX]" ;
+    rdfs:label "持锁不提交堆积（idle in transaction）"@zh .
+
+ccf:FM-DB-SEQ-SCAN a ccf:FaultMode ;
+    ccf:faultModeCode "FM-DB-SEQ-SCAN" ; cco:neutralCode "FM-DB-SEQ-SCAN" ;
+    ccf:displayName "全表扫描（索引失效）" ; ccf:faultLayer "Data" ; ccf:severity "major" ;
+    ccf:reversible true ; ccf:chainCode "F2" ; ccf:fmDetectionMode "predicate" ;
+    ccf:fmComponentType cc:Table ; ccf:affects cc:Table ; ccf:affectsSeverity "major" ;
+    ccf:judgedBy ccf:J-seq-scan-1 ; ccf:hasJudgmentGroup ccf:G-seq-scan-all ;
+    ccf:betweenGroupsOp "AND" ;
+    cco:contractSource "shared/model/fault-modes.yaml#/fault_modes[code=FM-DB-SEQ-SCAN]" ;
+    rdfs:label "全表扫描（索引失效）"@zh .
+
+ccf:FM-DB-ROLLBACK-STORM a ccf:FaultMode ;
+    ccf:faultModeCode "FM-DB-ROLLBACK-STORM" ; cco:neutralCode "FM-DB-ROLLBACK-STORM" ;
+    ccf:displayName "事务回滚风暴" ; ccf:faultLayer "Data" ; ccf:severity "major" ;
+    ccf:reversible true ; ccf:chainCode "F2" ; ccf:fmDetectionMode "predicate" ;
+    ccf:fmComponentType cc:GaussDBCluster ; ccf:affects cc:GaussDBCluster ; ccf:affectsSeverity "major" ;
+    ccf:judgedBy ccf:J-rollback-storm-1 ; ccf:hasJudgmentGroup ccf:G-rollback-storm-all ;
+    ccf:betweenGroupsOp "AND" ;
+    cco:contractSource "shared/model/fault-modes.yaml#/fault_modes[code=FM-DB-ROLLBACK-STORM]" ;
+    rdfs:label "事务回滚风暴"@zh .
+
+# ★ 23 个故障模式互斥（OWL 原生公理；方案1 的 LPG 无此语义，只能在代码里断言）
+[ a owl:AllDifferent ;
+  owl:distinctMembers ( ccf:FM-APP-POOL-EXHAUSTED ccf:FM-APP-DS-CONNECT-FAIL ccf:FM-APP-ENDPOINT-SLOW
+    ccf:FM-APP-INSTANCE-RESTART ccf:FM-APP-HEAP-PRESSURE ccf:FM-CTR-OOM-KILLED ccf:FM-CTR-CPU-THROTTLED
+    ccf:FM-CTR-NET-UNREACHABLE ccf:FM-HOST-CPU-CONTENTION ccf:FM-HOST-MEM-PRESSURE ccf:FM-DB-SLOW-QUERY
+    ccf:FM-DB-SESSION-POOL-FULL ccf:FM-DB-LOCK-WAIT ccf:FM-DB-INSTANCE-DOWN
+    ccf:FM-DB-DEADLOCK ccf:FM-DB-IDLE-IN-TX ccf:FM-DB-SEQ-SCAN ccf:FM-DB-ROLLBACK-STORM
+    ccf:FM-HOST-DISK-FULL ccf:FM-HOST-DISK-IO-ERROR ccf:FM-HOST-NET-IFACE-DOWN
+    ccf:FM-DB-REPLICATION-LAG ccf:FM-DB-UNUSED-INDEX ) ] .
+
+# ===========================================================================
+# 5) 判据组（16 个：13 个 all_of + 3 个 any_of；restart/net 两模式各含两组，
+#    down 只含 any_of —— 组间由 ccf:betweenGroupsOp 固定为 AND）
+# ===========================================================================
+ccf:G-pool-all a ccf:JudgmentGroup ; ccf:groupKind "all_of" ; ccf:groupOp "AND" ; cco:neutralCode "FM-APP-POOL-EXHAUSTED#all_of" ;
+    ccf:hasJudgment ccf:J-pool-1 , ccf:J-pool-2 , ccf:J-pool-3 .
+ccf:G-dscf-all a ccf:JudgmentGroup ; ccf:groupKind "all_of" ; ccf:groupOp "AND" ; cco:neutralCode "FM-APP-DS-CONNECT-FAIL#all_of" ;
+    ccf:hasJudgment ccf:J-dscf-1 .
+ccf:G-eps-all a ccf:JudgmentGroup ; ccf:groupKind "all_of" ; ccf:groupOp "AND" ; cco:neutralCode "FM-APP-ENDPOINT-SLOW#all_of" ;
+    ccf:hasJudgment ccf:J-eps-1 .
+ccf:G-restart-any a ccf:JudgmentGroup ; ccf:groupKind "any_of" ; ccf:groupOp "OR" ; cco:neutralCode "FM-APP-INSTANCE-RESTART#any_of" ;
+    ccf:hasJudgment ccf:J-restart-a1 .
+ccf:G-restart-all a ccf:JudgmentGroup ; ccf:groupKind "all_of" ; ccf:groupOp "AND" ; cco:neutralCode "FM-APP-INSTANCE-RESTART#all_of" ;
+    ccf:hasJudgment ccf:J-restart-b1 .
+ccf:G-heap-all a ccf:JudgmentGroup ; ccf:groupKind "all_of" ; ccf:groupOp "AND" ; cco:neutralCode "FM-APP-HEAP-PRESSURE#all_of" ;
+    ccf:hasJudgment ccf:J-heap-1 , ccf:J-heap-2 .
+ccf:G-oom-all a ccf:JudgmentGroup ; ccf:groupKind "all_of" ; ccf:groupOp "AND" ; cco:neutralCode "FM-CTR-OOM-KILLED#all_of" ;
+    ccf:hasJudgment ccf:J-oom-1 .
+ccf:G-throttle-all a ccf:JudgmentGroup ; ccf:groupKind "all_of" ; ccf:groupOp "AND" ; cco:neutralCode "FM-CTR-CPU-THROTTLED#all_of" ;
+    ccf:hasJudgment ccf:J-throttle-1 .
+ccf:G-net-any a ccf:JudgmentGroup ; ccf:groupKind "any_of" ; ccf:groupOp "OR" ; cco:neutralCode "FM-CTR-NET-UNREACHABLE#any_of" ;
+    ccf:hasJudgment ccf:J-net-a1 .
+ccf:G-net-all a ccf:JudgmentGroup ; ccf:groupKind "all_of" ; ccf:groupOp "AND" ; cco:neutralCode "FM-CTR-NET-UNREACHABLE#all_of" ;
+    ccf:hasJudgment ccf:J-net-b1 .
+ccf:G-hostcpu-all a ccf:JudgmentGroup ; ccf:groupKind "all_of" ; ccf:groupOp "AND" ; cco:neutralCode "FM-HOST-CPU-CONTENTION#all_of" ;
+    ccf:hasJudgment ccf:J-hostcpu-1 , ccf:J-hostcpu-2 .
+ccf:G-hostmem-all a ccf:JudgmentGroup ; ccf:groupKind "all_of" ; ccf:groupOp "AND" ; cco:neutralCode "FM-HOST-MEM-PRESSURE#all_of" ;
+    ccf:hasJudgment ccf:J-hostmem-1 .
+ccf:G-slowq-all a ccf:JudgmentGroup ; ccf:groupKind "all_of" ; ccf:groupOp "AND" ; cco:neutralCode "FM-DB-SLOW-QUERY#all_of" ;
+    ccf:hasJudgment ccf:J-slowq-1 .
+ccf:G-poolfull-all a ccf:JudgmentGroup ; ccf:groupKind "all_of" ; ccf:groupOp "AND" ; cco:neutralCode "FM-DB-SESSION-POOL-FULL#all_of" ;
+    ccf:hasJudgment ccf:J-poolfull-1 , ccf:J-poolfull-2 .
+ccf:G-lock-all a ccf:JudgmentGroup ; ccf:groupKind "all_of" ; ccf:groupOp "AND" ; cco:neutralCode "FM-DB-LOCK-WAIT#all_of" ;
+    ccf:hasJudgment ccf:J-lock-1 , ccf:J-lock-2 .
+ccf:G-down-any a ccf:JudgmentGroup ; ccf:groupKind "any_of" ; ccf:groupOp "OR" ; cco:neutralCode "FM-DB-INSTANCE-DOWN#any_of" ;
+    ccf:hasJudgment ccf:J-down-a1 , ccf:J-down-b1 .
+ccf:G-hostdiskfull-all a ccf:JudgmentGroup ; ccf:groupKind "all_of" ; ccf:groupOp "AND" ; cco:neutralCode "FM-HOST-DISK-FULL#all_of" ;
+    ccf:hasJudgment ccf:J-hostdiskfull-1 .
+ccf:G-hostdiskioerror-all a ccf:JudgmentGroup ; ccf:groupKind "all_of" ; ccf:groupOp "AND" ; cco:neutralCode "FM-HOST-DISK-IO-ERROR#all_of" ;
+    ccf:hasJudgment ccf:J-hostdiskioerror-1 .
+ccf:G-hostnetifacedown-all a ccf:JudgmentGroup ; ccf:groupKind "all_of" ; ccf:groupOp "AND" ; cco:neutralCode "FM-HOST-NET-IFACE-DOWN#all_of" ;
+    ccf:hasJudgment ccf:J-hostnetifacedown-1 .
+ccf:G-dbreplicationlag-all a ccf:JudgmentGroup ; ccf:groupKind "all_of" ; ccf:groupOp "AND" ; cco:neutralCode "FM-DB-REPLICATION-LAG#all_of" ;
+    ccf:hasJudgment ccf:J-dbreplicationlag-1 .
+ccf:G-dbunusedindex-all a ccf:JudgmentGroup ; ccf:groupKind "all_of" ; ccf:groupOp "AND" ; cco:neutralCode "FM-DB-UNUSED-INDEX#all_of" ;
+    ccf:hasJudgment ccf:J-dbunusedindex-1 .
+ccf:G-deadlock-all a ccf:JudgmentGroup ; ccf:groupKind "all_of" ; ccf:groupOp "AND" ; cco:neutralCode "FM-DB-DEADLOCK#all_of" ;
+    ccf:hasJudgment ccf:J-deadlock-1 .
+ccf:G-idle-in-tx-all a ccf:JudgmentGroup ; ccf:groupKind "all_of" ; ccf:groupOp "AND" ; cco:neutralCode "FM-DB-IDLE-IN-TX#all_of" ;
+    ccf:hasJudgment ccf:J-idle-in-tx-1 .
+ccf:G-seq-scan-all a ccf:JudgmentGroup ; ccf:groupKind "all_of" ; ccf:groupOp "AND" ; cco:neutralCode "FM-DB-SEQ-SCAN#all_of" ;
+    ccf:hasJudgment ccf:J-seq-scan-1 .
+ccf:G-rollback-storm-all a ccf:JudgmentGroup ; ccf:groupKind "all_of" ; ccf:groupOp "AND" ; cco:neutralCode "FM-DB-ROLLBACK-STORM#all_of" ;
+    ccf:hasJudgment ccf:J-rollback-storm-1 .
+
+# ===========================================================================
+# 6) 判据个体（32 条 detect + 1 条 distinguishing）
+# ===========================================================================
+ccf:J-pool-1 a ccf:Judgment ; ccf:judges ccf:FM-APP-POOL-EXHAUSTED ; ccf:jRole "detect" ;
+    ccf:jMetric ccm:m_app_datasource_pending_threads ; ccf:jMetricCode "app.datasource.pending_threads" ;
+    ccf:jPredicate "non_zero" ; ccf:jOperandKind "metric_value" ;
+    ccf:jPredicateSemantics "observation.value 存在且不等于 0" ; ccf:jBaselineRequired false ;
+    cco:contractSource "fault-modes.yaml#FM-APP-POOL-EXHAUSTED/detect/all_of[1]" .
+ccf:J-pool-2 a ccf:Judgment ; ccf:judges ccf:FM-APP-POOL-EXHAUSTED ; ccf:jRole "detect" ;
+    ccf:jMetric ccm:m_app_datasource_active_connections ; ccf:jMetricCode "app.datasource.active_connections" ;
+    ccf:jOp ">=" ; ccf:jOperandKind "entity_property" ;
+    ccf:jOperandValue "entity_property:JdbcDataSource.maxPoolSize" ; ccf:jOperandEntityProperty cc:maxPoolSize ;
+    cco:contractSource "fault-modes.yaml#FM-APP-POOL-EXHAUSTED/detect/all_of[2]" .
+ccf:J-pool-3 a ccf:Judgment ; ccf:judges ccf:FM-APP-POOL-EXHAUSTED ; ccf:jRole "detect" ;
+    ccf:jMetric ccm:m_app_datasource_acquire_wait_ms ; ccf:jMetricCode "app.datasource.acquire_wait_ms" ;
+    ccf:jOp ">" ; ccf:jOperandKind "threshold_reference" ;
+    ccf:jOperandValue "threshold:acquire_wait_ms_light#warning" ;
+    ccf:jThresholdReference "threshold:acquire_wait_ms_light#warning" ; ccf:jThreshold ccm:t_acquire_wait_ms_light_warning ;
+    cco:contractSource "fault-modes.yaml#FM-APP-POOL-EXHAUSTED/detect/all_of[3]" .
+ccf:J-pool-dist a ccf:Judgment ; ccf:judges ccf:FM-APP-POOL-EXHAUSTED ; ccf:jRole "distinguishing" ;
+    ccf:jMetric ccm:m_db_pool_session_used_ratio ; ccf:jMetricCode "db.pool.session_used_ratio" ;
+    ccf:jOp "<" ; ccf:jOperandKind "threshold_reference" ;
+    ccf:jOperandValue "threshold:session_used_ratio_light#warning" ;
+    ccf:jThresholdReference "threshold:session_used_ratio_light#warning" ; ccf:jThreshold ccm:t_session_used_ratio_light_warning ;
+    ccf:jNote "数据库侧正常 → 定界到应用层（否定性证据）" ;
+    cco:contractSource "fault-modes.yaml#FM-APP-POOL-EXHAUSTED/distinguishing_evidence[1]" .
+
+ccf:J-dscf-1 a ccf:Judgment ; ccf:judges ccf:FM-APP-DS-CONNECT-FAIL ; ccf:jRole "detect" ;
+    ccf:jMetric ccm:m_app_datasource_connect_fail_total ; ccf:jMetricCode "app.datasource.connect_fail_total" ;
+    ccf:jPredicate "increased" ; ccf:jOperandKind "metric_value" ;
+    ccf:jPredicateSemantics "observation.delta 存在且为正" ; ccf:jBaselineRequired true ;
+    ccf:unjudgeablePolicy "delta 缺失 ⇒ 条目 unjudgeable：既不成立也不证伪；规则不得据此判故障成立；按 WARN『待标定/不可机判』处理并登记 zero-instance-ledger.yaml。禁止静默转 false。" ;
+    cco:contractSource "fault-modes.yaml#FM-APP-DS-CONNECT-FAIL/detect/all_of[1]" .
+
+ccf:J-eps-1 a ccf:Judgment ; ccf:judges ccf:FM-APP-ENDPOINT-SLOW ; ccf:jRole "detect" ;
+    ccf:jMetric ccm:m_app_endpoint_p99_ms ; ccf:jMetricCode "app.endpoint.p99_ms" ;
+    ccf:jOp ">" ; ccf:jOperandKind "entity_property" ;
+    ccf:jOperandValue "entity_property:AppEndpoint.sloP99Ms" ; ccf:jOperandEntityProperty cc:sloP99Ms ;
+    cco:contractSource "fault-modes.yaml#FM-APP-ENDPOINT-SLOW/detect/all_of[1]" .
+
+ccf:J-restart-a1 a ccf:Judgment ; ccf:judges ccf:FM-APP-INSTANCE-RESTART ; ccf:jRole "detect" ;
+    ccf:jMetric ccm:m_app_uptime_s ; ccf:jMetricCode "app.uptime_s" ;
+    ccf:jPredicate "decreased" ; ccf:jOperandKind "metric_value" ;
+    ccf:jPredicateSemantics "observation.delta 存在且为负" ; ccf:jBaselineRequired true ;
+    ccf:unjudgeablePolicy "delta 缺失 ⇒ 条目 unjudgeable：既不成立也不证伪；规则不得据此判故障成立；按 WARN『待标定/不可机判』处理并登记 zero-instance-ledger.yaml。禁止静默转 false。" ;
+    cco:contractSource "fault-modes.yaml#FM-APP-INSTANCE-RESTART/detect/any_of[1]" .
+ccf:J-restart-b1 a ccf:Judgment ; ccf:judges ccf:FM-APP-INSTANCE-RESTART ; ccf:jRole "detect" ;
+    ccf:jMetric ccm:m_container_restart_total ; ccf:jMetricCode "container.restart_total" ;
+    ccf:jPredicate "increased" ; ccf:jOperandKind "metric_value" ;
+    ccf:jPredicateSemantics "observation.delta 存在且为正" ; ccf:jBaselineRequired true ;
+    ccf:unjudgeablePolicy "delta 缺失 ⇒ 条目 unjudgeable：既不成立也不证伪；规则不得据此判故障成立；按 WARN『待标定/不可机判』处理并登记 zero-instance-ledger.yaml。禁止静默转 false。" ;
+    cco:contractSource "fault-modes.yaml#FM-APP-INSTANCE-RESTART/detect/all_of[1]" .
+
+ccf:J-heap-1 a ccf:Judgment ; ccf:judges ccf:FM-APP-HEAP-PRESSURE ; ccf:jRole "detect" ;
+    ccf:jMetric ccm:m_app_heap_used_ratio ; ccf:jMetricCode "app.heap_used_ratio" ;
+    ccf:jOp ">" ; ccf:jOperandKind "threshold_reference" ;
+    ccf:jOperandValue "threshold:heap_used_ratio_light#warning" ;
+    ccf:jThresholdReference "threshold:heap_used_ratio_light#warning" ; ccf:jThreshold ccm:t_heap_used_ratio_light_warning ;
+    cco:contractSource "fault-modes.yaml#FM-APP-HEAP-PRESSURE/detect/all_of[1]" .
+ccf:J-heap-2 a ccf:Judgment ; ccf:judges ccf:FM-APP-HEAP-PRESSURE ; ccf:jRole "detect" ;
+    ccf:jMetric ccm:m_app_gc_pause_ms ; ccf:jMetricCode "app.gc_pause_ms" ;
+    ccf:jOp ">" ; ccf:jOperandKind "threshold_reference" ;
+    ccf:jOperandValue "threshold:gc_pause_ms_light#warning" ;
+    ccf:jThresholdReference "threshold:gc_pause_ms_light#warning" ; ccf:jThreshold ccm:t_gc_pause_ms_light_warning ;
+    cco:contractSource "fault-modes.yaml#FM-APP-HEAP-PRESSURE/detect/all_of[2]" .
+
+ccf:J-oom-1 a ccf:Judgment ; ccf:judges ccf:FM-CTR-OOM-KILLED ; ccf:jRole "detect" ;
+    ccf:jMetric ccm:m_container_oom_kill_total ; ccf:jMetricCode "container.oom_kill_total" ;
+    ccf:jPredicate "increased" ; ccf:jOperandKind "metric_value" ;
+    ccf:jPredicateSemantics "observation.delta 存在且为正" ; ccf:jBaselineRequired true ;
+    ccf:unjudgeablePolicy "delta 缺失 ⇒ 条目 unjudgeable：既不成立也不证伪；规则不得据此判故障成立；按 WARN『待标定/不可机判』处理并登记 zero-instance-ledger.yaml。禁止静默转 false。" ;
+    cco:contractSource "fault-modes.yaml#FM-CTR-OOM-KILLED/detect/all_of[1]" .
+
+ccf:J-throttle-1 a ccf:Judgment ; ccf:judges ccf:FM-CTR-CPU-THROTTLED ; ccf:jRole "detect" ;
+    ccf:jMetric ccm:m_container_cpu_throttled_periods ; ccf:jMetricCode "container.cpu_throttled_periods" ;
+    ccf:jPredicate "increased" ; ccf:jOperandKind "metric_value" ;
+    ccf:jPredicateSemantics "observation.delta 存在且为正" ; ccf:jBaselineRequired true ;
+    ccf:unjudgeablePolicy "delta 缺失 ⇒ 条目 unjudgeable：既不成立也不证伪；规则不得据此判故障成立；按 WARN『待标定/不可机判』处理并登记 zero-instance-ledger.yaml。禁止静默转 false。" ;
+    cco:contractSource "fault-modes.yaml#FM-CTR-CPU-THROTTLED/detect/all_of[1]" .
+
+ccf:J-net-a1 a ccf:Judgment ; ccf:judges ccf:FM-CTR-NET-UNREACHABLE ; ccf:jRole "detect" ;
+    ccf:jMetric ccm:m_app_datasource_connect_latency_ms ; ccf:jMetricCode "app.datasource.connect_latency_ms" ;
+    ccf:jOp ">" ; ccf:jOperandKind "entity_property" ;
+    ccf:jOperandValue "entity_property:JdbcDataSource.connectionTimeoutMs" ;
+    ccf:jOperandEntityProperty cc:connectionTimeoutMs ;
+    cco:contractSource "fault-modes.yaml#FM-CTR-NET-UNREACHABLE/detect/any_of[1]" .
+ccf:J-net-b1 a ccf:Judgment ; ccf:judges ccf:FM-CTR-NET-UNREACHABLE ; ccf:jRole "detect" ;
+    ccf:jMetric ccm:m_app_datasource_connect_fail_total ; ccf:jMetricCode "app.datasource.connect_fail_total" ;
+    ccf:jPredicate "increased" ; ccf:jOperandKind "metric_value" ;
+    ccf:jPredicateSemantics "observation.delta 存在且为正" ; ccf:jBaselineRequired true ;
+    ccf:unjudgeablePolicy "delta 缺失 ⇒ 条目 unjudgeable：既不成立也不证伪；规则不得据此判故障成立；按 WARN『待标定/不可机判』处理并登记 zero-instance-ledger.yaml。禁止静默转 false。" ;
+    cco:contractSource "fault-modes.yaml#FM-CTR-NET-UNREACHABLE/detect/all_of[1]" .
+
+ccf:J-hostcpu-1 a ccf:Judgment ; ccf:judges ccf:FM-HOST-CPU-CONTENTION ; ccf:jRole "detect" ;
+    ccf:jMetric ccm:m_host_load1 ; ccf:jMetricCode "host.load1" ;
+    ccf:jOp ">" ; ccf:jOperandKind "threshold_reference" ;
+    ccf:jOperandValue "threshold:load1_per_core_light#warning" ;
+    ccf:jThresholdReference "threshold:load1_per_core_light#warning" ; ccf:jThreshold ccm:t_load1_per_core_light_warning ;
+    cco:contractSource "fault-modes.yaml#FM-HOST-CPU-CONTENTION/detect/all_of[1]" .
+ccf:J-hostcpu-2 a ccf:Judgment ; ccf:judges ccf:FM-HOST-CPU-CONTENTION ; ccf:jRole "detect" ;
+    ccf:jMetric ccm:m_host_cpu_usage_ratio ; ccf:jMetricCode "host.cpu_usage_ratio" ;
+    ccf:jOp ">" ; ccf:jOperandKind "threshold_reference" ;
+    ccf:jOperandValue "threshold:cpu_usage_ratio_severe#critical" ;
+    ccf:jThresholdReference "threshold:cpu_usage_ratio_severe#critical" ; ccf:jThreshold ccm:t_cpu_usage_ratio_severe_critical ;
+    cco:contractSource "fault-modes.yaml#FM-HOST-CPU-CONTENTION/detect/all_of[2]" .
+
+ccf:J-hostmem-1 a ccf:Judgment ; ccf:judges ccf:FM-HOST-MEM-PRESSURE ; ccf:jRole "detect" ;
+    ccf:jMetric ccm:m_host_mem_available_ratio ; ccf:jMetricCode "host.mem_available_ratio" ;
+    ccf:jOp "<" ; ccf:jOperandKind "threshold_reference" ;
+    ccf:jOperandValue "threshold:mem_available_ratio_severe#critical" ;
+    ccf:jThresholdReference "threshold:mem_available_ratio_severe#critical" ; ccf:jThreshold ccm:t_mem_available_ratio_severe_critical ;
+    cco:contractSource "fault-modes.yaml#FM-HOST-MEM-PRESSURE/detect/all_of[1]" .
+
+ccf:J-slowq-1 a ccf:Judgment ; ccf:judges ccf:FM-DB-SLOW-QUERY ; ccf:jRole "detect" ;
+    ccf:jMetric ccm:m_db_query_mean_exec_ms ; ccf:jMetricCode "db.query.mean_exec_ms" ;
+    ccf:jOp ">" ; ccf:jOperandKind "threshold_reference" ;
+    ccf:jOperandValue "threshold:mean_exec_ms_light#warning" ;
+    ccf:jThresholdReference "threshold:mean_exec_ms_light#warning" ; ccf:jThreshold ccm:t_mean_exec_ms_light_warning ;
+    cco:contractSource "fault-modes.yaml#FM-DB-SLOW-QUERY/detect/all_of[1]" .
+
+ccf:J-poolfull-1 a ccf:Judgment ; ccf:judges ccf:FM-DB-SESSION-POOL-FULL ; ccf:jRole "detect" ;
+    ccf:jMetric ccm:m_db_pool_session_used_ratio ; ccf:jMetricCode "db.pool.session_used_ratio" ;
+    ccf:jOp ">" ; ccf:jOperandKind "threshold_reference" ;
+    ccf:jOperandValue "threshold:session_used_ratio_severe#critical" ;
+    ccf:jThresholdReference "threshold:session_used_ratio_severe#critical" ; ccf:jThreshold ccm:t_session_used_ratio_severe_critical ;
+    cco:contractSource "fault-modes.yaml#FM-DB-SESSION-POOL-FULL/detect/all_of[1]" .
+ccf:J-poolfull-2 a ccf:Judgment ; ccf:judges ccf:FM-DB-SESSION-POOL-FULL ; ccf:jRole "detect" ;
+    ccf:jMetric ccm:m_db_pool_conn_rejected_total ; ccf:jMetricCode "db.pool.conn_rejected_total" ;
+    ccf:jPredicate "increased" ; ccf:jOperandKind "metric_value" ;
+    ccf:jPredicateSemantics "observation.delta 存在且为正" ; ccf:jBaselineRequired true ;
+    ccf:unjudgeablePolicy "delta 缺失 ⇒ 条目 unjudgeable：既不成立也不证伪；规则不得据此判故障成立；按 WARN『待标定/不可机判』处理并登记 zero-instance-ledger.yaml。禁止静默转 false。" ;
+    cco:contractSource "fault-modes.yaml#FM-DB-SESSION-POOL-FULL/detect/all_of[2]" .
+
+ccf:J-lock-1 a ccf:Judgment ; ccf:judges ccf:FM-DB-LOCK-WAIT ; ccf:jRole "detect" ;
+    ccf:jMetric ccm:m_db_session_wait_event ; ccf:jMetricCode "db.session.wait_event" ;
+    ccf:jPredicate "in_enum" ; ccf:jOperandKind "enum_value" ;
+    ccf:jPredicateSemantics "observation.valueText ∈ values[]" ; ccf:jBaselineRequired false ;
+    ccf:jEnumValue "LockMgrLock" , "transactionid" , "relation" , "tuple" ;
+    cco:contractSource "fault-modes.yaml#FM-DB-LOCK-WAIT/detect/all_of[1]" .
+ccf:J-lock-2 a ccf:Judgment ; ccf:judges ccf:FM-DB-LOCK-WAIT ; ccf:jRole "detect" ;
+    ccf:jMetric ccm:m_db_session_xact_age_s ; ccf:jMetricCode "db.session.xact_age_s" ;
+    ccf:jOp ">" ; ccf:jOperandKind "threshold_reference" ;
+    ccf:jOperandValue "threshold:xact_age_s_light#warning" ;
+    ccf:jThresholdReference "threshold:xact_age_s_light#warning" ; ccf:jThreshold ccm:t_xact_age_s_light_warning ;
+    cco:contractSource "fault-modes.yaml#FM-DB-LOCK-WAIT/detect/all_of[2]" .
+ccf:J-hostdiskfull-1 a ccf:Judgment ; ccf:judges ccf:FM-HOST-DISK-FULL ; ccf:jRole "detect" ;
+    ccf:jMetric ccm:m_host_fs_max_used_pct ; ccf:jMetricCode "host.fs_max_used_pct" ;
+    ccf:jOp ">" ; ccf:jOperandKind "threshold_reference" ;
+    ccf:jOperandValue "threshold:fs_usage_pct_light#warning" ;
+    ccf:jThresholdReference "threshold:fs_usage_pct_light#warning" ; ccf:jThreshold ccm:t_fs_usage_pct_light ;
+    cco:contractSource "fault-modes.yaml#FM-HOST-DISK-FULL/detect/all_of[1]" .
+ccf:J-hostdiskioerror-1 a ccf:Judgment ; ccf:judges ccf:FM-HOST-DISK-IO-ERROR ; ccf:jRole "detect" ;
+    ccf:jMetric ccm:m_host_disk_io_errors_total ; ccf:jMetricCode "host.disk_io_errors_total" ;
+    ccf:jPredicate "non_zero" ; ccf:jOperandKind "metric_value" ;
+    ccf:jPredicateSemantics "observation.value 存在且不等于 0" ; ccf:jBaselineRequired false ;
+    cco:contractSource "fault-modes.yaml#FM-HOST-DISK-IO-ERROR/detect/all_of[1]" .
+ccf:J-hostnetifacedown-1 a ccf:Judgment ; ccf:judges ccf:FM-HOST-NET-IFACE-DOWN ; ccf:jRole "detect" ;
+    ccf:jMetric ccm:m_host_net_iface_down_count ; ccf:jMetricCode "host.net_iface_down_count" ;
+    ccf:jPredicate "non_zero" ; ccf:jOperandKind "metric_value" ;
+    ccf:jPredicateSemantics "observation.value 存在且不等于 0" ; ccf:jBaselineRequired false ;
+    cco:contractSource "fault-modes.yaml#FM-HOST-NET-IFACE-DOWN/detect/all_of[1]" .
+ccf:J-dbreplicationlag-1 a ccf:Judgment ; ccf:judges ccf:FM-DB-REPLICATION-LAG ; ccf:jRole "detect" ;
+    ccf:jMetric ccm:m_db_cluster_replication_not_streaming_count ; ccf:jMetricCode "db.cluster.replication_not_streaming_count" ;
+    ccf:jPredicate "non_zero" ; ccf:jOperandKind "metric_value" ;
+    ccf:jPredicateSemantics "observation.value 存在且不等于 0" ; ccf:jBaselineRequired false ;
+    cco:contractSource "fault-modes.yaml#FM-DB-REPLICATION-LAG/detect/all_of[1]" .
+ccf:J-dbunusedindex-1 a ccf:Judgment ; ccf:judges ccf:FM-DB-UNUSED-INDEX ; ccf:jRole "detect" ;
+    ccf:jMetric ccm:m_db_table_unused_index_count ; ccf:jMetricCode "db.table.unused_index_count" ;
+    ccf:jPredicate "non_zero" ; ccf:jOperandKind "metric_value" ;
+    ccf:jPredicateSemantics "observation.value 存在且不等于 0" ; ccf:jBaselineRequired false ;
+    cco:contractSource "fault-modes.yaml#FM-DB-UNUSED-INDEX/detect/all_of[1]" .
+ccf:J-deadlock-1 a ccf:Judgment ; ccf:judges ccf:FM-DB-DEADLOCK ; ccf:jRole "detect" ;
+    ccf:jMetric ccm:m_db_cluster_deadlocks ; ccf:jMetricCode "db.cluster.deadlocks" ;
+    ccf:jPredicate "increased" ; ccf:jOperandKind "metric_value" ;
+    ccf:jPredicateSemantics "observation.delta 存在且为正" ; ccf:jBaselineRequired true ;
+    cco:contractSource "fault-modes.yaml#FM-DB-DEADLOCK/detect/all_of[1]" .
+ccf:J-idle-in-tx-1 a ccf:Judgment ; ccf:judges ccf:FM-DB-IDLE-IN-TX ; ccf:jRole "detect" ;
+    ccf:jMetric ccm:m_db_instance_idle_in_xact ; ccf:jMetricCode "db.instance.idle_in_xact" ;
+    ccf:jPredicate "increased" ; ccf:jOperandKind "metric_value" ;
+    ccf:jPredicateSemantics "observation.delta 存在且为正" ; ccf:jBaselineRequired true ;
+    cco:contractSource "fault-modes.yaml#FM-DB-IDLE-IN-TX/detect/all_of[1]" .
+ccf:J-seq-scan-1 a ccf:Judgment ; ccf:judges ccf:FM-DB-SEQ-SCAN ; ccf:jRole "detect" ;
+    ccf:jMetric ccm:m_db_table_seq_scan ; ccf:jMetricCode "db.table.seq_scan" ;
+    ccf:jPredicate "increased" ; ccf:jOperandKind "metric_value" ;
+    ccf:jPredicateSemantics "observation.delta 存在且为正" ; ccf:jBaselineRequired true ;
+    cco:contractSource "fault-modes.yaml#FM-DB-SEQ-SCAN/detect/all_of[1]" .
+ccf:J-rollback-storm-1 a ccf:Judgment ; ccf:judges ccf:FM-DB-ROLLBACK-STORM ; ccf:jRole "detect" ;
+    ccf:jMetric ccm:m_db_cluster_xact_rollback ; ccf:jMetricCode "db.cluster.xact_rollback" ;
+    ccf:jPredicate "increased" ; ccf:jOperandKind "metric_value" ;
+    ccf:jPredicateSemantics "observation.delta 存在且为正" ; ccf:jBaselineRequired true ;
+    cco:contractSource "fault-modes.yaml#FM-DB-ROLLBACK-STORM/detect/all_of[1]" .
+
+ccf:J-down-a1 a ccf:Judgment ; ccf:judges ccf:FM-DB-INSTANCE-DOWN ; ccf:jRole "detect" ;
+    ccf:jMetric ccm:m_db_instance_up ; ccf:jMetricCode "db.instance.up" ;
+    ccf:jPredicate "is_false" ; ccf:jOperandKind "metric_value" ;
+    ccf:jPredicateSemantics "observation.value 为 false" ; ccf:jBaselineRequired false ;
+    cco:contractSource "fault-modes.yaml#FM-DB-INSTANCE-DOWN/detect/any_of[1]" .
+ccf:J-down-b1 a ccf:Judgment ; ccf:judges ccf:FM-DB-INSTANCE-DOWN ; ccf:jRole "detect" ;
+    ccf:jMetric ccm:m_db_cluster_switchover_total ; ccf:jMetricCode "db.cluster.switchover_total" ;
+    ccf:jPredicate "increased" ; ccf:jOperandKind "metric_value" ;
+    ccf:jPredicateSemantics "observation.delta 存在且为正" ; ccf:jBaselineRequired true ;
+    ccf:unjudgeablePolicy "delta 缺失 ⇒ 条目 unjudgeable：既不成立也不证伪；规则不得据此判故障成立；按 WARN『待标定/不可机判』处理并登记 zero-instance-ledger.yaml。禁止静默转 false。" ;
+    cco:contractSource "fault-modes.yaml#FM-DB-INSTANCE-DOWN/detect/any_of[2]" .
+
+# ===========================================================================
+# 7) 叶子根因（F5 的排除法判据）—— ccf:RootCause，不计入 14
+# ===========================================================================
+ccf:FM-APP-AUTH-INCOMPATIBLE a ccf:RootCause ;
+    ccf:rootCauseCode "FM-APP-AUTH-INCOMPATIBLE" ; cco:neutralCode "FM-APP-AUTH-INCOMPATIBLE" ;
+    ccf:displayName "JDBC 驱动/认证方式不兼容" ;
+    ccf:detectionMode "exclusion" ; ccf:chainCode "F5" ;
+    ccf:rootCauseOf ccf:FM-APP-DS-CONNECT-FAIL ;
+    ccf:rootCauseRequirement ccf:J-rcenc-1 , ccf:J-rcenc-2 , ccf:J-rcenc-3 , ccf:J-rcenc-4 ;
+    ccf:note "★ 需要「否定性推理」：必须能断言『某个条件不成立』才能收敛到此根因" ;
+    cco:contractSource "shared/model/causal-edges.yaml#/leaf_root_causes[subtype=FM-APP-AUTH-INCOMPATIBLE]" ;
+    rdfs:label "JDBC 驱动/认证方式不兼容"@zh .
+
+ccf:J-rcenc-1 a ccf:Judgment ; ccf:jRole "exclusion" ; ccf:jOperandKind "exclusion_clause" ;
+    ccf:exclusionRequirementText "db.instance.up == true            （数据库在线）" ;
+    ccf:jMetric ccm:m_db_instance_up ; ccf:jMetricCode "db.instance.up" ; ccf:jPredicate "is_true" ;
+    ccf:jPredicateSemantics "observation.value 为 true" ; ccf:jBaselineRequired false ;
+    cco:contractSource "causal-edges.yaml#/leaf_root_causes/exclusion_requirements[1]" .
+ccf:J-rcenc-2 a ccf:Judgment ; ccf:jRole "exclusion" ; ccf:jOperandKind "exclusion_clause" ;
+    ccf:exclusionRequirementText "host/container 网络可达             （网络正常）" ;
+    ccf:jMetric ccm:m_app_datasource_connect_latency_ms ; ccf:jMetricCode "app.datasource.connect_latency_ms" ;
+    ccf:jNote "网络不可达时 connect_latency_ms 会达到 connectionTimeoutMs；未达 ⇒ 网络正常" ;
+    cco:contractSource "causal-edges.yaml#/leaf_root_causes/exclusion_requirements[2]" .
+ccf:J-rcenc-3 a ccf:Judgment ; ccf:jRole "exclusion" ; ccf:jOperandKind "exclusion_clause" ;
+    ccf:exclusionRequirementText "app.datasource.connect_latency_ms 立即失败而非超时（认证失败）" ;
+    ccf:jMetric ccm:m_app_datasource_connect_latency_ms ; ccf:jMetricCode "app.datasource.connect_latency_ms" ;
+    ccf:jNote "★ 与 F6 的区分器（causal-edges.yaml#discriminators[2]）" ;
+    cco:contractSource "causal-edges.yaml#/leaf_root_causes/exclusion_requirements[3]" .
+ccf:J-rcenc-4 a ccf:Judgment ; ccf:jRole "exclusion" ; ccf:jOperandKind "exclusion_clause" ;
+    ccf:exclusionRequirementText "jdbcUrl / driverVersion / authMode 存在可疑变更（配置异常）" ;
+    ccf:jNote "★ 契约里这几项**没有**对应的指标 code / 属性 ⇒ 本实现不伪造 IRI，仅保留原文（诚实清单第 1 条）" ;
+    cco:contractSource "causal-edges.yaml#/leaf_root_causes/exclusion_requirements[4]" .
+
+# ===========================================================================
+# 8) 契约偏差登记
+# ===========================================================================
+# X-5  FM-APP-INSTANCE-RESTART / FM-CTR-NET-UNREACHABLE 的 detect 同级并列 any_of 与
+#      all_of（FM-DB-INSTANCE-DOWN 只含 any_of）⇒ **v1.0.3 已裁定**：组内 AND/OR、
+#      **组间 AND**、缺省组中性成立（依据 fault-modes.yaml#meta.detect_semantics）；
+#      落成显式 ccf:groupOp（16 组）与 ccf:betweenGroupsOp "AND"（14 模式）公理。
+# X-7  increased / decreased 需要窗口基线 ⇒ 基线缺失时判据 unjudgeable（不产 Finding、
+#      按 WARN 登记台账、严禁当 false）。本体侧载体：ccf:jPredicateSemantics /
+#      ccf:jBaselineRequired / ccf:unjudgeablePolicy（依据 fault-modes.yaml#meta.predicate_semantics）；
+#      规则侧载体：scheme2-onto/rules/r03,r04,r06,r07.rq 的三值分支。
+# 自定  ccf:fmComponentType / ccf:fmDetectionMode 的命名与值域（docs/04 未给规格）；
+#      ccf:affectsSeverity 的命名（镜像方案1 CC_AFFECTS.severity，docs/04 未写）。
+# 契约外指标  ccf:J-rcenc-4 的 4 条 exclusion_requirements 中第 4 条涉及
+#      jdbcUrl/driverVersion/authMode，契约的 metrics.yaml 里**没有**这些指标 ⇒
+#      不建属性、不建指标个体，只保留 requirement 原文。
+# ===========================================================================
+# 9) OWL 原生键公理（镜像 docs/03:67 的 Neo4j 唯一约束：
+#    CREATE CONSTRAINT cc_uq_fm_code IF NOT EXISTS FOR (n:CC_FaultMode) REQUIRE n.fmCode IS UNIQUE）
+#    ⇒ 同一诉求在 Neo4j 里是 DDL、不参与推理；在 OWL 2 里是**公理**（owl:hasKey）。
+# ===========================================================================
+ccf:FaultMode owl:hasKey ( ccf:faultModeCode ) .

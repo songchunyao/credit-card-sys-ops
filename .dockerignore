@@ -1,0 +1,75 @@
+# =============================================================================
+# .dockerignore —— 构建上下文裁剪（构建上下文 = 仓库根）
+#
+# 目的：让 `docker build` 只把**运行期真正需要**的文件送进 context。
+#   本项目两棵树都要进镜像，且**路径必须保持仓库相对布局**：
+#     · 采集层镜像   ← dist/collect-layer/（自包含，内部布局 service/ storages/ data/）
+#     · 四个应用镜像 ← shared/ + scheme1-kg/ + scheme2-onto/（服务按 __file__ 位置上溯算仓库根）
+#   ⇒ **不得**拍平目录，否则 repo_root_default()/parents[2] 型定位会静默算错根目录。
+#
+# ★ tmp/ 默认整棵排除，但 live-facts 镜像**必须**带 tmp/ccf_live5.json
+#   （它是 m5-input-facts.yaml 的 base_ref 基底快照，缺它启动即 fail-closed）
+#   ⇒ 用 `!` 例外把它放回来。注意排除父目录后再用 `!` 放回子文件是 Docker 支持的写法。
+# =============================================================================
+
+# ── 版本控制与 CI 元数据 ─────────────────────────────────────────
+.git
+.gitignore
+.gitattributes
+.gitlab-ci.yml
+.gitlab_token.txt
+
+# ── Python 产物 ──────────────────────────────────────────────────
+**/__pycache__
+**/*.py[cod]
+**/*.pyo
+.pytest_cache
+.mypy_cache
+.ruff_cache
+*.egg-info
+
+# ── 虚拟环境 ─────────────────────────────────────────────────────
+.venv
+.venv-*
+venv
+
+# ── 密钥：绝不进镜像（镜像内零密钥，全部运行时注入）──────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.p12
+id_rsa*
+id_ed25519*
+.git-credentials
+
+# ── 工作区：整棵排除，仅放回 live-facts 的基底快照 ───────────────
+tmp/**
+!tmp/ccf_live5.json
+
+# ── 无关文档与证据（运行时不需要）───────────────────────────────
+docs
+sse
+env
+tests
+**/tests
+ci
+dist/*.md
+*.log
+*.pid
+*.jsonl
+gen_report.py
+run_report.bat
+run_report.mjs
+方案梳理与代码分析报告.md
+
+# ── 编辑器 / 系统 ────────────────────────────────────────────────
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+Desktop.ini
+*~
+*.swp

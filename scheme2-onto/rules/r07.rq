@@ -1,0 +1,126 @@
+# ============================================================================
+# scheme2-onto/rules/r07.rq —— 方案2 原生 SPARQL CONSTRUCT 规则
+# ----------------------------------------------------------------------------
+#   规则执行口径: 见本文件头 + docs/04-appendix-ORSD.md「规则口径」一节
+#   契约: shared/model/fault-modes.yaml#FM-DB-INSTANCE-DOWN
+#   detect(any_of): db.instance.up predicate=is_false
+#                   db.cluster.switchover_total predicate=increased
+#   产出: F-007；关键证据（docs/04 §6）: switchover_total 有增量
+#   ★ 两个 any_of 分支各自绑定目标对象（实例 / 集群），再统一构造 finding。
+#   ★ 组语义 v1.0.3（X-5）：本模式 detect **只有 any_of 一组**（契约 fault-modes.yaml:249）
+#     ⇒ 缺省 all_of 组中性成立，组内 OR 即整体语义；无并列组。
+#   ★ 口径 v1.0.3（X-7）：分支 1（is_false）是确定判定；分支 2 的 increased 落在 cc:delta，
+#     三值（A 基线 / B 等效推导 / U 不可判只登记不产 Finding）。分支 1 不成立而分支 2
+#     基线不可得 ⇒ 整条 any_of 组不可判 ⇒ 登记 ccf:J-down-b1。
+PREFIX cc:    <https://credit-card-ops.ai/onto/topology#>
+PREFIX cco:   <https://credit-card-ops.ai/onto/core#>
+PREFIX ccm:   <https://credit-card-ops.ai/onto/metric#>
+PREFIX ccf:   <https://credit-card-ops.ai/onto/fault#>
+PREFIX ccc:   <https://credit-card-ops.ai/onto/causal#>
+PREFIX cca:   <https://credit-card-ops.ai/onto/action#>
+PREFIX ccp:   <https://credit-card-ops.ai/onto/prov#>
+PREFIX prov:  <http://www.w3.org/ns/prov#>
+PREFIX xsd:   <http://www.w3.org/2001/XMLSchema#>
+PREFIX rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs:  <http://www.w3.org/2000/01/rdf-schema#>
+
+CONSTRUCT {
+  ?finding a ccf:Finding ;
+      ccf:findingCode "F-007" ;
+      ccp:findingSeverity ?sev ;
+      ccp:findingFaultMode ?fm ;
+      ccp:findingFor ?target ;
+      ccp:associatedRule ccp:Rule-r07 ;
+      prov:wasDerivedFrom ?ev .
+  # ★ v1.0.3（X-7）不可判登记：?uj 只在不可判分支绑定 ⇒ 成立分支不生成这几条三元组；
+  #    反之 ?finding 只在成立分支绑定 ⇒ 不可判分支不产 Finding（既不成立也不证伪）。
+  ?uj a cco:InformationEntity ;
+      ccp:unjudgeableJudgment ccf:J-down-b1 ;
+      ccp:unjudgeableFor ?target ;
+      ccp:unjudgeableRule ccp:Rule-r07 ;
+      ccp:unjudgeableReason ?ujReason ;
+      prov:wasDerivedFrom ?ev .
+}
+WHERE {
+  {
+    BIND(ccf:FM-DB-INSTANCE-DOWN AS ?fm)  BIND("critical" AS ?sev)
+    # --- any_of 分支 1（组内 OR）：db.instance.up is_false —— 确定判定，不需基线 ---
+    ?target a cc:GaussDBInstance ; ccm:up ?up .
+    FILTER(?up = false)
+    ?target cc:hasEvidence ?ev .
+    ?ev cc:metricCode "db.instance.up"^^xsd:string .
+    BIND(IRI(CONCAT("https://credit-card-ops.ai/onto/inst/finding/",
+                    "F-007/",
+                    ENCODE_FOR_URI(STRAFTER(STR(?target), "/inst/")))) AS ?finding)
+  }
+  UNION
+  {
+    BIND(ccf:FM-DB-INSTANCE-DOWN AS ?fm)  BIND("critical" AS ?sev)
+    # --- A) 基线路径（v1.0.3 X-7）：cc:delta 存在且为正 ---
+    ?target ccm:switchoverTotal ?now .
+    ?target cc:hasEvidence ?ev .
+    ?ev cc:metricCode "db.cluster.switchover_total"^^xsd:string ;
+        cc:delta ?delta ; cc:deltaWindowS ?window .
+    ?zeroBase ccm:tierReference "baseline:counter_non_zero" ;
+              ccm:baselineValue ?zero .
+    FILTER(xsd:decimal(?delta) > ?zero)
+    FILTER NOT EXISTS { ?ev cc:counterReset true }
+    BIND(IRI(CONCAT("https://credit-card-ops.ai/onto/inst/finding/",
+                    "F-007/",
+                    ENCODE_FOR_URI(STRAFTER(STR(?target), "/inst/")))) AS ?finding)
+  }
+  UNION
+  {
+    BIND(ccf:FM-DB-INSTANCE-DOWN AS ?fm)  BIND("critical" AS ?sev)
+    # --- B) 等效推导路径：两条可比观测（capturedAt 更早 / rawValue 更小）推得 delta ---
+    ?target ccm:switchoverTotal ?now .
+    ?target cc:hasEvidence ?late , ?earlier .
+    ?late    cc:metricCode "db.cluster.switchover_total"^^xsd:string ; cc:rawValue ?vLate    ; cc:capturedAt ?tLate .
+    ?earlier cc:metricCode "db.cluster.switchover_total"^^xsd:string ; cc:rawValue ?vEarlier ; cc:capturedAt ?tEarlier .
+    FILTER(str(?tEarlier) < str(?tLate))
+    FILTER(xsd:decimal(?vEarlier) < xsd:decimal(?vLate))
+    FILTER NOT EXISTS { ?late cc:counterReset true }
+    FILTER NOT EXISTS { ?earlier cc:counterReset true }
+    BIND(?late AS ?ev)
+    BIND(IRI(CONCAT("https://credit-card-ops.ai/onto/inst/finding/",
+                    "F-007/",
+                    ENCODE_FOR_URI(STRAFTER(STR(?target), "/inst/")))) AS ?finding)
+  }
+  UNION
+  {
+    BIND(ccf:FM-DB-INSTANCE-DOWN AS ?fm)  BIND("critical" AS ?sev)
+    # --- U) 不可判（X-7）：基线不可得 ⇒ 只登记 ccp:unjudgeable*，不产 Finding ---
+    ?target ccm:switchoverTotal ?now .
+    ?target cc:hasEvidence ?ev .
+    ?ev cc:metricCode "db.cluster.switchover_total"^^xsd:string .
+    FILTER NOT EXISTS {
+      ?target cc:hasEvidence ?evB .
+      ?evB cc:metricCode "db.cluster.switchover_total"^^xsd:string ; cc:delta ?dAny ; cc:deltaWindowS ?wAny .
+      FILTER NOT EXISTS { ?evB cc:counterReset true }
+    }
+    FILTER NOT EXISTS {
+      ?target cc:hasEvidence ?l2 , ?e2 .
+      ?l2 cc:metricCode "db.cluster.switchover_total"^^xsd:string ; cc:capturedAt ?tl2 .
+      ?e2 cc:metricCode "db.cluster.switchover_total"^^xsd:string ; cc:capturedAt ?te2 .
+      FILTER(str(?te2) < str(?tl2))
+    }
+    BIND(IRI(CONCAT("https://credit-card-ops.ai/onto/inst/unjudgeable/",
+                    "F-007/",
+                    ENCODE_FOR_URI(STRAFTER(STR(?target), "/inst/")))) AS ?uj)
+    BIND("基线不可用（cc:delta / cc:deltaWindowS 缺失，或 cc:counterReset=true）⇒ 该判据 unjudgeable：既不成立也不证伪；不产 Finding，按 WARN『待标定/不可机判』登记 zero-instance-ledger.yaml" AS ?ujReason)
+  }
+  UNION
+  {
+    # --- FM-DB-REPLICATION-LAG（P0.9 新增）---
+    BIND(ccf:FM-DB-REPLICATION-LAG AS ?fm)  BIND("critical" AS ?sev)
+    ?target a cc:GaussDBCluster ; ccm:replicationNotStreamingCount ?v .
+    ?nzBase ccm:tierReference "baseline:counter_non_zero" ;
+            ccm:baselineValue ?zero .
+    FILTER(?v > ?zero)
+    ?target cc:hasEvidence ?ev .
+    ?ev cc:metricCode "db.cluster.replication_not_streaming_count"^^xsd:string .
+    BIND(IRI(CONCAT("https://credit-card-ops.ai/onto/inst/finding/",
+                    "F-007/",
+                    ENCODE_FOR_URI(STRAFTER(STR(?target), "/inst/")))) AS ?finding)
+  }
+}

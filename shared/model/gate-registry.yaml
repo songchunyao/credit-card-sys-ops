@@ -1,0 +1,438 @@
+# gate-registry.yaml —— shared/verify 门禁的**声明面**（数据，不是代码）
+#
+# 补 HB7 缺口：shared/verify/ 此前没有聚合 runner；G24（工具面契约）只在队长临时脚本
+# tmp/_m3_exit_regress.py 里覆盖过 36 例，而该临时脚本不是交付物。
+# 消费者 = shared/verify/gate_runner.py（执行 + 聚合）。
+#
+# 约定（与既有门禁一致）：
+#   退出码 0 = PASS / 1 = FAIL / 2 = BLOCKED（未测得）；优先级 BLOCKED > FAIL > PASS。
+#   gate_runner 对**其它任何退出码**（含负数、>2、启动失败、脚本不存在）判 FAIL 并点名原码；
+#   例外：该条已声明 declared_deviation_exit_codes（见下方第四态说明）时才记 DECLARED-DEVIATION。
+#
+# ★ v1 **不 pin 任何门禁文件的 sha256**：sha256 一律留空 = 只观测不判死。
+#   理由：此刻有并行施工者（W27/W28/W30/W31）正在改动 shared/deploy/smoke/e2e_smoke.py、
+#   shared/verify/purity_gate.py、shared/verify/m5_judge.py、shared/verify/m5/*.py、
+#   shared/model/m5-cases.yaml —— 若 pin 死必然假红。运行后由 gate_runner 如实打印**观测到的**
+#   sha256（含 file_sha256 与 stdout 的 sha256[:12]）。
+#
+# 覆盖契约（fail-closed）：shared/verify/ 下**每一个** .py 都必须在本文件里有且仅有一条登记
+#   （kind ∈ {gate, library}）。新门禁加入而未登记 ⇒ `--audit-coverage` exit 1。
+#
+# 已核验的文档串编号记在 g_ids（来源 = 各脚本自身 docstring/描述串，逐个现场读过）；
+# 主键 id 取**文件名主干**（稳定、唯一、不会被某个脚本改文档串而漂移），不用 G 号当主键。
+#
+# argv = 该门禁**默认模式**的完整参数，逐条现场核对来源：
+#   (a) 队长权威实跑台账 tmp/_m3_exit_regress.py 的 CASES 表（36 例）；
+#   (b) 该脚本自身 docstring 用法行 / argparse 定义（regress 未覆盖的 m5_cases_gate /
+#       m5_judge / purity_gate 等）。
+# 记账口径：argv 为相对仓库根的 POSIX 路径；gate_runner 以仓库根为 cwd 调用门禁。
+#
+# 分类判据（Q3 裁决，可审计）：某 .py 判 kind=gate ⟺ 下面三条同时成立 ——
+#   (1) 有 `if __name__ == "__main__"` 入口（或有模块级收尾 sys.exit，如 contract_gates.py:706）；
+#   (2) 有 argparse 参数面（或 docstring 里有明确用法行的手工 sys.argv 解析）；
+#   (3) 自身 docstring/描述串给出可独立跑出的三态退出码语义。
+#   三条缺任一条 ⇒ kind=library（被别的脚本 import、无独立 CLI）；library 只登记、不执行。
+#
+# ★ 第四态（Q2 裁决）：guard_conformance.py 另有 exit 3 = CARRIER_SPECIFIC —— 依据该门禁自己的
+#   docstring/源码（:25、:31、:120、:758、:1023）「该偏离已被登记为『载体能力边界』」，绝非 FAIL。
+#   只有在本条**显式**写 declared_deviation_exit_codes: [3] 时，gate_runner 才把 3 记为
+#   DECLARED-DEVIATION（单列：不并入 PASS、也不并入 FAIL，并照抄该门禁自己的 RESULT 行）；
+#   **未声明即按 FAIL** 并点名原始退出码。该字段可选；三态码 0/1/2 不得写入（写即契约错误 ⇒ exit 2）。
+
+schema: gate-registry/v1
+version: 1
+generated_by: shared/verify/gate_runner.py
+repo_root_hint: .
+
+entries:
+  # ---------------- offline 门禁（--offline 会真跑） ----------------
+  - id: contract_gates
+    path: shared/verify/contract_gates.py
+    kind: gate
+    class: offline
+    argv: []
+    expect_exit: "0=PASS 1=FAIL 2=BLOCKED（缺 PyYAML 等前置不可得时归 2）；队长 regress 观测无参=0"
+    evidence: tmp/gate_runner_evidence/contract_gates.stdout.txt
+    sha256: ""
+    g_ids: [G3, G4, G5, G7, G18]
+    note: "契约层门禁；★ 无 if __name__ 守卫、模块级收尾 sys.exit(:706) ⇒ 不可安全 import，必须子进程调用。"
+
+  - id: mapping_gate
+    path: shared/verify/mapping_gate.py
+    kind: gate
+    class: offline
+    argv: []
+    expect_exit: "0=PASS 1=FAIL 2=BLOCKED；队长 regress 观测无参=0"
+    evidence: tmp/gate_runner_evidence/mapping_gate.stdout.txt
+    sha256: ""
+    g_ids: [M1.5]
+    note: "只读 shared/mapping 与 shared/model，零网络 ⇒ offline。"
+
+  - id: doc_table_gate
+    path: shared/verify/doc_table_gate.py
+    kind: gate
+    class: offline
+    argv: []
+    expect_exit: "0=PASS 1=FAIL 2=BLOCKED；队长 regress 观测无参=0"
+    evidence: tmp/gate_runner_evidence/doc_table_gate.stdout.txt
+    sha256: ""
+    g_ids: [G17]
+    note: "文档表格一致性门禁；docstring 自载 G17。"
+
+  - id: ref_gate
+    path: shared/verify/ref_gate.py
+    kind: gate
+    class: offline
+    argv: []
+    expect_exit: "0=PASS 1=FAIL 2=BLOCKED；队长 regress 观测无参=0"
+    evidence: tmp/gate_runner_evidence/ref_gate.stdout.txt
+    sha256: ""
+    g_ids: [G20]
+    note: "出处引用门禁；手工 sys.argv 而非 argparse（无参即默认模式）。"
+
+  - id: auditrot_gate
+    path: shared/verify/auditrot_gate.py
+    kind: gate
+    class: offline
+    argv: []
+    expect_exit: "0=PASS 1=FAIL 2=BLOCKED；队长 regress 观测无参=0、--selftest=0"
+    evidence: tmp/gate_runner_evidence/auditrot_gate.stdout.txt
+    sha256: ""
+    g_ids: [R-29]
+    note: "docstring 自称「离线，零网络、零真机」⇒ offline。"
+
+  - id: ccf_instance_gate
+    path: shared/verify/ccf_instance_gate.py
+    kind: gate
+    class: offline
+    argv: ["--ccf", "tmp/ccf_live5.json"]
+    expect_exit: "0=PASS 1=FAIL（用法错误的自定义 handler 也 exit 1）；队长 regress 同参观测=0"
+    evidence: tmp/gate_runner_evidence/ccf_instance_gate.stdout.txt
+    sha256: ""
+    g_ids: [G21]
+    note: "docstring:58-63 用法行即 --ccf；自称「纯标准库 + PyYAML；只读，零网络，零 Neo4j/GraphDB 依赖」⇒ offline。"
+
+  - id: zero_instance_gate
+    path: shared/verify/zero_instance_gate.py
+    kind: gate
+    class: offline
+    argv: ["--ccf", "tmp/ccf_live5.json", "--quiet"]
+    expect_exit: "0=PASS 1=FAIL；argv 取自队长 regress（--ccf 为 required=True，缺参=2 用法错误）"
+    evidence: tmp/gate_runner_evidence/zero_instance_gate.stdout.txt
+    sha256: ""
+    g_ids: [G16]
+    note: "只读 CCF 快照与台账文件 ⇒ offline。"
+
+  - id: equivalence
+    path: shared/verify/equivalence.py
+    kind: gate
+    class: offline
+    argv: ["--a", "tmp/ccf_live5.json"]
+    expect_exit: "0=PASS 1=FAIL 2=BLOCKED（schema 缺失时 return 2）；队长 regress 同参观测=0"
+    evidence: tmp/gate_runner_evidence/equivalence.stdout.txt
+    sha256: ""
+    g_ids: [G5]
+    note: "★ 同时被 shared/collect/freeze.py:70 import，但自身有 argparse(:353-363)+__main__(:423-424) 与用法行 ⇒ 按「有 CLI」定义判 gate（不判 library，理由见报告）。"
+
+  - id: f5_kgt_gate
+    path: shared/verify/f5_kgt_gate.py
+    kind: gate
+    class: offline
+    argv: []
+    expect_exit: "0=PASS 1=FAIL 2=BLOCKED；队长 regress 观测无参=0"
+    evidence: tmp/gate_runner_evidence/f5_kgt_gate.stdout.txt
+    sha256: ""
+    g_ids: [F5]
+    note: "docstring:61-66 用法三行（无参 / --selftest / --dify-readback）；默认不拨号 ⇒ offline。"
+
+  - id: g8_info_parity
+    path: shared/verify/g8_info_parity.py
+    kind: gate
+    class: offline
+    argv: []
+    expect_exit: "0=PASS 1=FAIL 2=BLOCKED；队长 regress 观测无参=0"
+    evidence: tmp/gate_runner_evidence/g8_info_parity.stdout.txt
+    sha256: ""
+    g_ids: [G8]
+    note: "docstring 自称「本脚本只校验契约层面」⇒ offline。"
+
+  - id: h1_gate_proof
+    path: shared/verify/h1_gate_proof.py
+    kind: gate
+    class: offline
+    argv: []
+    expect_exit: "0=PASS 1=FAIL 2=BLOCKED；队长 regress 观测无参=0"
+    evidence: tmp/gate_runner_evidence/h1_gate_proof.stdout.txt
+    sha256: ""
+    g_ids: [M1.7]
+    note: "docstring 自称「不连任何网络、不 import 采集层、不碰真机」⇒ offline。"
+
+  - id: kg_tbox_check
+    path: shared/verify/kg_tbox_check.py
+    kind: gate
+    class: offline
+    argv: []
+    expect_exit: "0=PASS 1=FAIL；队长 regress 观测无参=0"
+    evidence: tmp/gate_runner_evidence/kg_tbox_check.stdout.txt
+    sha256: ""
+    g_ids: []
+    note: "纯标准库 + 自造 YAML 子集解析器，零外部依赖 ⇒ offline。★ 也被 scheme1-kg/tools/*.py import，但有 __main__(:1264)+def main(:1219) ⇒ 仍判 gate。"
+
+  - id: m5_cases_gate
+    path: shared/verify/m5_cases_gate.py
+    kind: gate
+    class: offline
+    argv: []
+    expect_exit: "0=PASS 1=FAIL 2=BLOCKED（epilog 明写 BLOCKED != FAIL 且 BLOCKED > FAIL > PASS）；--selftest 亦 0"
+    evidence: tmp/gate_runner_evidence/m5_cases_gate.stdout.txt
+    sha256: ""
+    g_ids: [M5]
+    note: "★ 队长 regress **未覆盖**此脚本；argv 由源码判定：--contract 默认 <root>/shared/model/m5-cases.yaml(:1582-1586)，无参即正式契约校验；epilog:1584 给出三态语义。★ W46 收紧（`:181-190` 条目，path 未变）：expect_objects 前缀改为按 shared/model/ccf.schema.json#x-id-prefix-by-type 硬判（不在表内 ⇒ E-CASES-OBJECT-UNKNOWN FAIL；旧 W-CASES-OBJECT-PREFIX 的 WARN 已删，见 shared/verify/m5_cases_gate.py:931-952），并新增 E-CASES-OBJECT-SNAPSHOT（meta.snapshot_ids 必须恰 1 且与 meta.object_index 同源，:982-1007）；--selftest 实测 50/50（负控 47 / 正控 3，exit 0）。"
+
+  - id: m5_judge
+    path: shared/verify/m5_judge.py
+    kind: gate
+    class: offline
+    argv: ["--selftest"]
+    expect_exit: "0=PASS 1=FAIL；★ 无参默认模式**必然 FAIL(1)**（源码实测 `m5_judge.py:1235-1237` 强制 --cases/--answers/--out；旧记 `:1219-1221` 系过期行号，已勘误）；★ `--selftest` 实测约 236 s（W44：496 次调用 / 净耗 206.5 s，`B=10000` 固定种子的纯 Python bootstrap 占墙钟 87.2%）⇒ 聚合 `--timeout` 须 ≥480 s，否则预算不足会被记为 BLOCKED（＝未测完/未测量，**不是**挂起、也**不是**判据失败）"
+    evidence: tmp/gate_runner_evidence/m5_judge.stdout.txt
+    sha256: ""
+    g_ids: [G6]
+    note: "★ W44 已证该文件**未被**并行施工者改动：四次独立观测 sha256 恒为 `ee776f748a264d31b34b7aebe66bd26ee75d8cd3309876346dbc3c0621ebb10d`（66640 B / 1249 LF，mtime 2026-09-29 17:04:16，早于本次作业）；本 runner 只按注册表调用，不 import。argv 取文档化的离线可跑模式 `--selftest`（`:1231-1234`，out 缺省落 `tmp/m5_judge_selftest`）；正式判决集需要有**真答案集**时另配 --cases/--answers/--out，本任务无该输入，故不冒充。无参模式在 1.16 s 内 fail-closed 退 1（`:1235-1237`）。★ W46 复核：本文件（shared/verify/m5_judge.py）**未被 W46 改动**，sha256 仍为 ee776f748a264d31b34b7aebe66bd26ee75d8cd3309876346dbc3c0621ebb10d（66640 B / 1249 LF）⇒ 本 note 继续有效；但 W46 改了它的两个下游库：shared/verify/m5/judge.py（由 21919 B/451 LF 变 22984 B/463 LF，sha256 57c2925bb2154c25d3053f7c088c5fa7729f177e9c02788fd56dc6976ddb8104 —— object_accuracy 命中口径由子串改 M-ID-SET v1）与 shared/verify/m5/contract.py（24429 B/519 LF → 30385 B/634 LF，a993c3ff29a88e65ac1b0afab61cfddcb93b4a7f11a5ab9b7cfc277de8c519bf，新增全部追加在 :522-634）。--selftest 复核：PASS=23 FAIL=0 BLOCKED=0，控制项 23 / 断言条目 130（与 W44 基线逐项相同）。"
+
+  - id: onto_tbox_check
+    path: shared/verify/onto_tbox_check.py
+    kind: gate
+    class: offline
+    argv: []
+    expect_exit: "0=PASS 1=FAIL；队长 regress 观测无参=0"
+    evidence: tmp/gate_runner_evidence/onto_tbox_check.stdout.txt
+    sha256: ""
+    g_ids: [M2.4, M2.7]
+    note: "rdflib 解析本体文件，只读本地 ⇒ offline（第三方库非网络依赖）。"
+
+  - id: purity_gate
+    path: shared/verify/purity_gate.py
+    kind: gate
+    class: offline
+    argv: []
+    expect_exit: "0=PASS 1=FAIL 2=BLOCKED（Blocked ⇒ 2，源码:1415-1426）"
+    evidence: tmp/gate_runner_evidence/purity_gate.stdout.txt
+    sha256: ""
+    g_ids: [G25]
+    note: "★ regress 未覆盖；argv 由 docstring 判定：P2 运行期断言是对**已留档的只读拨号见证**重放校验、不在门禁内重新拨号，--run-dependent-gates 为 opt-in ⇒ 默认模式 offline。★ S3a-2c 起本文件已冻结（沙箱影子文件集改为契约派生，sanity selftest 20/20）。"
+
+  - id: toolface_diff
+    path: shared/verify/toolface_diff.py
+    kind: gate
+    class: offline
+    argv: ["--kg", "tmp/w28_kg_openapi_live.json", "--onto", "tmp/w28_onto_openapi_live.json"]
+    expect_exit: "0=PASS 1=FAIL 2=BLOCKED；队长 regress 同参观测=0（--contract-only 与 --selftest 亦 0）"
+    evidence: tmp/gate_runner_evidence/toolface_diff.stdout.txt
+    sha256: ""
+    g_ids: [M3.3]
+    note: "文件对文件比对 ⇒ offline；★ 其 --health 模式走 urllib 真机，本注册表默认模式不含 --health。"
+
+  - id: toolset_parity_gate
+    path: shared/verify/toolset_parity_gate.py
+    kind: gate
+    class: offline
+    argv: ["--repo-root", ".", "--kg-manifest", "tmp/_m32_manifest.json", "--onto-manifest", "tmp/_m33_manifest.json"]
+    expect_exit: "0=PASS 1=FAIL 2=BLOCKED（docstring:29-33 三态，BLOCKED=前置条件不满足）；队长 regress 同参观测=0"
+    evidence: tmp/gate_runner_evidence/toolset_parity_gate.stdout.txt
+    sha256: ""
+    g_ids: [G24]
+    note: "G24 工具面契约门禁（HB7 缺口的主角）：只读两份 manifest 与契约文件，自身不拨号 ⇒ offline。"
+
+  - id: gate_runner
+    path: shared/verify/gate_runner.py
+    kind: gate
+    class: offline
+    argv: ["--audit-coverage"]
+    expect_exit: "0=PASS（全部 .py 均已登记）1=FAIL（有未登记新 .py / 登记项文件缺失）2=BLOCKED（注册表契约错误）"
+    evidence: tmp/gate_runner_evidence/gate_runner.stdout.txt
+    sha256: ""
+    g_ids: [HB7]
+    note: "★ 自指条目：本 runner 自身默认模式（无参）会遍历运行注册表内所有门禁、包含自身 ⇒ 递归；故 argv 取 --audit-coverage（只审计覆盖、不执行门禁），既避免自指递归，又让每次运行自带覆盖自检。"
+
+  # ---------------- online 门禁（--offline 不跑，列入 NOT-EVALUATED） ----------------
+  - id: abox_identity_gate
+    path: shared/verify/abox_identity_gate.py
+    kind: gate
+    class: online
+    argv: []
+    expect_exit: "0=PASS 1=FAIL 2=BLOCKED；队长 regress 在注入 CC_NEO4J_PASSWORD 的环境下观测无参=0"
+    evidence: tmp/gate_runner_evidence/abox_identity_gate.stdout.txt
+    sha256: ""
+    g_ids: [G22]
+    note: "默认模式读 targets.yaml 走真机 ABox 抓取 ⇒ 会拨号 ⇒ online。本任务**不跑**。"
+
+  - id: answer_shape_gate
+    path: shared/verify/answer_shape_gate.py
+    kind: gate
+    class: online
+    argv: []
+    expect_exit: "0=PASS 1=FAIL 2=BLOCKED；队长 regress 在注入 CC_NEO4J_PASSWORD 的环境下观测无参=0"
+    evidence: tmp/gate_runner_evidence/answer_shape_gate.stdout.txt
+    sha256: ""
+    g_ids: [G23]
+    note: "默认模式连真机取答案形状 ⇒ 会拨号 ⇒ online。本任务**不跑**。"
+
+  - id: graph_meta_gate
+    path: shared/verify/graph_meta_gate.py
+    kind: gate
+    class: online
+    argv: []
+    expect_exit: "0=PASS 1=FAIL 2=BLOCKED；队长 regress 观测无参=0（--selftest --quiet 亦 0）"
+    evidence: tmp/gate_runner_evidence/graph_meta_gate.stdout.txt
+    sha256: ""
+    g_ids: [G19, M1.6]
+    note: "默认模式连 Neo4j/GraphDB（需 CC_NEO4J_PASSWORD）⇒ online。本任务**不跑**。"
+
+  - id: guard_conformance
+    path: shared/verify/guard_conformance.py
+    kind: gate
+    class: online
+    argv: []
+    expect_exit: "★ 0=PASS 1=FAIL 2=BLOCKED **3=CARRIER_SPECIFIC（已登记的载体能力边界，非 FAIL）**；队长 regress 观测全量真机=3、--selftest=0"
+    declared_deviation_exit_codes: [3]
+    evidence: tmp/gate_runner_evidence/guard_conformance.stdout.txt
+    sha256: ""
+    g_ids: [M3.4, M3.5]
+    note: "★ 第四态（Q2 裁决）：本条目显式声明 declared_deviation_exit_codes: [3] ⇒ gate_runner 把 3 记为 DECLARED-DEVIATION（单列：不并入 PASS、不并入 FAIL，并原样照抄该门禁自己的 RESULT 行）；依据其自身 :25/:31/:120/:758/:1023。未声明的 3 仍判 FAIL（不给任何门禁兜底）。本任务**不跑**。"
+
+  - id: parity
+    path: shared/verify/parity.py
+    kind: gate
+    class: online
+    argv: ["--ccf", "tmp/ccf_live5.json", "--quiet"]
+    expect_exit: "0=PASS 1=FAIL 2=BLOCKED；成因①（既有）snapshotId 无命名图时 emit_blocked ⇒ 2；成因②（W43 增补）环境变量未提供凭据 ⇒ 2（对齐同族 t10_native_parity.py；未测量≠测得坏结果）；队长 regress 同参观测=0"
+    evidence: tmp/gate_runner_evidence/parity.stdout.txt
+    sha256: ""
+    g_ids: [M1.5]
+    note: "需 Neo4j + GraphDB（targets.yaml / CC_NEO4J_PASSWORD）⇒ 会拨号 ⇒ online。本任务**不跑**。"
+
+  - id: t10_native_parity
+    path: shared/verify/t10_native_parity.py
+    kind: gate
+    class: online
+    argv: ["--ccf", "tmp/ccf_live5.json", "--kg-ontology-dir", "scheme1-kg/ontology", "--onto-rules-dir", "scheme2-onto/rules", "--quiet"]
+    expect_exit: "0=PASS 1=FAIL 2=BLOCKED；队长 regress 同参观测=0"
+    evidence: tmp/gate_runner_evidence/t10_native_parity.stdout.txt
+    sha256: ""
+    g_ids: [M2.8]
+    note: "需真机两侧原生查询比对 ⇒ 会拨号 ⇒ online。本任务**不跑**。"
+
+  - id: e2e_smoke
+    path: shared/deploy/smoke/e2e_smoke.py
+    kind: gate
+    class: online
+    argv: []
+    expect_exit: "★ 仪器退出码（0/1/2）**不等于** M4 出口判据结论；此条 PASS 只表示仪器通过，出口判据以证据文件为准"
+    evidence: tmp/gate_runner_evidence/e2e_smoke.stdout.txt
+    sha256: ""
+    g_ids: [M4-3]
+    note: "★ M4 出口判据 ③「模型真的调到工具并拿到非空答案 ≥1 次」是**真机取证项**，不是可自动判 PASS 的门禁：本注册表只登记路径、写清语义边界，**不 import、不执行**（该文件此刻正被 W30/W31 修改）。仅在不加 --offline 且未排除时才会被真跑。"
+
+  # ---------------- library（被 import、无独立 CLI，不执行） ----------------
+  - id: m5_init
+    path: shared/verify/m5/__init__.py
+    kind: library
+    class: offline
+    argv: []
+    expect_exit: "不适用（无 CLI）"
+    reason: "m5 子包初始化（PKG_VERSION）；被 shared/verify/m5_judge.py:61 import；无 argparse、无 def main、无 __main__ ⇒ 不可独立跑，不登记 argv 语义。"
+    sha256: ""
+
+  - id: m5_contract
+    path: shared/verify/m5/contract.py
+    kind: library
+    class: offline
+    argv: []
+    expect_exit: "不适用（无 CLI）"
+    reason: "被 shared/verify/m5_judge.py:61 import（as C）；无 argparse、无 def main、无 __main__ ⇒ 无独立三态退出码。"
+    sha256: ""
+
+  - id: m5_judge_lib
+    path: shared/verify/m5/judge.py
+    kind: library
+    class: offline
+    argv: []
+    expect_exit: "不适用（无 CLI）"
+    reason: "被 shared/verify/m5_judge.py:61 import（as J）；无 argparse、无 def main、无 __main__ ⇒ 无独立三态退出码。"
+    sha256: ""
+
+  - id: m5_reporting
+    path: shared/verify/m5/reporting.py
+    kind: library
+    class: offline
+    argv: []
+    expect_exit: "不适用（无 CLI）"
+    reason: "被 shared/verify/m5_judge.py:61 import（as R）；无 argparse、无 def main、无 __main__ ⇒ 无独立三态退出码。"
+    sha256: ""
+
+  - id: threshold_calibrate
+    path: shared/verify/threshold_calibrate.py
+    kind: gate
+    class: offline
+    argv: ["--selftest"]
+    expect_exit: 0
+    reason: "T1 阈值标定器（用户裁定 ①(A)：warning = clamp(max(健康期 P95×2, 域下限), …, 域上限)、critical = warning×3）。CI 只跑 --selftest（clamp 正控 + 规则端到端 + 样本不足/上限封顶 两个负控）；真跑用 --propose/--apply。★ 不覆盖已由用户裁定的阈值（如 xact_age_s_light）与归别的裁定处理的阈值（load1_light → ②）。"
+    sha256: ""
+
+  - id: m6_carrier_efficiency
+    path: shared/verify/m6/carrier_efficiency.py
+    kind: gate
+    class: offline
+    argv: ["--selftest"]
+    expect_exit: 0
+    reason: "M6.3 容器侧效率指标采集器（口径 = shared/model/m6-carrier-metrics.yaml；docs/06 §2.2 要求 query_latency_p50/p95 与 elapsed_s 分开报）。CI 只跑 --selftest（百分位正控 + ok/窗口/两套命名/缺件 4 个负控，不需要审计链）；真读审计链需 --audit-map 或默认路径在场（默认路径在 旧载体机 上）。"
+    sha256: ""
+
+  - id: m6_change_cost
+    path: shared/verify/m6/change_cost.py
+    kind: gate
+    class: offline
+    argv: ["--selftest"]
+    expect_exit: 0
+    reason: "M6.4 变更投入成本的计量器（口径 = shared/model/m6-cost.yaml；docs/06 §2.3 裁决 8）。CI 只跑 --selftest（计数核的正控 + 3 个负控，不需要 git 范围）；真跑需 --base/--head 或 --worktree 并给定变更集（见 m6-cost.yaml#open_questions OQ-M6C-02）。"
+    sha256: ""
+
+  - id: m5_review_b
+    path: shared/verify/m5/review_b.py
+    kind: library
+    class: offline
+    argv: []
+    expect_exit: "不适用（无 CLI）"
+    reason: "M5 复核角色 B 的**独立实现**（docs/06:112-115 双人复核的机器侧）：被 shared/collect/m5_inject_build.py import（构造期 fail-closed 断言 A/B 一致），并被 m5-cases.recorded.yaml 的 gold_audit 记 impl_sha256。无 argparse、无 def main、无 __main__ ⇒ 无独立三态退出码。★ 不登记为 gate：它不是判据，是**被构造器调用的求值库**。"
+    sha256: ""
+
+  - id: m5_stats
+    path: shared/verify/m5/stats.py
+    kind: library
+    class: offline
+    argv: []
+    expect_exit: "不适用（无 CLI）"
+    reason: "被 shared/verify/m5_judge.py:61 import（as S）；无 argparse、无 def main、无 __main__ ⇒ 无独立三态退出码。"
+    sha256: ""
+
+  - id: m5_selftest_lib
+    path: shared/verify/m5/selftest.py
+    kind: library
+    class: offline
+    argv: []
+    expect_exit: "不适用（无 CLI）"
+    reason: "被 shared/verify/m5_judge.py:61 import（as ST），并由 m5_judge.py:1233 调用其 run_selftest()；无 argparse、无 def main、无 __main__ ⇒ 只能经由 m5_judge 触发。"
+    sha256: ""
+
+  # ---------------- 追加登记（S4a 新建门禁；★ 追加在文件末尾以避免行号漂移） ----------------
+  - id: m5_facts_check
+    path: shared/verify/m5/m5_facts_check.py
+    kind: gate
+    class: offline
+    argv: []
+    expect_exit: "0=PASS 1=FAIL 2=BLOCKED（缺件 / 读不到基底 ⇒ 无法判定归 2）；队长亲跑无参=0、stdout 565 B"
+    evidence: tmp/gate_runner_evidence/m5_facts_check.stdout.txt
+    sha256: ""
+    g_ids: [M5]
+    note: "★ S4a 新建的 M5 正本校验器（只读）：只用磁盘上的固化正本重放，逐例复核 working_set_sha256 与可确认现象集合，不构造、不落盘、不拨号；docstring:17 给出三态语义、:19-22 给出用法行，有 argparse(:52-57) 与 __main__(:224-225) ⇒ 按「有 CLI」判 gate（不判 library）。★ 本条目是**追加在 entries 末尾**的，理由 = 本文件被 G20 锚点面与 P5 路径级登记引用，中间插入会让其后所有行号位移。未登记时 `gate_runner --audit-coverage` 如实判 FAIL（覆盖契约 fail-closed），本条目即为该 FAIL 的产物侧修复。"

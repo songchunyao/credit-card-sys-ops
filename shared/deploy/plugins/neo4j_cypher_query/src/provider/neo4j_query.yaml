@@ -1,0 +1,48 @@
+identity:
+  author: cc-ops
+  name: neo4j_query
+  label:
+    en_US: Neo4j Cypher Query (cc-ops fork)
+    zh_Hans: Neo4j Cypher 查询（cc-ops fork）
+    pt_BR: Consulta Cypher Neo4j (cc-ops fork)
+  description:
+    en_US: Read-only Neo4j knowledge-graph query tool for Dify Agents (cc-ops local fork of nikola_milosevic/neo4j_query 0.2.0). Cypher query and optional parameters are exposed to the LLM so an Agent can run graph queries on its own; max_records and allow_write_queries stay workflow-controlled and the upstream EXPLAIN write guard is unchanged.
+    zh_Hans: 供 Dify Agent 自主使用的只读 Neo4j 知识图谱查询工具（cc-ops 对 nikola_milosevic/neo4j_query 0.2.0 的本地 fork）。Cypher query 与可选 parameters 交给模型填写，使 Agent 能自主发起图查询；max_records 与 allow_write_queries 仍由工作流控制，上游的 EXPLAIN 写保护原样保留。
+    pt_BR: Ferramenta de consulta somente leitura do grafo Neo4j para Agentes Dify (fork local cc-ops).
+  icon: icon.svg
+  tags:
+      - search
+tools:
+  - tools/neo4j_query.yaml
+extra:
+  python:
+    source: provider/neo4j_query.py
+
+credentials_for_provider:
+  NEO4J_URL:
+    type: text-input
+    required: true
+    label:
+      en_US: Neo4j URL
+    placeholder:
+      en_US: neo4j+s://xxxx.databases.neo4j.io or bolt://localhost:7687
+    help:
+      en_US: Enter your Neo4j connection URL (works with both Neo4j Aura and locally hosted instances)
+  NEO4J_USERNAME:
+    type: text-input
+    required: true
+    label:
+      en_US: Neo4j Username
+    placeholder:
+      en_US: neo4j
+    help:
+      en_US: Enter your Neo4j username
+  NEO4J_PASSWORD:
+    type: secret-input
+    required: true
+    label:
+      en_US: Neo4j Password
+    placeholder:
+      en_US: Enter your Neo4j password
+    help:
+      en_US: Enter your Neo4j password

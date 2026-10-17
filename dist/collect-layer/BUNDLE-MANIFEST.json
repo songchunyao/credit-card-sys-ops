@@ -1,0 +1,119 @@
+{
+  "files": [
+    {
+      "bytes": 2056,
+      "path": ".env.example",
+      "sha256": "da952ca00ab1ca4a7611d0a2c3f265c816336b9ad0b6ade3d7f70a6d12777301"
+    },
+    {
+      "bytes": 6128,
+      "path": "data/actions/action_map.yaml",
+      "sha256": "b7179df1b4deef9a332b52bbdec0ad1fbf2636f4ee8da2a017070d8de58755c0"
+    },
+    {
+      "bytes": 24631,
+      "path": "data/rules/advanced.yaml",
+      "sha256": "6672620f1149a74075428c1cab2dab7528826751d18d8d34dfa2201320e1be32"
+    },
+    {
+      "bytes": 23187,
+      "path": "data/rules/default.yaml",
+      "sha256": "032326de3e182ecc2d2224eb5b490a2fa63f5be39a53fdafcb7b1302450d61e2"
+    },
+    {
+      "bytes": 18769,
+      "path": "data/runbooks/templates.yaml",
+      "sha256": "5cbe58277d3789f064d10ecc0909003cbc0b87abdec6ba56c8430de4db506a37"
+    },
+    {
+      "bytes": 540,
+      "path": "requirements.txt",
+      "sha256": "57e8cd66d6c23c16d33d3f4d89b5abe43c82d54c959db0c280974fa19163ba73"
+    },
+    {
+      "bytes": 8664,
+      "path": "service/__init__.py",
+      "sha256": "3997dcf413194b2825b2a2500653c622f26e6b82485321fae048c8937c005e01"
+    },
+    {
+      "bytes": 1273,
+      "path": "service/app_collect.py",
+      "sha256": "1a44a9a61e5357d92361a6a5b8be490a328ae82dbdbfd1192a316df85095b64b"
+    },
+    {
+      "bytes": 67813,
+      "path": "service/collect_api.py",
+      "sha256": "1a81edf97accfaa165d61c7de55754dc592506002b63ad8a9f1ad3b3c068577b"
+    },
+    {
+      "bytes": 49357,
+      "path": "service/collect_sim.py",
+      "sha256": "4440e51f1df367cca7f998cffd272c5f3c9c3e8bdd74c02d6b5c3bdcffdef409"
+    },
+    {
+      "bytes": 13411,
+      "path": "service/common.py",
+      "sha256": "81b4efd62b0ed629fbb3f4429935cb34da52cbe01f8e665b5804eb3deffcc7c1"
+    },
+    {
+      "bytes": 12503,
+      "path": "service/probes/__init__.py",
+      "sha256": "103d19f83f08b8548944769f298813ed5a8464518b832ba59def6fe4008b7563"
+    },
+    {
+      "bytes": 18372,
+      "path": "service/probes/alarm_probe.py",
+      "sha256": "2cba1f758deae25226fc60750101d30457a2c9570085a1bb14db2dccf3700abb"
+    },
+    {
+      "bytes": 35180,
+      "path": "service/probes/app_probe.py",
+      "sha256": "f6bfa35e7b93cc90a2c4100dbb8ca46ce38c156bf38fced4e51f104cd0d63a09"
+    },
+    {
+      "bytes": 37120,
+      "path": "service/probes/container_probe.py",
+      "sha256": "3869e47bab5e6aab454b73cc1b87e3754e19b7755aa5c72d4b0fd5ba497509d4"
+    },
+    {
+      "bytes": 102686,
+      "path": "service/probes/gaussdb_probe.py",
+      "sha256": "a2f32f7b6de28ddbc5784751d45dd37413961dd1a17560cd976a7861104b3ddf"
+    },
+    {
+      "bytes": 15436,
+      "path": "service/probes/io_relay.py",
+      "sha256": "4bbe4d76f68abcbaa33550562bd5c75df55f78438972f1446761353f8e4b2bef"
+    },
+    {
+      "bytes": 100991,
+      "path": "service/probes/os_probe.py",
+      "sha256": "eca26caa16bdee489e5cc19d4cb374671dca06764f38a37412ffde3b7bb3708d"
+    },
+    {
+      "bytes": 20933,
+      "path": "service/probes/plan_now.py",
+      "sha256": "69e32655c1c48cfb1ba34ad0a3fe9ec175c65e39f18502fed7e4383b8381dcc4"
+    },
+    {
+      "bytes": 35681,
+      "path": "service/probes/storage_probe.py",
+      "sha256": "716a4e749aa7fee3d11b9726abc1eef17fe74f1de01528f4cb8f37b303cd2560"
+    },
+    {
+      "bytes": 23934,
+      "path": "service/probes/tpops_probe.py",
+      "sha256": "db5823719a45147fac1c3b20a38119539eae625bf0fd79e0ccad572278bef044"
+    },
+    {
+      "bytes": 39443,
+      "path": "storages/dorado_collector.py",
+      "sha256": "dfcf9028d4febcc361466d7f504e8c23eb8047ea8a8213ea35ab5bcd9ed2ecda"
+    }
+  ],
+  "generated_from_manifest_version": "1.0.0",
+  "launch": "tini -- sh -c \"exec python -m uvicorn service.app_collect:app --host 0.0.0.0 --port ${SVC_PORT} --workers 1\"",
+  "schema": "collect-layer-bundle/1",
+  "service_port": 8187,
+  "source_git_head": "8dcdefdfc11184cee6e385a1581985c2094e84cf"
+}

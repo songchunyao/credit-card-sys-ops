@@ -1,0 +1,22 @@
+[Unit]
+Description=upstream-ops v3 本体服务（gdo-onto-v3 :8188）
+After=network-online.target gdo-collect-v3.service
+Wants=network-online.target
+StartLimitIntervalSec=600
+StartLimitBurst=30
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/upstream-agent/ontology/v3/service
+Environment=GDO_ONTO_PORT=8188
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStartPre=/bin/bash -c 'for i in $(seq 1 60); do (exec 3<>/dev/tcp/127.0.0.1/7200) 2>/dev/null && exit 0; sleep 5; done; echo "GraphDB :7200 未在 300s 内就绪" >&2; exit 1'
+ExecStartPre=/bin/bash -c 'for i in $(seq 1 60); do (exec 3<>/dev/tcp/127.0.0.1/8187) 2>/dev/null && exit 0; sleep 5; done; echo "采集层 :8187 未在 300s 内就绪" >&2; exit 1'
+ExecStart=/opt/cc-venv/bin/python onto_service.py
+Restart=on-failure
+RestartSec=15
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

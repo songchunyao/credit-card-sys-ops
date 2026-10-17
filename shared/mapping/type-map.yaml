@@ -1,0 +1,784 @@
+# ============================================================================
+# type-map.yaml · 中性名 → KG 名 / ONTO 名的**显式映射表**（是数据不是代码）
+# ----------------------------------------------------------------------------
+# 权威出处：docs/01-场景建模与范围定义.md §1.1「强制」、docs/00 §6.3、裁决 13
+# 输入契约：shared/model/topology.yaml + metrics.yaml + ccf.schema.json
+# 消费者：  投影器 P1（Neo4j）/ P2（GraphDB）——**只读本表，不得硬编码载体名**
+# ----------------------------------------------------------------------------
+# ★ 裁决 13：Neo4j 侧标签与关系类型统一加命名空间前缀 `CC_`。
+#   原因：目标实例 `neo4j-gaussdb`（community 单库）已有 v2 本体图 423 节点，
+#   其中 `Host`(4) / `Table`(2) / `Session`(2) 标签与 `ACCESSES` / `DEPLOYED_ON`
+#   关系类型与本项目撞名；ONTO 侧可新建专属仓库 `cc-ops`，故必须让 KG 侧也隔离。
+# ============================================================================
+
+meta:
+  version: "1.2.0"
+  date: "2026-10-05"
+  revision: "1.2.0 = 新增派生证据型 Evidence + 关系 HAS_EVIDENCE（M1.5c：每条 CCF 观测一个证据节点，两侧对称投影）；observation_projection 增 evidence 块，派生规则（记录 id / 指标码 / 状态 / 原始值 / 原始单位 / reason / probe / 采集时刻）全部以数据形式写在表里"
+  contract_of: "01-场景建模与范围定义.md §1.1"
+  generated_from:
+    - shared/model/topology.yaml
+    - shared/model/metrics.yaml
+    - shared/model/ccf.schema.json
+  counts:
+    types: 14
+    concrete_types: 13
+    annotation_types: 1
+    ccf_object_types: 12
+    metrics: 91
+  rules:
+    - "中性名出现在 shared/ 与评测台；KG 名只出现在 scheme1-kg/；ONTO 名只出现在 scheme2-onto/"
+    - "映射表是唯一允许出现三套名字并置的地方"
+    - "投影器遇到映射表里没有的中性名必须 fail-closed（禁止猜测或兜底改名）"
+    - "属性名两侧同形（小驼峰），差别只在命名空间：KG 靠标签隔离，ONTO 靠 IRI 前缀隔离"
+    - "Cypher 与 SPARQL 里出现的目标标签/关系类型/IRI 必须逐字来自本表"
+
+namespaces:
+  kg:
+    label_prefix: "CC_"
+    reltype_prefix: "CC_"
+    constraint_prefix: "cc_uq_"
+    property_style: lowerCamel
+    instance_id_property: "ccfId"
+    snapshot_property: "ccfSnapshotId"
+    layer_property: "ccfLayer"
+    neutral_type_property: "ccfType"
+    note: "与既有 v2 图的 gdo_uq_* 索引区分，本项目索引名一律 cc_uq_*"
+  onto:
+    base: "https://credit-card-ops.ai/onto/"
+    cc: "https://credit-card-ops.ai/onto/topology#"
+    cco: "https://credit-card-ops.ai/onto/core#"
+    ccm: "https://credit-card-ops.ai/onto/metric#"
+    ccf: "https://credit-card-ops.ai/onto/fault#"
+    ccc: "https://credit-card-ops.ai/onto/causal#"
+    cca: "https://credit-card-ops.ai/onto/action#"
+    ccp: "https://credit-card-ops.ai/onto/prov#"
+    ccs: "https://credit-card-ops.ai/onto/shapes#"
+    instance_iri_template: "https://credit-card-ops.ai/onto/inst/{id}"
+    id_separator: "/"
+    id_separator_from: ":"
+    graph_iri_template: "https://credit-card-ops.ai/onto/graph/{snapshotId}"
+    neutral_type_property: "cc:ccfType"
+    snapshot_property: "cc:ccfSnapshotId"
+    layer_property: "cc:ccfLayer"
+
+# 前缀表：投影器写 Turtle prologue / 展开 CURIE 时**只读本块**，不得硬编码前缀名
+prefixes:
+  cc: "https://credit-card-ops.ai/onto/topology#"
+  cca: "https://credit-card-ops.ai/onto/action#"
+  ccc: "https://credit-card-ops.ai/onto/causal#"
+  ccf: "https://credit-card-ops.ai/onto/fault#"
+  ccm: "https://credit-card-ops.ai/onto/metric#"
+  cco: "https://credit-card-ops.ai/onto/core#"
+  ccp: "https://credit-card-ops.ai/onto/prov#"
+  ccs: "https://credit-card-ops.ai/onto/shapes#"
+  xsd: "http://www.w3.org/2001/XMLSchema#"
+
+# 投影器共用的保留属性名（P1 / P2 / parity 三处必须逐字一致，故放在表里）
+common_properties:
+  kg:
+    instance_id: "ccfId"
+    snapshot: "ccfSnapshotId"
+    layer: "ccfLayer"
+    neutral_type: "ccfType"
+    relation_id: "ccfRelId"
+  onto:
+    instance_id: "cc:ccfId"
+    snapshot: "cc:ccfSnapshotId"
+    layer: "cc:ccfLayer"
+    neutral_type: "cc:ccfType"
+
+# 观测（CCF observation）如何落成载体原生属性（`01-` §3.3）
+observation_projection:
+  policy: "value 只在 status=collected 时落成属性；status != collected 的条目落进两个多值属性"
+  kg:
+    value: "<metric.kg_property>"
+    not_collected: "ccfNotCollected"
+    collected_empty: "ccfCollectedEmpty"
+  onto:
+    value: "<metric.onto_property>"
+    not_collected: "ccm:notCollected"
+    collected_empty: "ccm:collectedEmpty"
+  rationale:
+    - "三态语义不同（collected / notCollected / collectedEmpty），只有 notCollected 能否定事实"
+    - "Neo4j 无法存 null 属性，故否定性证据必须落成显式清单，否则 C4 否定性证据族失去依据"
+    - "单条观测的 recordId 溯源由 M1.5c 的 Evidence 节点承担，不在本表"
+
+# ★ M1.5c：observations[] → 派生证据节点（每条观测一个节点 + 一条 对象→证据 边）
+#   `attrs` 的值是**观测里的字段路径**（不是载体属性名）：
+#     · `a|b` = 取第一个存在的字段（collected 时 value / valueText 二选一）
+#     · 字段不存在 ⇒ **不写该属性**（两侧一致：ONTO 侧不写空三元组，
+#       Neo4j 侧不写 null —— Neo4j 存不了 null，写空串会污染 C4 判定）
+#   投影器必须据此建属性；**不得**在代码里写 field 名。
+  evidence:
+    from: "observations"
+    type: Evidence
+    relation: HAS_EVIDENCE
+    id_field: "id"
+    object_field: "objectId"
+    attrs:
+      recordId: "id"
+      metricCode: "metricCode"
+      status: "status"
+      rawValue: "value|valueText"
+      rawUnit: "unit"
+      reason: "reason"
+      probe: "provenance.probe"
+      capturedAt: "observedAt"
+      # ── ★★ 2026-10-12 路线B/P0.5 打通：窗口基线三件套 ★★ ──
+      #   在此之前 `cc:delta` / `cc:deltaWindowS` / `cc:counterReset` **已在
+      #   cc-topology.ttl 声明**（domain cc:Evidence），投影器也**是数据驱动**的
+      #   （`maps.attrs(ev_type)` + `ev_attrs.get(k)`），但**本规格没列这三项**
+      #   ⇒ delta 在 CCF 里有、投影时被**静默丢弃** ⇒ 载体内 `cc:delta` 恒不存在
+      #   ⇒ 一切 `predicate: increased/decreased` 的规则**只能走「不可判」分支**，
+      #      永远产不出 Finding。这就是「delta 机制已就位但判据仍不可机判」的真正断点。
+      #   ★ 加这三项后：CCF 有 delta ⇒ 投影器写 cc:delta ⇒ r03/r04/r06/r07 与
+      #       F2 规则（r02 的 4 个新模式）的基线路径**才可能命中**。
+      #   ★ 语义不变：字段缺失 ⇒ **不写该属性**（与其余 attrs 同一条纪律）。
+      delta: "delta"
+      deltaWindowS: "deltaWindowS"
+      counterReset: "counterReset"
+    note: "粒度 = 每条 CCF 观测一个证据节点（用户裁定 U-Q = A）；两侧对称投影。★ 2026-10-12：attrs 由 8 项扩到 11 项（+delta/deltaWindowS/counterReset，打通 increased/decreased 判据）"
+
+types:
+  AppEndpoint:
+    layer: App
+    abstract: false
+    kg_label: "CC_AppEndpoint"
+    onto_class: "cc:AppEndpoint"
+    key_attrs: [path, protocol]
+    attrs:
+      path: {kg_property: path, onto_property: "cc:path", xsd: xsd:string}
+      protocol: {kg_property: protocol, onto_property: "cc:protocol", xsd: xsd:string}
+      sloP99Ms: {kg_property: sloP99Ms, onto_property: "cc:sloP99Ms", xsd: xsd:decimal}
+  AppInstance:
+    layer: App
+    abstract: false
+    kg_label: "CC_AppInstance"
+    onto_class: "cc:AppInstance"
+    key_attrs: [instanceId]
+    attrs:
+      instanceId: {kg_property: instanceId, onto_property: "cc:instanceId", xsd: xsd:string}
+      jvmVersion: {kg_property: jvmVersion, onto_property: "cc:jvmVersion", xsd: xsd:string}
+      pid: {kg_property: pid, onto_property: "cc:pid", xsd: xsd:integer}
+      startTime: {kg_property: startTime, onto_property: "cc:startTime", xsd: xsd:dateTime}
+  ConnectionPool:
+    layer: Data
+    abstract: true
+    kg_label: "CC_ConnectionPool"
+    onto_class: "cc:ConnectionPool"
+    key_attrs: []
+    attrs: {}
+  Container:
+    layer: Runtime
+    abstract: false
+    kg_label: "CC_Container"
+    onto_class: "cc:Container"
+    key_attrs: [containerId]
+    attrs:
+      containerId: {kg_property: containerId, onto_property: "cc:containerId", xsd: xsd:string}
+      cpuLimitCores: {kg_property: cpuLimitCores, onto_property: "cc:cpuLimitCores", xsd: xsd:decimal}
+      image: {kg_property: image, onto_property: "cc:image", xsd: xsd:string}
+      imageDigest: {kg_property: imageDigest, onto_property: "cc:imageDigest", xsd: xsd:string}
+      memLimitMb: {kg_property: memLimitMb, onto_property: "cc:memLimitMb", xsd: xsd:integer}
+      restartCount: {kg_property: restartCount, onto_property: "cc:restartCount", xsd: xsd:integer}
+      state: {kg_property: state, onto_property: "cc:state", xsd: xsd:string}
+  CreditCardApp:
+    layer: App
+    abstract: false
+    kg_label: "CC_CreditCardApp"
+    onto_class: "cc:CreditCardApp"
+    key_attrs: [appCode]
+    attrs:
+      appCode: {kg_property: appCode, onto_property: "cc:appCode", xsd: xsd:string}
+      appName: {kg_property: appName, onto_property: "cc:appName", xsd: xsd:string}
+      sloP99Ms: {kg_property: sloP99Ms, onto_property: "cc:sloP99Ms", xsd: xsd:decimal}
+      techStack: {kg_property: techStack, onto_property: "cc:techStack", xsd: xsd:string}
+      version: {kg_property: version, onto_property: "cc:version", xsd: xsd:string}
+  DatabaseSessionPool:
+    layer: Data
+    abstract: false
+    kg_label: "CC_DatabaseSessionPool"
+    onto_class: "cc:DatabaseSessionPool"
+    onto_superclass: "cc:ConnectionPool"
+    key_attrs: [poolId]
+    attrs:
+      maxConnections: {kg_property: maxConnections, onto_property: "cc:maxConnections", xsd: xsd:integer}
+      poolId: {kg_property: poolId, onto_property: "cc:poolId", xsd: xsd:string}
+      superuserReserved: {kg_property: superuserReserved, onto_property: "cc:superuserReserved", xsd: xsd:integer}
+  Evidence:
+    layer: null
+    abstract: false
+    annotation: true
+    kg_label: "CC_Evidence"
+    onto_class: "cc:Evidence"
+    key_attrs: [recordId]
+    attrs:
+      capturedAt: {kg_property: capturedAt, onto_property: "cc:capturedAt", xsd: xsd:dateTime}
+      metricCode: {kg_property: metricCode, onto_property: "cc:metricCode", xsd: xsd:string}
+      probe: {kg_property: probe, onto_property: "cc:probe", xsd: xsd:string}
+      rawUnit: {kg_property: rawUnit, onto_property: "cc:rawUnit", xsd: xsd:string}
+      rawValue: {kg_property: rawValue, onto_property: "cc:rawValue", xsd: xsd:string}
+      reason: {kg_property: reason, onto_property: "cc:reason", xsd: xsd:string}
+      recordId: {kg_property: recordId, onto_property: "cc:recordId", xsd: xsd:string}
+      status: {kg_property: status, onto_property: "cc:status", xsd: xsd:string}
+      # ── ★★ 2026-10-13 端到端修复：窗口基线三件套的**声明**（本表）──
+      #   此前只往 `observation_projection.evidence.attrs`（**源字段映射**）加了这三项，
+      #   而 **ONTO 投影器写属性时查的是本表**（p2_graphdb.py: `ev_attrs = maps.attrs(ev_type)`；
+      #   `spec = ev_attrs.get(k)`，spec 为 None 即 `continue` 跳过），KG 侧则直接读源映射
+      #   ⇒ 真机实测 **KG 65 条 delta、ONTO 0 条** —— 两侧不对称，ONTO 全部 increased 规则
+      #     只能走「不可判」分支，永不产 Finding。
+      #   ⇒ 三件套必须在**两处**同时登记：本表决定「写不写」，源映射决定「取观测里的哪个字段」。
+      #   ★ xsd 与 ccf.schema.json 一致：delta type=[number,integer] ⇒ decimal；
+      #     deltaWindowS type=integer（minimum=1）；counterReset type=boolean。
+      delta: {kg_property: delta, onto_property: "cc:delta", xsd: xsd:decimal}
+      deltaWindowS: {kg_property: deltaWindowS, onto_property: "cc:deltaWindowS", xsd: xsd:integer}
+      counterReset: {kg_property: counterReset, onto_property: "cc:counterReset", xsd: xsd:boolean}
+  GaussDBCluster:
+    layer: Data
+    abstract: false
+    kg_label: "CC_GaussDBCluster"
+    onto_class: "cc:GaussDBCluster"
+    key_attrs: [clusterName]
+    attrs:
+      clusterName: {kg_property: clusterName, onto_property: "cc:clusterName", xsd: xsd:string}
+      mode: {kg_property: mode, onto_property: "cc:mode", xsd: xsd:string}
+      nodeCount: {kg_property: nodeCount, onto_property: "cc:nodeCount", xsd: xsd:integer}
+      version: {kg_property: version, onto_property: "cc:version", xsd: xsd:string}
+  GaussDBInstance:
+    layer: Data
+    abstract: false
+    kg_label: "CC_GaussDBInstance"
+    onto_class: "cc:GaussDBInstance"
+    key_attrs: [instanceId]
+    attrs:
+      datanodeId: {kg_property: datanodeId, onto_property: "cc:datanodeId", xsd: xsd:string}
+      hostName: {kg_property: hostName, onto_property: "cc:hostName", xsd: xsd:string}
+      instanceId: {kg_property: instanceId, onto_property: "cc:instanceId", xsd: xsd:string}
+      port: {kg_property: port, onto_property: "cc:port", xsd: xsd:integer}
+      role: {kg_property: role, onto_property: "cc:role", xsd: xsd:string}
+  Host:
+    layer: Runtime
+    abstract: false
+    kg_label: "CC_Host"
+    onto_class: "cc:Host"
+    key_attrs: [hostname]
+    attrs:
+      cpuCores: {kg_property: cpuCores, onto_property: "cc:cpuCores", xsd: xsd:integer}
+      hostname: {kg_property: hostname, onto_property: "cc:hostname", xsd: xsd:string}
+      ip: {kg_property: ip, onto_property: "cc:ip", xsd: xsd:string}
+      kernelVersion: {kg_property: kernelVersion, onto_property: "cc:kernelVersion", xsd: xsd:string}
+      memTotalGb: {kg_property: memTotalGb, onto_property: "cc:memTotalGb", xsd: xsd:decimal}
+      osVersion: {kg_property: osVersion, onto_property: "cc:osVersion", xsd: xsd:string}
+      role: {kg_property: role, onto_property: "cc:role", xsd: xsd:string}
+  JdbcDataSource:
+    layer: App
+    abstract: false
+    kg_label: "CC_JdbcDataSource"
+    onto_class: "cc:JdbcDataSource"
+    onto_superclass: "cc:ConnectionPool"
+    key_attrs: [dsCode]
+    attrs:
+      authMode: {kg_property: authMode, onto_property: "cc:authMode", xsd: xsd:string}
+      connectionTimeoutMs: {kg_property: connectionTimeoutMs, onto_property: "cc:connectionTimeoutMs", xsd: xsd:integer}
+      driverName: {kg_property: driverName, onto_property: "cc:driverName", xsd: xsd:string}
+      driverVersion: {kg_property: driverVersion, onto_property: "cc:driverVersion", xsd: xsd:string}
+      dsCode: {kg_property: dsCode, onto_property: "cc:dsCode", xsd: xsd:string}
+      idleTimeoutMs: {kg_property: idleTimeoutMs, onto_property: "cc:idleTimeoutMs", xsd: xsd:integer}
+      jdbcUrlMasked: {kg_property: jdbcUrlMasked, onto_property: "cc:jdbcUrlMasked", xsd: xsd:string}
+      maxPoolSize: {kg_property: maxPoolSize, onto_property: "cc:maxPoolSize", xsd: xsd:integer}
+      minIdle: {kg_property: minIdle, onto_property: "cc:minIdle", xsd: xsd:integer}
+      poolImpl: {kg_property: poolImpl, onto_property: "cc:poolImpl", xsd: xsd:string}
+      sslEnabled: {kg_property: sslEnabled, onto_property: "cc:sslEnabled", xsd: xsd:boolean}
+      validationQuery: {kg_property: validationQuery, onto_property: "cc:validationQuery", xsd: xsd:string}
+  Query:
+    layer: Data
+    abstract: false
+    kg_label: "CC_Query"
+    onto_class: "cc:Query"
+    key_attrs: [queryId]
+    attrs:
+      accessMode: {kg_property: accessMode, onto_property: "cc:accessMode", xsd: xsd:string}
+      planHash: {kg_property: planHash, onto_property: "cc:planHash", xsd: xsd:string}
+      queryId: {kg_property: queryId, onto_property: "cc:queryId", xsd: xsd:string}
+      sqlFingerprint: {kg_property: sqlFingerprint, onto_property: "cc:sqlFingerprint", xsd: xsd:string}
+  Session:
+    layer: Data
+    abstract: false
+    kg_label: "CC_Session"
+    onto_class: "cc:Session"
+    key_attrs: [sessionId]
+    attrs:
+      clientAddr: {kg_property: clientAddr, onto_property: "cc:clientAddr", xsd: xsd:string}
+      sessionId: {kg_property: sessionId, onto_property: "cc:sessionId", xsd: xsd:string}
+      user: {kg_property: user, onto_property: "cc:user", xsd: xsd:string}
+      xactStart: {kg_property: xactStart, onto_property: "cc:xactStart", xsd: xsd:dateTime}
+  Table:
+    layer: Data
+    abstract: false
+    kg_label: "CC_Table"
+    onto_class: "cc:Table"
+    key_attrs: [schemaName, tableName]
+    attrs:
+      schemaName: {kg_property: schemaName, onto_property: "cc:schemaName", xsd: xsd:string}
+      tableName: {kg_property: tableName, onto_property: "cc:tableName", xsd: xsd:string}
+
+# 指标码 → 载体原生属性（58 条；规则只引指标码，投影器负责落成属性）
+metrics:
+  app.datasource.acquire_wait_ms:
+    object: JdbcDataSource
+    kg_property: "acquireWaitMs"
+    onto_property: "ccm:acquireWaitMs"
+    xsd: xsd:decimal
+  app.datasource.active_connections:
+    object: JdbcDataSource
+    kg_property: "activeConnections"
+    onto_property: "ccm:activeConnections"
+    xsd: xsd:integer
+  app.datasource.connect_fail_total:
+    object: JdbcDataSource
+    kg_property: "connectFailTotal"
+    onto_property: "ccm:connectFailTotal"
+    xsd: xsd:integer
+  app.datasource.connect_latency_ms:
+    object: JdbcDataSource
+    kg_property: "connectLatencyMs"
+    onto_property: "ccm:connectLatencyMs"
+    xsd: xsd:decimal
+  app.datasource.idle_connections:
+    object: JdbcDataSource
+    kg_property: "idleConnections"
+    onto_property: "ccm:idleConnections"
+    xsd: xsd:integer
+  app.datasource.pending_threads:
+    object: JdbcDataSource
+    kg_property: "pendingThreads"
+    onto_property: "ccm:pendingThreads"
+    xsd: xsd:integer
+  app.datasource.timeout_total:
+    object: JdbcDataSource
+    kg_property: "timeoutTotal"
+    onto_property: "ccm:timeoutTotal"
+    xsd: xsd:integer
+  app.endpoint.error_rate:
+    object: AppEndpoint
+    kg_property: "errorRate"
+    onto_property: "ccm:errorRate"
+    xsd: xsd:decimal
+  app.endpoint.p99_ms:
+    object: AppEndpoint
+    kg_property: "p99Ms"
+    onto_property: "ccm:p99Ms"
+    xsd: xsd:decimal
+  app.endpoint.qps:
+    object: AppEndpoint
+    kg_property: "qps"
+    onto_property: "ccm:qps"
+    xsd: xsd:decimal
+  app.endpoint.tps:
+    object: AppEndpoint
+    kg_property: "tps"
+    onto_property: "ccm:tps"
+    xsd: xsd:decimal
+  app.endpoint.p50_ms:
+    object: AppEndpoint
+    kg_property: "p50Ms"
+    onto_property: "ccm:p50Ms"
+    xsd: xsd:decimal
+  app.endpoint.p95_ms:
+    object: AppEndpoint
+    kg_property: "p95Ms"
+    onto_property: "ccm:p95Ms"
+    xsd: xsd:decimal
+  app.endpoint.max_ms:
+    object: AppEndpoint
+    kg_property: "maxMs"
+    onto_property: "ccm:maxMs"
+    xsd: xsd:decimal
+  app.endpoint.success_total:
+    object: AppEndpoint
+    kg_property: "successTotal"
+    onto_property: "ccm:successTotal"
+    xsd: xsd:integer
+  app.endpoint.fail_total:
+    object: AppEndpoint
+    kg_property: "failTotal"
+    onto_property: "ccm:failTotal"
+    xsd: xsd:integer
+  host.fs_max_used_pct:
+    object: Host
+    kg_property: "fsMaxUsedPct"
+    onto_property: "ccm:fsMaxUsedPct"
+    xsd: xsd:decimal
+  host.disk_io_errors_total:
+    object: Host
+    kg_property: "diskIoErrorsTotal"
+    onto_property: "ccm:diskIoErrorsTotal"
+    xsd: xsd:integer
+  host.net_iface_down_count:
+    object: Host
+    kg_property: "netIfaceDownCount"
+    onto_property: "ccm:netIfaceDownCount"
+    xsd: xsd:integer
+  host.net_iface_total:
+    object: Host
+    kg_property: "netIfaceTotal"
+    onto_property: "ccm:netIfaceTotal"
+    xsd: xsd:integer
+  db.cluster.replay_lag_bytes_max:
+    object: GaussDBCluster
+    kg_property: "replayLagBytesMax"
+    onto_property: "ccm:replayLagBytesMax"
+    xsd: xsd:integer
+  db.cluster.replication_not_streaming_count:
+    object: GaussDBCluster
+    kg_property: "replicationNotStreamingCount"
+    onto_property: "ccm:replicationNotStreamingCount"
+    xsd: xsd:integer
+  db.cluster.alert_active_count:
+    object: GaussDBCluster
+    kg_property: "alertActiveCount"
+    onto_property: "ccm:alertActiveCount"
+    xsd: xsd:integer
+  db.table.index_count:
+    object: Table
+    kg_property: "indexCount"
+    onto_property: "ccm:indexCount"
+    xsd: xsd:integer
+  db.table.unused_index_count:
+    object: Table
+    kg_property: "unusedIndexCount"
+    onto_property: "ccm:unusedIndexCount"
+    xsd: xsd:integer
+  db.cluster.replication_pending_bytes:
+    object: GaussDBCluster
+    kg_property: "replicationPendingBytes"
+    onto_property: "ccm:replicationPendingBytes"
+    xsd: xsd:integer
+  db.cluster.replication_flush_pending_bytes:
+    object: GaussDBCluster
+    kg_property: "replicationFlushPendingBytes"
+    onto_property: "ccm:replicationFlushPendingBytes"
+    xsd: xsd:integer
+  db.cluster.walsender_count:
+    object: GaussDBCluster
+    kg_property: "walsenderCount"
+    onto_property: "ccm:walsenderCount"
+    xsd: xsd:integer
+  db.cluster.replication_slot_count:
+    object: GaussDBCluster
+    kg_property: "replicationSlotCount"
+    onto_property: "ccm:replicationSlotCount"
+    xsd: xsd:integer
+  db.cluster.replication_slot_active_count:
+    object: GaussDBCluster
+    kg_property: "replicationSlotActiveCount"
+    onto_property: "ccm:replicationSlotActiveCount"
+    xsd: xsd:integer
+  db.cluster.is_standby:
+    object: GaussDBCluster
+    kg_property: "isStandby"
+    onto_property: "ccm:isStandby"
+    xsd: xsd:boolean
+  app.gc_pause_ms:
+    object: AppInstance
+    kg_property: "gcPauseMs"
+    onto_property: "ccm:gcPauseMs"
+    xsd: xsd:decimal
+  app.heap_used_ratio:
+    object: AppInstance
+    kg_property: "heapUsedRatio"
+    onto_property: "ccm:heapUsedRatio"
+    xsd: xsd:decimal
+  app.thread_count:
+    object: AppInstance
+    kg_property: "threadCount"
+    onto_property: "ccm:threadCount"
+    xsd: xsd:integer
+  app.uptime_s:
+    object: AppInstance
+    kg_property: "uptimeS"
+    onto_property: "ccm:uptimeS"
+    xsd: xsd:integer
+  container.cpu_throttled_periods:
+    object: Container
+    kg_property: "cpuThrottledPeriods"
+    onto_property: "ccm:cpuThrottledPeriods"
+    xsd: xsd:integer
+  container.cpu_usage_ratio:
+    object: Container
+    kg_property: "cpuUsageRatio"
+    onto_property: "ccm:cpuUsageRatio"
+    xsd: xsd:decimal
+  container.mem_working_set_mb:
+    object: Container
+    kg_property: "memWorkingSetMb"
+    onto_property: "ccm:memWorkingSetMb"
+    xsd: xsd:integer
+  container.oom_kill_total:
+    object: Container
+    kg_property: "oomKillTotal"
+    onto_property: "ccm:oomKillTotal"
+    xsd: xsd:integer
+  container.restart_total:
+    object: Container
+    kg_property: "restartTotal"
+    onto_property: "ccm:restartTotal"
+    xsd: xsd:integer
+  container.status:
+    object: Container
+    kg_property: "status"
+    onto_property: "ccm:status"
+    xsd: xsd:string
+  db.cluster.down_nodes:
+    object: GaussDBCluster
+    kg_property: "downNodes"
+    onto_property: "ccm:downNodes"
+    xsd: xsd:integer
+  db.cluster.replication_lag_mb:
+    object: GaussDBCluster
+    kg_property: "replicationLagMb"
+    onto_property: "ccm:replicationLagMb"
+    xsd: xsd:decimal
+  db.cluster.switchover_total:
+    object: GaussDBCluster
+    kg_property: "switchoverTotal"
+    onto_property: "ccm:switchoverTotal"
+    xsd: xsd:integer
+  db.cluster.up_nodes:
+    object: GaussDBCluster
+    kg_property: "upNodes"
+    onto_property: "ccm:upNodes"
+    xsd: xsd:integer
+  db.instance.buffer_hit_ratio:
+    object: GaussDBInstance
+    kg_property: "bufferHitRatio"
+    onto_property: "ccm:bufferHitRatio"
+    xsd: xsd:decimal
+  db.instance.cpu_usage_ratio:
+    object: GaussDBInstance
+    kg_property: "cpuUsageRatio"
+    onto_property: "ccm:cpuUsageRatio"
+    xsd: xsd:decimal
+  db.instance.io_wait_pct:
+    object: GaussDBInstance
+    kg_property: "ioWaitPct"
+    onto_property: "ccm:ioWaitPct"
+    xsd: xsd:decimal
+  db.instance.long_txn_age_s:
+    object: GaussDBInstance
+    kg_property: "longTxnAgeS"
+    onto_property: "ccm:longTxnAgeS"
+    xsd: xsd:integer
+  db.instance.max_connections:
+    object: GaussDBInstance
+    kg_property: "maxConnections"
+    onto_property: "ccm:maxConnections"
+    xsd: xsd:integer
+  db.instance.mem_usage_ratio:
+    object: GaussDBInstance
+    kg_property: "memUsageRatio"
+    onto_property: "ccm:memUsageRatio"
+    xsd: xsd:decimal
+  db.instance.session_count:
+    object: GaussDBInstance
+    kg_property: "sessionCount"
+    onto_property: "ccm:sessionCount"
+    xsd: xsd:integer
+  db.instance.up:
+    object: GaussDBInstance
+    kg_property: "up"
+    onto_property: "ccm:up"
+    xsd: xsd:boolean
+  db.instance.waiting_connections:
+    object: GaussDBInstance
+    kg_property: "waitingConnections"
+    onto_property: "ccm:waitingConnections"
+    xsd: xsd:integer
+  db.pool.conn_rejected_total:
+    object: DatabaseSessionPool
+    kg_property: "connRejectedTotal"
+    onto_property: "ccm:connRejectedTotal"
+    xsd: xsd:integer
+  db.pool.session_used_ratio:
+    object: DatabaseSessionPool
+    kg_property: "sessionUsedRatio"
+    onto_property: "ccm:sessionUsedRatio"
+    xsd: xsd:decimal
+  db.pool.session_waiting:
+    object: DatabaseSessionPool
+    kg_property: "sessionWaiting"
+    onto_property: "ccm:sessionWaiting"
+    xsd: xsd:integer
+  db.query.exec_count:
+    object: Query
+    kg_property: "execCount"
+    onto_property: "ccm:execCount"
+    xsd: xsd:integer
+  db.query.max_exec_ms:
+    object: Query
+    kg_property: "maxExecMs"
+    onto_property: "ccm:maxExecMs"
+    xsd: xsd:decimal
+  db.query.mean_exec_ms:
+    object: Query
+    kg_property: "meanExecMs"
+    onto_property: "ccm:meanExecMs"
+    xsd: xsd:decimal
+  db.query.returned_rows:
+    object: Query
+    kg_property: "returnedRows"
+    onto_property: "ccm:returnedRows"
+    xsd: xsd:integer
+  db.query.seq_scan_ratio:
+    object: Query
+    kg_property: "seqScanRatio"
+    onto_property: "ccm:seqScanRatio"
+    xsd: xsd:decimal
+  db.session.query_elapsed_s:
+    object: Session
+    kg_property: "queryElapsedS"
+    onto_property: "ccm:queryElapsedS"
+    xsd: xsd:decimal
+  db.session.state:
+    object: Session
+    kg_property: "state"
+    onto_property: "ccm:state"
+    xsd: xsd:string
+  db.session.wait_event:
+    object: Session
+    kg_property: "waitEvent"
+    onto_property: "ccm:waitEvent"
+    xsd: xsd:string
+  db.session.xact_age_s:
+    object: Session
+    kg_property: "xactAgeS"
+    onto_property: "ccm:xactAgeS"
+    xsd: xsd:integer
+  db.table.dead_tuple_ratio:
+    object: Table
+    kg_property: "deadTupleRatio"
+    onto_property: "ccm:deadTupleRatio"
+    xsd: xsd:decimal
+  db.table.last_analyze_age_h:
+    object: Table
+    kg_property: "lastAnalyzeAgeH"
+    onto_property: "ccm:lastAnalyzeAgeH"
+    xsd: xsd:decimal
+  db.table.live_tuples:
+    object: Table
+    kg_property: "liveTuples"
+    onto_property: "ccm:liveTuples"
+    xsd: xsd:integer
+  db.table.size_mb:
+    object: Table
+    kg_property: "sizeMb"
+    onto_property: "ccm:sizeMb"
+    xsd: xsd:decimal
+  host.conntrack_count:
+    object: Host
+    kg_property: "conntrackCount"
+    onto_property: "ccm:conntrackCount"
+    xsd: xsd:integer
+  host.cpu_usage_ratio:
+    object: Host
+    kg_property: "cpuUsageRatio"
+    onto_property: "ccm:cpuUsageRatio"
+    xsd: xsd:decimal
+  host.disk_io_wait:
+    object: Host
+    kg_property: "diskIoWait"
+    onto_property: "ccm:diskIoWait"
+    xsd: xsd:decimal
+  host.disk_util:
+    object: Host
+    kg_property: "diskUtil"
+    onto_property: "ccm:diskUtil"
+    xsd: xsd:decimal
+  host.load1:
+    object: Host
+    kg_property: "load1"
+    onto_property: "ccm:load1"
+    xsd: xsd:decimal
+  host.load5:
+    object: Host
+    kg_property: "load5"
+    onto_property: "ccm:load5"
+    xsd: xsd:decimal
+  host.mem_available_ratio:
+    object: Host
+    kg_property: "memAvailableRatio"
+    onto_property: "ccm:memAvailableRatio"
+    xsd: xsd:decimal
+  host.net_rx_bytes:
+    object: Host
+    kg_property: "netRxBytes"
+    onto_property: "ccm:netRxBytes"
+    xsd: xsd:integer
+  host.net_tx_bytes:
+    object: Host
+    kg_property: "netTxBytes"
+    onto_property: "ccm:netTxBytes"
+    xsd: xsd:integer
+
+  # ★ P0-A（2026-10-12）：新增 12 个 DB 指标码（原先采到但未映射）
+  db.cluster.deadlocks:
+    object: GaussDBCluster
+    kg_property: "deadlocks"
+    onto_property: "ccm:deadlocks"
+    xsd: xsd:integer
+  db.cluster.xact_rollback:
+    object: GaussDBCluster
+    kg_property: "xactRollback"
+    onto_property: "ccm:xactRollback"
+    xsd: xsd:integer
+  db.cluster.slow_query_count:
+    object: GaussDBCluster
+    kg_property: "slowQueryCount"
+    onto_property: "ccm:slowQueryCount"
+    xsd: xsd:integer
+  db.instance.active_sessions:
+    object: GaussDBInstance
+    kg_property: "activeSessions"
+    onto_property: "ccm:activeSessions"
+    xsd: xsd:integer
+  db.instance.idle_in_xact:
+    object: GaussDBInstance
+    kg_property: "idleInXact"
+    onto_property: "ccm:idleInXact"
+    xsd: xsd:integer
+  db.instance.lock_waits:
+    object: GaussDBInstance
+    kg_property: "lockWaits"
+    onto_property: "ccm:lockWaits"
+    xsd: xsd:integer
+  db.cluster.temp_files:
+    object: GaussDBCluster
+    kg_property: "tempFiles"
+    onto_property: "ccm:tempFiles"
+    xsd: xsd:integer
+  db.cluster.temp_file_written:
+    object: GaussDBCluster
+    kg_property: "tempFileWritten"
+    onto_property: "ccm:tempFileWritten"
+    xsd: xsd:boolean
+  db.table.seq_scan:
+    object: Table
+    kg_property: "seqScan"
+    onto_property: "ccm:seqScan"
+    xsd: xsd:integer
+  db.table.idx_scan:
+    object: Table
+    kg_property: "idxScan"
+    onto_property: "ccm:idxScan"
+    xsd: xsd:integer
+  db.table.dead_tuples:
+    object: Table
+    kg_property: "deadTuples"
+    onto_property: "ccm:deadTuples"
+    xsd: xsd:integer
+  db.table.hot_update_ratio_pct:
+    object: Table
+    kg_property: "hotUpdateRatioPct"
+    onto_property: "ccm:hotUpdateRatioPct"
+    xsd: xsd:decimal

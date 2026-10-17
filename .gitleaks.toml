@@ -1,0 +1,37 @@
+# gitleaks configuration — https://github.com/gitleaks/gitleaks
+#
+# Starts from the upstream default ruleset and adds one narrow allowlist: the
+# synthetic credentials that this repository's own self-tests and negative
+# fixtures contain on purpose, plus the detector patterns themselves. Nothing
+# else is exempt — a real secret in any other file must still fail the scan.
+[extend]
+useDefault = true
+
+[allowlist]
+description = """Synthetic credentials used by self-tests, negative fixtures and
+detector unit tests. These are literals such as `sup3rS3cr3tValue`, `hunter2`,
+`P@ssw0rd-2026`, `sk-live-...` and `neo4j://user:pass@host`. They exist so the
+offline gates can prove they *detect* credential-shaped values, and they are
+never used to authenticate anywhere. Their surrounding checks also embed the
+redaction helpers that intentionally print masked forms."""
+paths = [
+  # Gate runner: negative fixtures for the secret/credential gates (D43 etc.)
+  # and the masking helpers those gates are tested against.
+  '''shared/verify/gate_runner\.py''',
+  # Self-tests that assert the credential checker refuses/redacts values.
+  '''deploy/credentials_check\.py''',
+  '''deploy/selfcheck\.py''',
+  # Smoke/eval harnesses that build a synthetic Dify workspace fixture.
+  '''shared/deploy/smoke/e2e_smoke\.py''',
+  '''shared/deploy/smoke/m5_run\.py''',
+  # The credential sheet template: placeholders only, no real values.
+  '''deploy/credentials\.example''',
+]
+
+# Placeholder ranges and documentation URLs that are not secrets.
+regexes = [
+  # RFC 5737 documentation addresses used throughout the docs and examples.
+  '''192\.0\.2\.\d{1,3}''',
+  # Loopback / container-internal hostnames.
+  '''(?:127\.0\.0\.1|localhost|host\.docker\.internal)''',
+]

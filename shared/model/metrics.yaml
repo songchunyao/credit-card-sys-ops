@@ -1,0 +1,720 @@
+# ============================================================================
+# shared/model/metrics.yaml  ·  场景契约 · 指标目录（中性名）
+# ----------------------------------------------------------------------------
+# 指标码是「规则」与「投影器」之间的唯一契约：规则只引指标码，
+# 投影器负责把它落成载体原生属性。新增故障链只改规则 + 本目录，不改投影器代码。
+#
+# source 字段：探针来源预判（探针清单以 docs/02 的实测定稿为准）
+#   gaussdb  → 复用 upstream-ops-agent 的 gaussdb 探针  ✅
+#   os       → 复用 os 探针                                   ✅
+#   app      → 需新建（JVM/Micrometer/JMX）                    ❌ 增量
+#   container→ 需新建（K8s API / cAdvisor / docker stats）      ❌ 增量
+#   derived  → 由其它指标计算得出，不直接采集                    —
+# ============================================================================
+
+meta:
+  version: "1.0.0"
+  contract_of: "01-场景建模与范围定义.md §2 §4"
+
+metrics:
+
+  # ===== 应用层 =====
+  - code: app.uptime_s
+    object: AppInstance
+    layer: App
+    unit: s
+    type: integer
+    source: app
+    note: "归零 = 实例重启（FM-APP-INSTANCE-RESTART 的直接证据）"
+
+  - code: app.heap_used_ratio
+    object: AppInstance
+    layer: App
+    unit: ratio
+    type: decimal
+    source: app
+    range: [0, 1]
+
+  - code: app.gc_pause_ms
+    object: AppInstance
+    layer: App
+    unit: ms
+    type: decimal
+    source: app
+
+  - code: app.thread_count
+    object: AppInstance
+    layer: App
+    unit: 个
+    type: integer
+    source: app
+
+  - code: app.endpoint.p99_ms
+    object: AppEndpoint
+    layer: App
+    unit: ms
+    type: decimal
+    source: app
+    note: "最上层症状；蓝本信用卡支付服务 SLO P99 = 200ms"
+
+  - code: app.endpoint.error_rate
+    object: AppEndpoint
+    layer: App
+    unit: ratio
+    type: decimal
+    source: app
+    range: [0, 1]
+
+  - code: app.endpoint.qps
+    object: AppEndpoint
+    layer: App
+    unit: 次/s
+    type: decimal
+    source: app
+
+  - code: app.endpoint.tps
+    object: AppEndpoint
+    layer: App
+    unit: 次/s
+    type: decimal
+    source: app
+
+  - code: app.endpoint.p50_ms
+    object: AppEndpoint
+    layer: App
+    unit: ms
+    type: decimal
+    source: app
+
+  - code: app.endpoint.p95_ms
+    object: AppEndpoint
+    layer: App
+    unit: ms
+    type: decimal
+    source: app
+
+  - code: app.endpoint.max_ms
+    object: AppEndpoint
+    layer: App
+    unit: ms
+    type: decimal
+    source: app
+
+  - code: app.endpoint.success_total
+    object: AppEndpoint
+    layer: App
+    unit: 次
+    type: integer
+    source: app
+
+  - code: app.endpoint.fail_total
+    object: AppEndpoint
+    layer: App
+    unit: 次
+    type: integer
+    source: app
+
+  - code: host.fs_max_used_pct
+    object: Host
+    layer: Runtime
+    unit: percent
+    type: decimal
+    source: os
+
+  - code: host.disk_io_errors_total
+    object: Host
+    layer: Runtime
+    unit: 次
+    type: integer
+    source: os
+
+  - code: host.net_iface_down_count
+    object: Host
+    layer: Runtime
+    unit: 个
+    type: integer
+    source: os
+
+  - code: host.net_iface_total
+    object: Host
+    layer: Runtime
+    unit: 个
+    type: integer
+    source: os
+
+  - code: db.cluster.replay_lag_bytes_max
+    object: GaussDBCluster
+    layer: Data
+    unit: bytes
+    type: integer
+    source: gaussdb
+
+  - code: db.cluster.replication_not_streaming_count
+    object: GaussDBCluster
+    layer: Data
+    unit: 个
+    type: integer
+    source: gaussdb
+
+  - code: db.cluster.alert_active_count
+    object: GaussDBCluster
+    layer: Data
+    unit: 个
+    type: integer
+    source: gaussdb
+
+  - code: db.table.index_count
+    object: Table
+    layer: Data
+    unit: 个
+    type: integer
+    source: gaussdb
+
+  - code: db.table.unused_index_count
+    object: Table
+    layer: Data
+    unit: 个
+    type: integer
+    source: gaussdb
+
+  - code: db.cluster.replication_pending_bytes
+    object: GaussDBCluster
+    layer: Data
+    unit: bytes
+    type: integer
+    source: gaussdb
+
+  - code: db.cluster.replication_flush_pending_bytes
+    object: GaussDBCluster
+    layer: Data
+    unit: bytes
+    type: integer
+    source: gaussdb
+
+  - code: db.cluster.walsender_count
+    object: GaussDBCluster
+    layer: Data
+    unit: 个
+    type: integer
+    source: gaussdb
+
+  - code: db.cluster.replication_slot_count
+    object: GaussDBCluster
+    layer: Data
+    unit: 个
+    type: integer
+    source: gaussdb
+
+  - code: db.cluster.replication_slot_active_count
+    object: GaussDBCluster
+    layer: Data
+    unit: 个
+    type: integer
+    source: gaussdb
+
+  - code: db.cluster.is_standby
+    object: GaussDBCluster
+    layer: Data
+    type: boolean
+    source: gaussdb
+
+  # --- 数据源（F1/F5/F6 的核心证据区） ---
+  - code: app.datasource.active_connections
+    object: JdbcDataSource
+    layer: App
+    unit: 个
+    type: integer
+    source: app
+    threshold_ref: JdbcDataSource.maxPoolSize
+
+  - code: app.datasource.idle_connections
+    object: JdbcDataSource
+    layer: App
+    unit: 个
+    type: integer
+    source: app
+
+  - code: app.datasource.pending_threads
+    object: JdbcDataSource
+    layer: App
+    unit: 个
+    type: integer
+    source: app
+    note: ">0 = 有线程在等连接（F1 判定关键）"
+
+  - code: app.datasource.acquire_wait_ms
+    object: JdbcDataSource
+    layer: App
+    unit: ms
+    type: decimal
+    source: app
+
+  - code: app.datasource.connect_latency_ms
+    object: JdbcDataSource
+    layer: App
+    unit: ms
+    type: decimal
+    source: app
+    note: "F5 vs F6 的区分器：立刻失败(认证) vs 超时(网络)"
+
+  - code: app.datasource.connect_fail_total
+    object: JdbcDataSource
+    layer: App
+    unit: 次
+    type: integer
+    source: app
+
+  - code: app.datasource.timeout_total
+    object: JdbcDataSource
+    layer: App
+    unit: 次
+    type: integer
+    source: app
+
+  # ===== 承载层 =====
+  - code: container.cpu_usage_ratio
+    object: Container
+    layer: Runtime
+    unit: ratio
+    type: decimal
+    source: container
+    range: [0, 1]
+
+  - code: container.cpu_throttled_periods
+    object: Container
+    layer: Runtime
+    unit: 次
+    type: integer
+    source: container
+    note: "F3 关键：CPU 用量可能不高，但被限流"
+
+  - code: container.mem_working_set_mb
+    object: Container
+    layer: Runtime
+    unit: MB
+    type: integer
+    source: container
+    threshold_ref: Container.memLimitMb
+
+  - code: container.oom_kill_total
+    object: Container
+    layer: Runtime
+    unit: 次
+    type: integer
+    source: container
+    note: "F4 唯一证据源"
+
+  - code: container.restart_total
+    object: Container
+    layer: Runtime
+    unit: 次
+    type: integer
+    source: container
+
+  - code: container.status
+    object: Container
+    layer: Runtime
+    unit: null
+    type: string
+    source: container
+    enum: [Running, Waiting, Terminated, Unknown]   # ★ 取值域**结构性封闭**（上游 service/probes/container_probe.py L267-274 的四分支 + else 兜底）：source = Prometheus kube-state-metrics（kube_pod_container_status_running/waiting/terminated），**不是** crictl inspect；shared/collect/v3-fact-inventory.json 的 notes 与上游实现不符 ⇒ 未采纳为取值域
+
+  - code: host.cpu_usage_ratio
+    object: Host
+    layer: Runtime
+    unit: ratio
+    type: decimal
+    source: os
+    range: [0, 1]
+
+  - code: host.mem_available_ratio
+    object: Host
+    layer: Runtime
+    unit: ratio
+    type: decimal
+    source: os
+    range: [0, 1]
+
+  - code: host.load1
+    object: Host
+    layer: Runtime
+    unit: null
+    type: decimal
+    source: os
+
+  - code: host.load5
+    object: Host
+    layer: Runtime
+    unit: null
+    type: decimal
+    source: os
+
+  - code: host.disk_util
+    object: Host
+    layer: Runtime
+    unit: percent
+    type: decimal
+    source: os
+    range: [0, 100]
+
+  - code: host.disk_io_wait
+    object: Host
+    layer: Runtime
+    unit: percent
+    type: decimal
+    source: os
+    range: [0, 100]
+
+  - code: host.conntrack_count
+    object: Host
+    layer: Runtime
+    unit: 个
+    type: integer
+    source: os
+
+  - code: host.net_rx_bytes
+    object: Host
+    layer: Runtime
+    unit: bytes
+    type: integer
+    source: os
+
+  - code: host.net_tx_bytes
+    object: Host
+    layer: Runtime
+    unit: bytes
+    type: integer
+    source: os
+
+  # ===== 数据层 =====
+  - code: db.cluster.up_nodes
+    object: GaussDBCluster
+    layer: Data
+    unit: 个
+    type: integer
+    source: gaussdb
+
+  - code: db.cluster.down_nodes
+    object: GaussDBCluster
+    layer: Data
+    unit: 个
+    type: integer
+    source: gaussdb
+
+  - code: db.cluster.replication_lag_mb
+    object: GaussDBCluster
+    layer: Data
+    unit: MB
+    type: decimal
+    source: gaussdb
+
+  - code: db.cluster.switchover_total
+    object: GaussDBCluster
+    layer: Data
+    unit: 次
+    type: integer
+    source: gaussdb
+    note: "F7 关键"
+
+  - code: db.instance.cpu_usage_ratio
+    object: GaussDBInstance
+    layer: Data
+    unit: ratio
+    type: decimal
+    source: gaussdb
+    range: [0, 1]
+
+  - code: db.instance.mem_usage_ratio
+    object: GaussDBInstance
+    layer: Data
+    unit: ratio
+    type: decimal
+    source: gaussdb
+    range: [0, 1]
+
+  - code: db.instance.session_count
+    object: GaussDBInstance
+    layer: Data
+    unit: 个
+    type: integer
+    source: gaussdb
+
+  - code: db.instance.max_connections
+    object: GaussDBInstance
+    layer: Data
+    unit: 个
+    type: integer
+    source: gaussdb
+    note: "实体自带配置，不硬编码（沿用 onto-ops-agent D3 原则）"
+
+  - code: db.instance.waiting_connections
+    object: GaussDBInstance
+    layer: Data
+    unit: 个
+    type: integer
+    source: gaussdb
+
+  - code: db.instance.long_txn_age_s
+    object: GaussDBInstance
+    layer: Data
+    unit: s
+    type: integer
+    source: gaussdb
+
+  - code: db.instance.io_wait_pct
+    object: GaussDBInstance
+    layer: Data
+    unit: percent
+    type: decimal
+    source: gaussdb
+    range: [0, 100]
+    note: "阈值审核清单实测：生产值域 [0.22, 0.72]%，而旧阈值写 >20 → 差 28×，永不可能命中"
+
+  - code: db.instance.buffer_hit_ratio
+    object: GaussDBInstance
+    layer: Data
+    unit: percent
+    type: decimal
+    source: gaussdb
+    range: [0, 100]
+
+  - code: db.instance.up
+    object: GaussDBInstance
+    layer: Data
+    unit: null
+    type: boolean
+    source: gaussdb
+    note: "F7 直接证据"
+
+  - code: db.pool.session_used_ratio
+    object: DatabaseSessionPool
+    layer: Data
+    unit: ratio
+    type: decimal
+    source: derived
+    expression: "db.instance.session_count / db.instance.max_connections"
+    range: [0, 1]
+
+  - code: db.pool.session_waiting
+    object: DatabaseSessionPool
+    layer: Data
+    unit: 个
+    type: integer
+    source: gaussdb
+
+  - code: db.pool.conn_rejected_total
+    object: DatabaseSessionPool
+    layer: Data
+    unit: 次
+    type: integer
+    source: gaussdb
+
+  - code: db.session.state
+    object: Session
+    layer: Data
+    unit: null
+    type: string
+    source: gaussdb
+    enum: [active, idle, idle in transaction, waiting]
+
+  - code: db.session.wait_event
+    object: Session
+    layer: Data
+    unit: null
+    type: string
+    source: gaussdb
+    enum: [LockMgrLock, transactionid, relation, tuple, WALWrite, DataFileRead]
+
+  - code: db.session.xact_age_s
+    object: Session
+    layer: Data
+    unit: s
+    type: integer
+    source: gaussdb
+
+  - code: db.session.query_elapsed_s
+    object: Session
+    layer: Data
+    unit: s
+    type: decimal
+    source: gaussdb
+
+  - code: db.query.mean_exec_ms
+    object: Query
+    layer: Data
+    unit: ms
+    type: decimal
+    source: gaussdb
+    note: "实测样本：慢 SQL 平均 30.8s、TOP 51.9s（来自 upstream-eval 真实用例）"
+
+  - code: db.query.max_exec_ms
+    object: Query
+    layer: Data
+    unit: ms
+    type: decimal
+    source: gaussdb
+
+  - code: db.query.exec_count
+    object: Query
+    layer: Data
+    unit: 次
+    type: integer
+    source: gaussdb
+
+  - code: db.query.returned_rows
+    object: Query
+    layer: Data
+    unit: 行
+    type: integer
+    source: gaussdb
+
+  - code: db.query.seq_scan_ratio
+    object: Query
+    layer: Data
+    unit: ratio
+    type: decimal
+    source: gaussdb
+    range: [0, 1]
+
+  - code: db.table.live_tuples
+    object: Table
+    layer: Data
+    unit: 行
+    type: integer
+    source: gaussdb
+
+  - code: db.table.dead_tuple_ratio
+    object: Table
+    layer: Data
+    unit: ratio
+    type: decimal
+    source: gaussdb
+    range: [0, 1]
+
+  - code: db.table.last_analyze_age_h
+    object: Table
+    layer: Data
+    unit: h
+    type: decimal
+    source: gaussdb
+
+  - code: db.table.size_mb
+    object: Table
+    layer: Data
+    unit: MB
+    type: decimal
+    source: gaussdb
+
+  # ★ P0-A（2026-10-12）：此前**已采集但未映射进 CCF** 的 GaussDB 证据
+  - code: db.cluster.deadlocks
+    object: GaussDBCluster
+    layer: Data
+    unit: 次
+    type: integer
+    source: gaussdb
+    note: "累计死锁数（pg_stat_database.deadlocks）。FM 侧 sql_deadlock 的直接证据；累计量，判 increased 需窗口 delta"
+  # ★ P0-A（2026-10-12）：此前**已采集但未映射进 CCF** 的 GaussDB 证据
+  - code: db.cluster.xact_rollback
+    object: GaussDBCluster
+    layer: Data
+    unit: 次
+    type: integer
+    source: gaussdb
+    note: "累计回滚事务数。biz_unique_conflict / sql_deadlock 的证据；累计量，判 increased 需窗口 delta"
+  # ★ P0-A（2026-10-12）：此前**已采集但未映射进 CCF** 的 GaussDB 证据
+  - code: db.cluster.slow_query_count
+    object: GaussDBCluster
+    layer: Data
+    unit: 次
+    type: integer
+    source: gaussdb
+    note: "慢 SQL 条数（fact cluster.slow_sql_count）"
+  # ★ P0-A（2026-10-12）：此前**已采集但未映射进 CCF** 的 GaussDB 证据
+  - code: db.instance.active_sessions
+    object: GaussDBInstance
+    layer: Data
+    unit: 个
+    type: integer
+    source: gaussdb
+    note: "active 态会话数（fact gaussdb.session.active）"
+  # ★ P0-A（2026-10-12）：此前**已采集但未映射进 CCF** 的 GaussDB 证据
+  - code: db.instance.idle_in_xact
+    object: GaussDBInstance
+    layer: Data
+    unit: 个
+    type: integer
+    source: gaussdb
+    note: "idle in transaction 会话数。sql_idle_in_tx 的直接证据"
+  # ★ P0-A（2026-10-12）：此前**已采集但未映射进 CCF** 的 GaussDB 证据
+  - code: db.instance.lock_waits
+    object: GaussDBInstance
+    layer: Data
+    unit: 个
+    type: integer
+    source: gaussdb
+    note: "等待锁的会话数。db_lock / biz_hot_row / biz_lock_range / sql_lock_chain 的证据"
+  # ★ P0-A（2026-10-12）：此前**已采集但未映射进 CCF** 的 GaussDB 证据
+  - code: db.cluster.temp_files
+    object: GaussDBCluster
+    layer: Data
+    unit: 个
+    type: integer
+    source: gaussdb
+    note: "临时文件数。sql_order_noindex / sql_bloat_select 的证据"
+  # ★ P0-A（2026-10-12）：此前**已采集但未映射进 CCF** 的 GaussDB 证据
+  - code: db.cluster.temp_file_written
+    object: GaussDBCluster
+    layer: Data
+    unit: null
+    type: boolean
+    source: gaussdb
+    note: "本轮是否写过临时文件"
+  # ★ P0-A（2026-10-12）：此前**已采集但未映射进 CCF** 的 GaussDB 证据
+  - code: db.table.seq_scan
+    object: Table
+    layer: Data
+    unit: 次
+    type: integer
+    source: gaussdb
+    note: "顺序扫描次数。sql_full_scan / sql_fuzzy_like 的直接证据"
+  # ★ P0-A（2026-10-12）：此前**已采集但未映射进 CCF** 的 GaussDB 证据
+  - code: db.table.idx_scan
+    object: Table
+    layer: Data
+    unit: 次
+    type: integer
+    source: gaussdb
+    note: "索引扫描次数"
+  # ★ P0-A（2026-10-12）：此前**已采集但未映射进 CCF** 的 GaussDB 证据
+  - code: db.table.dead_tuples
+    object: Table
+    layer: Data
+    unit: 行
+    type: integer
+    source: gaussdb
+    note: "死元组绝对数（表膨胀）"
+  # ★ P0-A（2026-10-12）：此前**已采集但未映射进 CCF** 的 GaussDB 证据
+  - code: db.table.hot_update_ratio_pct
+    object: Table
+    layer: Data
+    unit: percent
+    type: decimal
+    source: gaussdb
+    range: [0, 100]
+    note: "热更新行占比。biz_hot_row 的证据"
+
+# ---------------------------------------------------------------------------
+# ★ 阈值原则（继承 onto-ops-agent D3，本项目强制）
+#   阈值零硬编码：一律绑定到「实体自带配置」或「阈值个体」，
+#   绝不把数字写进规则。
+#   教训来源：absorb-wt/阈值审核清单.md 实测 92 条阈值中 83 条硬编码，
+#   大量与生产实测相差 70×–700×，判据永不可能命中。
+# ---------------------------------------------------------------------------
+threshold_policy:
+  hardcode_forbidden: true
+  binding_modes:
+    - entity_property   # 绑到实体自带配置，如 JdbcDataSource.maxPoolSize
+    - threshold_node    # 绑到阈值个体（ONTO: obs:Threshold；KG: :Threshold 节点）
+    - derived           # 由其它指标按 expression 计算
+  required_fields: [warning, critical, rationale]   # 每条阈值必须带判据来源说明
+  rationale_required: true

@@ -1,0 +1,51 @@
+schema: m6-cost/1
+meta:
+  role: "M6.4 变更投入成本的**口径与范围**登记（主判据 = 规则修改量；docs/06 §2.3 裁决 8）"
+  spec: "docs/06-评测设计（A-B对照）.md:221-237"
+  unit: "行（由 git diff 直接产出，无主观性）"
+  main_criterion: "① 规则修改量 = 新增/修改一个故障分析规则所需的声明量（增删行数）"
+  secondary:
+    files_touched: "② 触及文件数（git diff --name-only）—— 本文件声明范围，脚本按范围计数"
+    layers_touched: "② 层数（改动文件覆盖的 App/Runtime/Data 层数）—— ★ **本批以声明式映射实现**（见 file_layer_map），但**映射粒度是文件级**，而两侧的 ontology 文件**三层全覆盖** ⇒ 该口径当前**区分度低**；要真正区分需按「规则所涉及的层」而非「文件所在层」⇒ **待复核**"
+    runtime_cost: "③ 性态代价（激活时延增量 + 图规模增量）—— 需真机改造前后各测 3 次，**不在离线可做范围**"
+    gate_cost: "④ 门禁代价（触发几项校验）—— 见 docs/06 §5 G1-G7"
+  gate: "shared/verify/m6/change_cost.py（--selftest 为离线门禁；真跑需给定 git 范围）"
+  self_sha_policy: "本文件不列自身滚动 sha256：标记用、不得 pin。"
+carriers:
+  KG:
+    scope:
+      - "scheme1-kg/ontology/*.cypher"
+    rule_line_patterns:
+      - "^\\s*(CREATE|MATCH|MERGE)\\b"
+      - "^\\s*(SET|ON CREATE|ON MATCH)\\b"
+    rationale: "docs/06:229 —— KG 侧的声明量 = Cypher 文件的新增/删除行数（CREATE/MATCH/MERGE 语句行）"
+  ONTO:
+    scope:
+      - "scheme2-onto/ontology/*.ttl"
+      - "scheme2-onto/shapes/*.ttl"
+    rule_line_patterns:
+      - "swrla:"
+      - "\\bsh:"
+      - "a\\s+\\w+:Restriction"    # 泛型 Restriction 声明（避免把载体命名空间字样写进共享契约）
+    rationale: "docs/06:229 —— ONTO 侧的声明量 = TTL 文件中 swrla: / sh: / 以及泛型 Restriction 声明的新增/删除行数（原文口径见 docs/06:229）"
+fairness_note: "两侧范围按「各自表达同一逻辑所需的规则声明文件」对齐；**不**按文件数或总行数对齐（那正是要测的差异）"
+file_layer_map:
+  ruled_by: "用户裁定 ⑦（2026-10-10）：「⑦按你建议」⇒ **维持现状**（文件级映射 + 在报告里注明区分度局限），细化留待 M6.2 有真实变更集后"
+  provenance: "★ 本映射是**声明**（由本契约给出、脚本照用），来源 = 各文件在项目里的语义角色 + 其内容涉及的层；**待复核**"
+  granularity_limitation: "文件级映射；两侧 ontology 文件普遍三层全覆盖 ⇒ layers_touched 多为 3，区分度低。细化方案（按规则涉及的层）需先定义「规则→层」的可机检口径。"
+  KG:
+    "scheme1-kg/ontology/01-schema.cypher": [App, Runtime, Data]
+    "scheme1-kg/ontology/02-topology.cypher": [App, Runtime, Data]
+    "scheme1-kg/ontology/03-fault-modes.cypher": [App, Runtime, Data]
+    "scheme1-kg/ontology/04-rules.cypher": [App, Runtime, Data]
+  ONTO:
+    "scheme2-onto/ontology/cc-fault.ttl": [App, Runtime, Data]
+    "scheme2-onto/ontology/cc-causal.ttl": [App, Runtime, Data]
+    "scheme2-onto/ontology/cc-metric.ttl": [App, Runtime, Data]
+    "scheme2-onto/ontology/cc-core.ttl": [App, Runtime, Data]
+    "scheme2-onto/shapes/shacl-constraints.ttl": [App, Runtime, Data]
+open_questions:
+  - id: OQ-M6C-01
+    question: "② 的「层数」需要一张声明式「文件 → 层（App/Runtime/Data）」映射；本批未定，脚本只报 files_touched，不猜层数。"
+  - id: OQ-M6C-02
+    question: "变更实验的**具体那条规则**（新增哪条故障分析规则）尚未指定；脚本对任意 git 范围都可用，但要跑真实验需先定变更集。"

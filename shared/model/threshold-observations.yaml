@@ -1,0 +1,89 @@
+schema: threshold-observations
+meta:
+  version: 1.0.0
+  role: T1 期健康值域实测与阈值占位值的机检对账（不改任何阈值取值）。判据（双侧）：对每个「警告档非 null」且其指标有实测观测的阈值，必须满足 `P95/cap ≤ warning ≤ P95×cap`；任一侧超出 ⇒ 必须在 declared_deviations 里登记，否则 X19 报 ERROR。
+  source: docs/02 §15（11 有效样本；时窗 2026-10-09T12:54:58.818088 … 2026-10-09T12:59:06.120200；采集层 旧载体机:8187，启动命令取自 shared/deploy/port/collect-layer.manifest.yaml）
+  how_measured: 对 /tools/gather 做 12 次×20s 四层采集；交替层顺序以避开采集层防循环护栏（未用 X-GDO-Internal 豁免头）；按 v3-ccf-map#path_to_metric 映射并套 unit_convert；派生指标按 metrics.yaml#expression 计算
+  cap_ratio: 20
+  self_sha_policy: 本文件不列自身滚动 sha256：标记用、不得 pin。
+  gate: shared/verify/contract_gates.py（X19）
+  ruling_2_note: '★ 用户裁定 ②(A)：`load1_light` 已**改名为 `load1_per_core_light`**（契约 `normalize_by: cpuCores`；判据比较 `host.load1 / Host.cpuCores`）⇒ 本表的 `host.load1` 观测（P95=6.42）**不再用于标定该阈值**（它比的是绝对值）；per-core 标定**被阻塞**：带
+    load1 的主机（dn_6001/dn_6002）attrs **没有 cpuCores** ⇒ 无 per-core 观测 ⇒ 两档保持 null（宁缺勿造）。需要采集层为 os 层主机采集核数（docs/10 §7）。'
+observations:
+- metric: host.load1
+  n: 11
+  min: 4.15
+  median: 5.32
+  p95: 6.42
+  max: 6.42
+- metric: host.cpu_usage_ratio
+  n: 11
+  min: 0.0575
+  median: 0.0953
+  p95: 0.1142
+  max: 0.1142
+- metric: db.table.dead_tuple_ratio
+  n: 11
+  min: 0.0
+  median: 0.0
+  p95: 0.0
+  max: 0.0
+- metric: db.pool.session_used_ratio
+  n: 11
+  min: 0.00088
+  median: 0.00092
+  p95: 0.00092
+  max: 0.00092
+- metric: db.session.xact_age_s
+  n: 11
+  min: 28801.764
+  median: 28802.194
+  p95: 28802.705
+  max: 28802.705
+declared_deviations:
+- threshold: session_used_ratio_light
+  metric: db.pool.session_used_ratio
+  declared_warning: 0.5
+  observed_p95: 0.00092
+  ratio_hi: 543.48
+  ratio_lo: 0.0018
+  kind: 已裁定（域下限主导）
+  reason: ★ 用户裁定 ①(A) 后**已按规则标定**：warning = max(P95×2, 域下限) = max(0.00184, 0.5) = 0.5；比值大是**域下限主导**的必然结果（健康期近空闲 ⇒ 纯 P95×2 无运维意义），**不是**占位值残留；标定脚本 shared/verify/threshold_calibrate.py。
+- threshold: session_used_ratio_severe
+  metric: db.pool.session_used_ratio
+  declared_warning: 0.8
+  observed_p95: 0.00092
+  ratio_hi: 869.57
+  ratio_lo: 0.0011
+  kind: 已裁定（域下限主导）
+  reason: ★ 用户裁定 ①(A) 后**已按规则标定**：warning = max(P95×2, 域下限) = max(0.00184, 0.5) = 0.8；比值大是**域下限主导**的必然结果（健康期近空闲 ⇒ 纯 P95×2 无运维意义），**不是**占位值残留；标定脚本 shared/verify/threshold_calibrate.py。
+- threshold: xact_age_s_light
+  metric: db.session.xact_age_s
+  declared_warning: 300.0
+  observed_p95: 28802.705
+  ratio_hi: 0.01
+  ratio_lo: 96.009
+  kind: 已裁定意图（**不再是缺陷**）
+  ruled_by: 用户裁定 ③（2026-10-10）：「③我建议5分」⇒ **按 5 分钟语义**保留 300/900s
+  reason: 采集探针的 SQL **只捞 > 5 分钟**的长事务（故健康期观测本身即 ≥300s，实测 ~8h）⇒ 该阈值会覆盖采集面**全部**被登记的长事务，**这是刻意的**：语义 =「凡被采集到的长事务都值得提示」。★ 因此 ratio_lo=96.01（观测 P95 是阈值的 96 倍）**不是标定缺陷**，而是「阈值定义在采集面之下」的必然结果；X19 仍按 declared_deviation
+    记 WARN（不改判态），但报告不得把它写成「假阳性缺陷」。
+  do_not_recalibrate: true
+  do_not_recalibrate_reason: 用户裁定 ③ 已定语义（5 分钟）⇒ 标定器不得覆盖
+domain_bounds:
+  role: 用户裁定 ①(A) 中「域下限」与「域上限」的**声明式来源**（标定规则：warning = clamp(max(P95×2, 域下限), …, 域上限)；critical = clamp(warning×3, …, 域上限)）
+  cap_source: 凡 metrics.yaml 声明了 range 的指标，域上限一律取 range[1]（契约自证，不另发明）
+  ruled_by: 用户裁定 ①（2026-10-10）：「①和②选（A）」
+  entries:
+  - metric: db.pool.session_used_ratio
+    floor: 0.5
+    floor_source: 健康期近空闲（P95=0.00092）⇒ 纯 P95×2=0.0018 无运维意义；0.5 = 「会话池已用一半」这一**运维上有意义的界线**（★ 声明值，非实测）
+  - threshold: session_used_ratio_severe
+    metric: db.pool.session_used_ratio
+    floor: 0.8
+    floor_source: ★ 与 light 分开声明：若 severe 也用 0.5，则 `critical = warning×3` 会被域上限 1.0 封顶 ⇒ light/severe 两档**取值相同**（X19 也会失去区分度）。0.8 = 「池只剩两成余量」（★ 声明值）
+  - metric: db.table.dead_tuple_ratio
+    floor: 0.1
+    floor_source: 健康期恒为 0 ⇒ P95×2=0 会**每次触发**；0.1 = 业界常用的死元组比例注意线（★ 声明值，非实测）
+  - metric: host.cpu_usage_ratio
+    floor: 0.0
+    floor_source: P95×2=0.2284 本身有意义（不设下限）；上限取 metrics.yaml#range[1]=1.0

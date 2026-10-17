@@ -1,0 +1,410 @@
+# ============================================================================
+# shared/model/topology.yaml  ·  场景契约 · 四层拓扑（中性名）
+# ----------------------------------------------------------------------------
+# 本文件规定「必须能表达什么」，不规定怎么表达。
+# 方案1 用 Cypher 原生实现 → scheme1-kg/ontology/
+# 方案2 用 OWL 原生实现    → scheme2-onto/ontology/
+# 等价性由 shared/verify/equivalence.py 校验。
+#
+# 上游：docs/00-总体设计与裁决记录.md、docs/01-场景建模与范围定义.md
+# ============================================================================
+
+meta:
+  version: "1.1.0"
+  contract_of: "01-场景建模与范围定义.md §2 §3"
+  layer_enum: [App, Runtime, Data]
+
+# ---------------------------------------------------------------------------
+# 层定义（层是推理的第一公民，两方案都必须能表达"层"）
+# ---------------------------------------------------------------------------
+layers:
+  - code: App
+    name: 应用层
+  - code: Runtime
+    name: 承载层
+  - code: Data
+    name: 数据层
+
+# ---------------------------------------------------------------------------
+# 类型目录
+#   abstract: true  → 不直接实例化，仅用于分类（ONTO 侧建类层次，KG 侧建 Label 约定）
+#   layer          → 所属层
+#   disjoint_with  → 语义互斥的类型（ONTO 侧用 owl:disjointWith 强制，KG 侧仅靠约定）
+#   key_attrs      → 标识性属性（两方案都必须建索引/主键）
+# ---------------------------------------------------------------------------
+types:
+
+  # ===== L1 应用层 =====
+  - code: CreditCardApp
+    name: 信用卡系统应用
+    layer: App
+    abstract: false
+    key_attrs: [appCode]
+    attrs:
+      appCode:   {type: string,  unit: null}
+      appName:   {type: string,  unit: null}
+      version:   {type: string,  unit: null}
+      techStack: {type: string,  unit: null}
+      sloP99Ms:  {type: decimal, unit: ms}
+
+  - code: AppInstance
+    name: 应用实例
+    layer: App
+    key_attrs: [instanceId]
+    attrs:
+      instanceId: {type: string,  unit: null}
+      jvmVersion: {type: string,  unit: null}
+      pid:        {type: integer, unit: null}
+      startTime:  {type: datetime, unit: null}
+
+  - code: AppEndpoint
+    name: 应用服务端点
+    layer: App
+    key_attrs: [path, protocol]
+    attrs:
+      path:      {type: string,  unit: null}
+      protocol:  {type: string,  unit: null}
+      sloP99Ms:  {type: decimal, unit: ms}
+
+  # ★ 一等对象：JDBC/ODBC 数据源（裁决 §5.2）。它同时就是**应用侧连接池**
+  #   （HikariCP / Druid / DBCP 的池即由它承载），故挂到抽象类 ConnectionPool 下，
+  #   并与 DatabaseSessionPool 构成互斥对。
+  - code: JdbcDataSource
+    name: JDBC/ODBC 数据源（应用侧连接池）
+    layer: App
+    parent: ConnectionPool
+    disjoint_with: [DatabaseSessionPool]
+    key_attrs: [dsCode]
+    attrs:
+      dsCode:             {type: string,  unit: null}
+      driverName:         {type: string,  unit: null}
+      driverVersion:      {type: string,  unit: null}
+      jdbcUrlMasked:      {type: string,  unit: null}   # 脱敏，不含口令
+      authMode:           {type: string,  unit: null}   # password | md5 | sha256 | sasl
+      sslEnabled:         {type: boolean, unit: null}
+      poolImpl:           {type: string,  unit: null}   # HikariCP | Druid | DBCP
+      maxPoolSize:        {type: integer, unit: 个}       # 应用侧配置
+      minIdle:            {type: integer, unit: 个}
+      connectionTimeoutMs: {type: integer, unit: ms}
+      idleTimeoutMs:      {type: integer, unit: ms}
+      validationQuery:    {type: string,  unit: null}
+
+  # ===== L2 承载层 =====
+  - code: Container
+    name: 容器
+    layer: Runtime
+    key_attrs: [containerId]
+    attrs:
+      containerId:       {type: string,  unit: null}
+      image:             {type: string,  unit: null}
+      imageDigest:       {type: string,  unit: null}
+      restartCount:      {type: integer, unit: 次}
+      cpuLimitCores:     {type: decimal, unit: 核}
+      memLimitMb:        {type: integer, unit: MB}
+      state:             {type: string,  unit: null}   # Running|Waiting|Terminated|Unknown（三处同步：metrics.yaml container.status.enum 与 shapes/shacl-constraints.ttl:152 的 sh:in；取值域**结构性封闭** —— 上游 service/probes/container_probe.py L267-274 四分支 + else 兜底，采集面永不发射小写值）
+
+  - code: Host
+    name: 宿主机
+    layer: Runtime
+    key_attrs: [hostname]
+    attrs:
+      hostname:    {type: string,  unit: null}
+      ip:          {type: string,  unit: null}
+      cpuCores:    {type: integer, unit: 核}
+      memTotalGb:  {type: decimal, unit: GB}
+      osVersion:   {type: string,  unit: null}
+      kernelVersion: {type: string, unit: null}
+      role:        {type: string,  unit: null}   # app-node | db-node | mixed
+
+  # ===== L3 数据层 =====
+  - code: GaussDBCluster
+    name: GaussDB 集群
+    layer: Data
+    key_attrs: [clusterName]
+    attrs:
+      clusterName: {type: string,  unit: null}
+      version:     {type: string,  unit: null}
+      mode:        {type: string,  unit: null}   # primary-standby | distributed
+      nodeCount:   {type: integer, unit: 个}
+
+  - code: GaussDBInstance
+    name: GaussDB 实例
+    layer: Data
+    key_attrs: [instanceId]
+    attrs:
+      instanceId: {type: string,  unit: null}
+      hostName:   {type: string,  unit: null}
+      port:       {type: integer, unit: null}
+      role:       {type: string,  unit: null}   # primary | standby | datanode
+      datanodeId: {type: string,  unit: null}
+
+  # ★ 抽象类型：连接池（两侧具体类型的父类）
+  - code: ConnectionPool
+    name: 连接池
+    layer: Data
+    abstract: true
+    note: "ONTO 侧建为父类（JdbcDataSource / DatabaseSessionPool）并据 owl:disjointWith 排除双重归属；KG 侧无父类概念，只能靠约定。★ App 层的 JdbcDataSource 挂在这个 Data 层抽象类下，是刻意的跨层父子关系 —— 它表达的是「应用侧池在语义上也是一种连接池」，不是拓扑包含"
+
+  # ★ 互斥对之二：数据库侧会话池
+  - code: DatabaseSessionPool
+    name: 数据库侧会话池
+    layer: Data
+    parent: ConnectionPool
+    disjoint_with: [JdbcDataSource]
+    key_attrs: [poolId]
+    attrs:
+      poolId:             {type: string,  unit: null}
+      maxConnections:     {type: integer, unit: 个}
+      superuserReserved:  {type: integer, unit: 个}
+
+  - code: Session
+    name: 会话
+    layer: Data
+    key_attrs: [sessionId]
+    attrs:
+      sessionId: {type: string,  unit: null}
+      user:      {type: string,  unit: null}
+      clientAddr: {type: string,  unit: null}
+      # 会话状态 / 等待事件**刻意不在此声明为属性**：同一事实由指标码
+      # db.session.state / db.session.wait_event 承载（docs/01:33「指标码是观测的唯一契约」）。
+      # 原先在此声明 state/waitEvent，与上述两个指标在 LPG 侧撞成同名属性
+      # （mapping_gate M6 报「同一事实被建模两次」），而真机 CCF 里 Session 的
+      # attrs 恒为 {}（如 session:sess-281401614833536），17 条 db.session.state 观测
+      # 才是真实载体 ⇒ 声明了却从不填充，属冗余，2026-10-05 删除。
+      xactStart: {type: datetime, unit: null}
+
+  - code: Query
+    name: 查询
+    layer: Data
+    key_attrs: [queryId]
+    attrs:
+      queryId:        {type: string,  unit: null}
+      sqlFingerprint: {type: string,  unit: null}   # 指纹，不含明文
+      planHash:       {type: string,  unit: null}
+      accessMode:     {type: string,  unit: null}   # seq_scan | index_scan
+
+  - code: Table
+    name: 表
+    layer: Data
+    key_attrs: [schemaName, tableName]
+    attrs:
+      schemaName: {type: string,  unit: null}
+      tableName:  {type: string,  unit: null}
+
+  # ★ M1.5c（2026-10-05 用户裁定 A/A）：证据节点型
+  #   它**不是 CCF 的对象类型**（不出现在 objects[]，也不进 ccf.schema.json 的 typeCode
+  #   enum），而是由 observations[] 逐条派生：**每条 CCF 观测一个证据节点**
+  #   （真机 167 条 ⇒ 167 个节点）。故标注 annotation: true —— 门禁 M1 据此跳过
+  #   「必须在 schema typeCode enum 里」这条检查。
+  #   为什么建模成节点而不是属性：C5 要求「结论可溯源到 CCF 记录 id」，一条观测被引用
+  #   多少次、被谁引用，只有独立节点才能表达（属性表做不到）。
+  - code: Evidence
+    name: 观测证据
+    annotation: true
+    layer: null                 # 证据不属任何业务层（layer_enum 之外）
+    key_attrs: [recordId]
+    attrs:
+      recordId:   {type: string,   unit: null}   # = CCF observation.id（obs-000001）
+      metricCode: {type: string,   unit: null}
+      status:     {type: string,   unit: null}   # collected / notCollected / collectedEmpty
+      rawValue:   {type: string,   unit: null}
+      rawUnit:    {type: string,   unit: null}
+      reason:     {type: string,   unit: null}   # 仅 status != collected 时非空
+      probe:      {type: string,   unit: null}   # provenance.probe
+      capturedAt: {type: datetime, unit: null}   # observedAt
+
+# ---------------------------------------------------------------------------
+# 关系目录
+#   cardinality: 1:N / N:1 / 1:1 / N:M
+#   cross_layer: true → 跨层关系（跨层传播的关键边，两方案都必须能沿它遍历）
+#   inverse: 逆关系名（ONTO 侧声明 owl:inverseOf；KG 侧必须显式写双向关系或查询时反向）
+#            逆关系若不在本 relations 目录内（CCF 不断言它），必须登记到下方
+#            inverse_relations 里，否则该 inverse 声明是悬空的（门禁 X7 校验）。
+# ---------------------------------------------------------------------------
+relations:
+  - code: HAS_APP_INSTANCE
+    from: CreditCardApp
+    to: AppInstance
+    cardinality: 1:N
+    cross_layer: false
+    inverse: INSTANCE_OF
+    note: "★ 2026-xx 契约修正：原与集群→实例共用 HAS_INSTANCE；OWL 侧同一 IRI 带两个 range 会退化为 union 语义，故拆分"
+
+  - code: EXPOSES
+    from: CreditCardApp
+    to: AppEndpoint
+    cardinality: 1:N
+    cross_layer: false
+
+  # ★ 跨层：应用 → 承载
+  - code: RUNS_IN
+    from: AppInstance
+    to: Container
+    cardinality: N:1
+    cross_layer: true
+    inverse: RUNS
+
+  # 层内：承载 → 承载（★ Container 与 Host 同属 Runtime 层 ⇒ 非跨层关系）
+  - code: DEPLOYED_ON
+    from: Container
+    to: Host
+    cardinality: N:1
+    cross_layer: false
+    inverse: HOSTS_CONTAINER
+
+  - code: USES_DATASOURCE
+    from: AppInstance
+    to: JdbcDataSource
+    cardinality: N:1
+    cross_layer: false
+
+  # ★★ 跨层边界：应用 → 数据（JDBC/ODBC 连接，本项目核心边）
+  - code: CONNECTS_TO
+    from: JdbcDataSource
+    to: GaussDBCluster
+    cardinality: N:1
+    cross_layer: true
+    inverse: ACCEPTS_CONNECTION_FROM
+    note: "F5/F6 的唯一区分点所在边"
+
+  - code: RESOLVES_TO
+    from: JdbcDataSource
+    to: GaussDBInstance
+    cardinality: N:1
+    cross_layer: true
+    note: "运行时解析目标，主备切换时此边会变（F7）"
+
+  - code: HAS_DB_INSTANCE
+    from: GaussDBCluster
+    to: GaussDBInstance
+    cardinality: 1:N
+    cross_layer: false
+
+  - code: HOSTS
+    from: Host
+    to: GaussDBInstance
+    cardinality: 1:N
+    cross_layer: true
+
+  - code: HAS_SESSION_POOL
+    from: GaussDBInstance
+    to: DatabaseSessionPool
+    cardinality: "1:1"
+    cross_layer: false
+
+  - code: HAS_SESSION
+    from: DatabaseSessionPool
+    to: Session
+    cardinality: 1:N
+    cross_layer: false
+
+  - code: RUNS_QUERY
+    from: Session
+    to: Query
+    cardinality: 1:N
+    cross_layer: false
+
+  - code: ACCESSES
+    from: Query
+    to: Table
+    cardinality: N:M
+    cross_layer: false
+
+  - code: REPLICATES_TO
+    from: GaussDBInstance
+    to: GaussDBInstance
+    cardinality: "1:1"
+    cross_layer: false
+
+  # ★ M1.5c：任何业务对象 → 它自己的观测证据（M1.5c 双侧对称投影）
+  #   from: "*" = **域不受限**（OWL 侧 cc:hasEvidence 不声明 rdfs:domain，
+  #   range = cc:Evidence；LPG 侧无约束）。写 "*" 而不是逐个列举 12 个类型，
+  #   是为了让「证据可挂在任何对象上」这件事只声明一次。
+  #   cardinality 1:N（一个对象多条观测；一条观测只属于一个对象）。
+  - code: HAS_EVIDENCE
+    from: "*"
+    to: Evidence
+    cardinality: 1:N
+    cross_layer: false
+    asserted_in_ccf: false      # ★ 不由 CCF 的 relations[] 承载（否则同一事实断言两次）
+    derived_from: observations  # 由 observations[] 逐条派生：每条观测一条边
+    note: "★ 派生边：对象 → 它自己的观测证据。派生规则见 type-map.yaml 的 observation_projection.evidence"
+
+# ---------------------------------------------------------------------------
+# 逆关系登记（★ 门禁 X7）
+#   relations 是 **CCF 的断言词汇表**（15 条）：其中 14 条由采集层按契约写出 CCF 的
+#   relations[]；HAS_EVIDENCE 不由 relations[] 承载，而由投影器从 observations[] 逐条
+#   派生（M1.5c）。
+#   本节 4 条是**载体侧派生**的反向关系名：只用于 OWL 的 owl:inverseOf 声明
+#   与图侧反向遍历，**不得**出现在 CCF 的 relations[] 里（否则同一事实被断言两次）。
+# ---------------------------------------------------------------------------
+inverse_relations:
+  - code: INSTANCE_OF
+    from: AppInstance
+    to: CreditCardApp
+    inverse: HAS_APP_INSTANCE
+    asserted: false
+  - code: RUNS
+    from: Container
+    to: AppInstance
+    inverse: RUNS_IN
+    asserted: false
+  - code: HOSTS_CONTAINER
+    from: Host
+    to: Container
+    inverse: DEPLOYED_ON
+    asserted: false
+  - code: ACCEPTS_CONNECTION_FROM
+    from: GaussDBCluster
+    to: JdbcDataSource
+    inverse: CONNECTS_TO
+    asserted: false
+
+# ---------------------------------------------------------------------------
+# 拓扑统计口径（用于等价性自检与"传播深度"度量）
+# ---------------------------------------------------------------------------
+topology_facts:
+  max_hop_depth: 10           # 9（AppEndpoint…Table）+ 1（Table → 其 Evidence 节点）
+  hop_path: [AppEndpoint, CreditCardApp, AppInstance, JdbcDataSource, GaussDBCluster, GaussDBInstance, DatabaseSessionPool, Session, Query, Table]
+  cross_layer_edge_count: 4   # RUNS_IN, CONNECTS_TO, RESOLVES_TO, HOSTS（DEPLOYED_ON 为层内关系，不计）
+  relation_count: 15          # 14（CCF 断言）+ 1（HAS_EVIDENCE，由 observations[] 派生）
+  inverse_relation_count: 4    # 派生反向关系，不计入 relation_count
+  type_count: 14              # 12 可实例化 + 1 抽象 ConnectionPool + 1 证据型 Evidence
+  # ★ 2026-xx 契约修正记录：
+  #   (1) 原 HAS_INSTANCE 被复用给「应用→实例」与「集群→实例」两个语义，
+  #       已拆为 HAS_APP_INSTANCE / HAS_DB_INSTANCE；
+  #   (2) 原 cross_layer_edge_count 记为 6，实际只有 5 条（注释里把 CONNECTS_TO 数了两遍）。
+  #   (3) 2026-xx 由 shared/verify/contract_gates.py 机读发现并修正：
+  #       · HAS_SESSION_POOL / REPLICATES_TO 的 cardinality 写作未加引号的 1:1，
+  #         YAML 1.1 按**六十进制**解析成整数 61 ⇒ 基数语义实际已丢失，已改为 "1:1"；
+  #       · DEPLOYED_ON 标 cross_layer: true，但 Container 与 Host 同属 Runtime 层，
+  #         按 layer_enum 它是层内关系 ⇒ 已改为 false，跨层边数 5 → 4；
+  #       · 4 条关系声明的 inverse 名在 relations 中不存在（悬空），已登记到
+  #         inverse_relations 并标注 asserted: false。
+  #   (4) 2026-xx 用户裁定（问「AppDataSource 孤立」时选 A ：删掉冗余的第三个名字）：
+  #       · 原 AppDataSource（应用侧连接池）与 JdbcDataSource 被注释为「同一对象的两个
+  #         视角」，但它**没有任何关系、没有任何指标、没有任何故障模式引用它**
+  #         （7 条应用侧数据源指标的 object 全是 JdbcDataSource；FM-APP-POOL-EXHAUSTED
+  #         与 FM-APP-DS-CONNECT-FAIL 的 component_type 也全是 JdbcDataSource）
+  #         ⇒ 它在投影后会产出一批**孤立节点**，命中门禁 G5。
+  #       · 处理：删除 AppDataSource，把互斥对改为 JdbcDataSource ⊣ DatabaseSessionPool，
+  #         并把 JdbcDataSource 挂到抽象类 ConnectionPool 下（保留「应用侧池 ⊣ 数据库侧
+  #         会话池」这一互斥语义，以及 ONTO 侧用 owl:disjointWith 排除双重归属的能力）。
+  #       · type_count 14 → 13；ccf.schema.json 的 typeCode enum 与 x-id-prefix-by-type
+  #         同步去掉 AppDataSource。
+  #   (5) 2026-10-05 M1.5c（用户裁定 U-Q = A、对称性 = A）：新增证据型 Evidence +
+  #       关系 HAS_EVIDENCE，两侧对称投影。
+  #       · 粒度 = **每条 CCF 观测一个证据节点**（真机 167 条 ⇒ 167 节点 + 167 边），
+  #         不按对象聚合；理由：C5 要求结论逐条溯源到 CCF 记录 id，
+  #         且 `false_claim` 判定需要「这条观测被引用过吗」这一粒度。
+  #       · Evidence 是**派生型**（`annotation: true`）：不出现在 CCF 的 objects[]，
+  #         也不进 ccf.schema.json 的 typeCode enum；由 observations[] 派生，
+  #         派生规则（记录 id / 指标码 / 状态 / 原始值 / 原始单位 / reason / probe /
+  #         采集时刻）全部写在 `shared/mapping/type-map.yaml` 的
+  #         `observation_projection.evidence.attrs` 里（**映射是数据不是代码**）。
+  #       · ONTO 侧：`cc:hasEvidence`（range = cc:Evidence，**不声明 rdfs:domain**）
+  #         + `ccp:`（prov#）挂接 PROV-O；KG 侧 `:CC_Evidence` + `:CC_HAS_EVIDENCE`。
+  #       · 本型 layer 为 null（不属于 App/Runtime/Data）：门禁必须允许 layer: null；
+  #         投影器**不得**为它写 layer 属性（两侧一致，Neo4j 存不了 null）。
+  #       · type_count 13 → 14；relation_count 14 → 15；max_hop_depth 9 → 10
+  #         （Table → 其 Evidence 节点再 +1 跳）。

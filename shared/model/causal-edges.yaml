@@ -1,0 +1,323 @@
+# ============================================================================
+# shared/model/causal-edges.yaml  ·  场景契约 · 故障因果边（中性名）
+# ----------------------------------------------------------------------------
+# 「故障1 → 可能导致 → 故障2 → 可能导致 → 故障3 ...」
+#
+# ★ 三形态（沿用 gdo-v3 已验证设计）
+#   causes           无条件因果
+#   conditional_causes 带前提的因果（前提不满足则不成因）
+#   relates_to       对称共现，**不参与因果收敛**（只作伴生呈现）
+#
+# ★ 两条必须继承的教训（来自 gdo-v3 实测）
+#   1) 【禁止声明传递性】本图成环（见 meta.cycles），传递闭包在环图上对「排序」无定义。
+#      gdo-v3 的因果图 16 节点中 13 个同属一个强连通分量，因此刻意不声明
+#      owl:TransitiveProperty。本项目同样处理。
+#   2) 【共现 ≠ 因果】relates_to 绝不参与根因收敛，否则根因集合被伴生故障撑爆。
+# ============================================================================
+
+meta:
+  version: "1.0.0"
+  contract_of: "01-场景建模与范围定义.md §5.3"
+  relation_enum: [causes, conditional_causes, relates_to]
+  transitive: false          # ★ 强制：任何载体都不得声明传递性
+  cycles:                    # ★ 已知**有向**环 —— 有界 BFS 必须按此规避（门禁 G4 机读校验）
+    # 2026-xx 修正（contract_gates.py 机读发现）：原第一项那个 5 节点集**不是有向环**。
+    # 文档曾写作「E1→E4→E3→E18→E6→E5」，但
+    #     E1 = FM-DB-SLOW-QUERY      → FM-APP-POOL-EXHAUSTED
+    #     E4 = FM-DB-SLOW-QUERY      → FM-DB-SESSION-POOL-FULL
+    # 第二条边的起点接不上第一条边的终点，这不是一条可走的有向路径。
+    # 经 Tarjan 强连通分解：全图**唯一**的有向环就是下面这一项（E5 + E6）。
+    - [FM-APP-POOL-EXHAUSTED, FM-APP-ENDPOINT-SLOW]
+  undirected_cycles: []      # ★ 实测为空：本因果图不存在任何「无向成环、有向不成环」的子图
+    # 原这里登记过 {FM-DB-SLOW-QUERY, FM-APP-POOL-EXHAUSTED, FM-DB-SESSION-POOL-FULL,
+    # FM-APP-DS-CONNECT-FAIL, FM-APP-ENDPOINT-SLOW} 这 5 个节点，但经 contract_gates.py
+    # 机读校验：它在**有向**意义下不成环（见上面 cycles 的注释），在**无向**意义下也
+    # 不成环 —— 例如 FM-APP-POOL-EXHAUSTED 与 FM-DB-SESSION-POOL-FULL 之间没有任何
+    # 方向的边。该子图真实结构是一棵**弱连通的无环汇聚**（两个上游各自的路径在
+    # FM-APP-ENDPOINT-SLOW 汇合），不是环。故此处清空。
+
+edges:
+
+  # --- F2：核心跨层链（DB → App，方向反直觉） ---
+  - id: E1
+    from: FM-DB-SLOW-QUERY
+    relation: causes
+    to: FM-APP-POOL-EXHAUSTED
+    chain: F2
+    evidence: "慢查询长时间占用会话 → 应用侧连接被耗尽"
+    provenance: authored
+
+  - id: E2
+    from: FM-DB-LOCK-WAIT
+    relation: causes
+    to: FM-DB-SLOW-QUERY
+    chain: F2
+    evidence: "锁等待表现为执行时间长"
+    provenance: authored
+
+  - id: E3
+    from: FM-DB-SESSION-POOL-FULL
+    relation: causes
+    to: FM-APP-DS-CONNECT-FAIL
+    chain: F2
+    evidence: "数据库拒绝新会话 → 应用连接失败"
+    provenance: authored
+
+  - id: E4
+    from: FM-DB-SLOW-QUERY
+    relation: causes
+    to: FM-DB-SESSION-POOL-FULL
+    chain: F2
+    evidence: "慢查询堆积会话"
+    provenance: authored
+
+  # --- F1：应用内部（含反馈环 E6） ---
+  - id: E5
+    from: FM-APP-POOL-EXHAUSTED
+    relation: causes
+    to: FM-APP-ENDPOINT-SLOW
+    chain: F1
+    evidence: "无可用连接 → 请求排队 → P99 劣化"
+    provenance: authored
+
+  - id: E6
+    from: FM-APP-ENDPOINT-SLOW
+    relation: conditional_causes
+    to: FM-APP-POOL-EXHAUSTED
+    condition:
+      metric: app.endpoint.qps
+      op: ">"
+      operand: "threshold:qps_high#critical"
+    chain: F1
+    evidence: "高负载下排队反噬（反馈环，成环案例之一）"
+    provenance: authored
+
+  # --- F3：Host → Container → App ---
+  - id: E7
+    from: FM-HOST-CPU-CONTENTION
+    relation: conditional_causes
+    to: FM-CTR-CPU-THROTTLED
+    condition:
+      metric: host.cpu_usage_ratio
+      op: ">"
+      operand: "threshold:cpu_usage_ratio_severe#critical"
+    chain: F3
+    evidence: "宿主机争抢超过阈值时才触发 cgroup 限流"
+    provenance: authored
+    note: "★ 条件因果边：两方案表达能力的直接对比点"
+
+  - id: E8
+    from: FM-CTR-CPU-THROTTLED
+    relation: causes
+    to: FM-APP-ENDPOINT-SLOW
+    chain: F3
+    evidence: "容器被限流 → 应用线程得不到 CPU → 响应变慢"
+    provenance: authored
+
+  # --- F4：两条并存路径（同一现象、两条根因） ---
+  - id: E9
+    from: FM-HOST-MEM-PRESSURE
+    relation: conditional_causes
+    to: FM-CTR-OOM-KILLED
+    condition:
+      metric: host.mem_available_ratio
+      op: "<"
+      operand: "threshold:mem_available_ratio_severe#critical"
+    chain: F4
+    evidence: "宿主机内存紧张才触发容器 OOM（路径甲：宿主机紧张）"
+    provenance: authored
+
+  - id: E10
+    from: FM-CTR-OOM-KILLED
+    relation: causes
+    to: FM-APP-INSTANCE-RESTART
+    chain: F4
+    evidence: "容器被杀 → 应用实例重启"
+    provenance: authored
+
+  - id: E11
+    from: FM-APP-INSTANCE-RESTART
+    relation: causes
+    to: FM-APP-ENDPOINT-SLOW
+    chain: F4
+    evidence: "重启期间请求失败"
+    provenance: authored
+
+  - id: E12
+    from: FM-APP-HEAP-PRESSURE
+    relation: conditional_causes
+    to: FM-CTR-OOM-KILLED
+    condition:
+      metric: container.mem_working_set_mb
+      op: ">"
+      operand: "entity_property:Container.memLimitMb"
+    chain: F4
+    evidence: "应用自身堆膨胀触及容器 limit（路径乙：容器 limit 过小）"
+    provenance: authored
+    note: "★ E9 与 E12 是同一现象的**两条不同因果路径** —— 考验多路径排序"
+
+  # --- F6 / F7：连接失败的其余两条来源 ---
+  - id: E13
+    from: FM-CTR-NET-UNREACHABLE
+    relation: causes
+    to: FM-APP-DS-CONNECT-FAIL
+    chain: F6
+    evidence: "容器到 DB 网络不通 → 连接超时"
+    provenance: authored
+
+  - id: E14
+    from: FM-DB-INSTANCE-DOWN
+    relation: causes
+    to: FM-APP-DS-CONNECT-FAIL
+    chain: F7
+    evidence: "实例故障/切换 → 连接瞬时中断"
+    provenance: authored
+
+  - id: E15
+    from: FM-DB-INSTANCE-DOWN
+    relation: causes
+    to: FM-DB-SESSION-POOL-FULL
+    chain: F7
+    evidence: "切换期间会话堆积"
+    provenance: authored
+
+  # --- 共现（非因果，不参与收敛） ---
+  - id: E16
+    from: FM-DB-SLOW-QUERY
+    relation: relates_to
+    to: FM-DB-LOCK-WAIT
+    chain: F2
+    evidence: "慢查询与锁等待常同时出现，但不互为因果"
+    provenance: authored
+    note: "对称边；不得参与根因收敛"
+
+  - id: E17
+    from: FM-APP-HEAP-PRESSURE
+    relation: relates_to
+    to: FM-HOST-MEM-PRESSURE
+    chain: F4
+    evidence: "同一宿主机上常同时出现"
+    provenance: authored
+
+  - id: E18
+    from: FM-APP-DS-CONNECT-FAIL
+    relation: causes
+    to: FM-APP-ENDPOINT-SLOW
+    chain: [F5, F6, F7]
+    evidence: "F5/F6/F7 的共同出口"
+    provenance: authored
+
+  # --- ★ 2026-10-12 路线B：新增 4 个数据层故障码的因果边（全部挂在 F2 链） ---
+  #   方向：新码 → 现有节点。**不新增任何指向新码的边** ⇒ 不引入新的有向环
+  #   （meta.cycles 只有 {POOL-EXHAUSTED, ENDPOINT-SLOW} 一项，门禁 G4 会复核）。
+  - id: E19
+    from: FM-DB-DEADLOCK
+    relation: causes
+    to: FM-DB-SLOW-QUERY
+    chain: F2
+    evidence: "死锁检测主动 abort 事务 ⇒ 应用重试 ⇒ 执行时间被拉长"
+    provenance: authored
+
+  - id: E20
+    from: FM-DB-IDLE-IN-TX
+    relation: causes
+    to: FM-DB-LOCK-WAIT
+    chain: F2
+    evidence: "持锁不提交 ⇒ 后续竞争者排队等锁"
+    provenance: authored
+
+  - id: E21
+    from: FM-DB-SEQ-SCAN
+    relation: causes
+    to: FM-DB-SLOW-QUERY
+    chain: F2
+    evidence: "索引失效退化为顺序扫描 ⇒ 单语句执行时间上升"
+    provenance: authored
+
+  - id: E22
+    from: FM-DB-ROLLBACK-STORM
+    relation: causes
+    to: FM-DB-SLOW-QUERY
+    chain: F2
+    evidence: "大量事务回滚 ⇒ 有效吞吐下降、重试放大 ⇒ 观测到的执行时间上升"
+    provenance: authored
+
+
+  - id: E23
+    from: FM-HOST-DISK-FULL
+    relation: causes
+    to: FM-DB-INSTANCE-DOWN
+    chain: F4
+    evidence: "磁盘写满 ⇒ WAL/临时文件无法落盘 ⇒ 实例不可写"
+    provenance: authored
+
+  - id: E24
+    from: FM-HOST-DISK-IO-ERROR
+    relation: causes
+    to: FM-DB-INSTANCE-DOWN
+    chain: F4
+    evidence: "底层 I/O 错误 ⇒ 数据文件读写失败 ⇒ 实例降级/退出"
+    provenance: authored
+
+  - id: E25
+    from: FM-HOST-NET-IFACE-DOWN
+    relation: causes
+    to: FM-CTR-NET-UNREACHABLE
+    chain: F6
+    evidence: "宿主网卡 down ⇒ 其上容器对外不可达"
+    provenance: authored
+
+  - id: E26
+    from: FM-DB-REPLICATION-LAG
+    relation: causes
+    to: FM-APP-DS-CONNECT-FAIL
+    chain: F7
+    evidence: "主备中断 ⇒ 连接被路由到不可用节点 ⇒ 应用侧连接失败"
+    provenance: authored
+
+  - id: E27
+    from: FM-DB-UNUSED-INDEX
+    relation: causes
+    to: FM-DB-SLOW-QUERY
+    chain: F2
+    evidence: "索引失效 ⇒ 退化顺序扫描 ⇒ 单语句执行时间上升"
+    provenance: authored
+
+# ---------------------------------------------------------------------------
+# ★ 叶子根因（无出边）—— 靠排除法定罪，是最难的用例
+#   F5（JDBC 驱动/认证不兼容）没有出边：其判据是「其他可能都被排除后的剩余项」。
+#   真实来源：upstream-ops-agent 实测踩过 Kernel 507 专有 SASL，
+#   libpq 报 "none of the server's SASL authentication mechanisms are supported"。
+# ---------------------------------------------------------------------------
+leaf_root_causes:
+  - code: FM-APP-DS-CONNECT-FAIL
+    subtype: FM-APP-AUTH-INCOMPATIBLE
+    chain: F5
+    display_name: JDBC 驱动/认证方式不兼容
+    detection_mode: exclusion      # ★ 排除法
+    exclusion_requirements:
+      - "db.instance.up == true            （数据库在线）"
+      - "host/container 网络可达             （网络正常）"
+      - "app.datasource.connect_latency_ms 立即失败而非超时（认证失败）"
+      - "jdbcUrl / driverVersion / authMode 存在可疑变更（配置异常）"
+    note: "★ 需要「否定性推理」：必须能断言『某个条件不成立』才能收敛到此根因"
+
+# ---------------------------------------------------------------------------
+# 区分器（用于「同症状不同根因」的用例判定）
+# ---------------------------------------------------------------------------
+discriminators:
+  - pair: [FM-APP-POOL-EXHAUSTED, FM-DB-SESSION-POOL-FULL]
+    symptom_shared: 应用连接获取失败
+    discriminator_metric: db.pool.session_used_ratio
+    rule: "数据库侧正常 → 应用侧；数据库侧贴顶 → 数据库侧"
+    note: "★ 靠『某指标正常』定罪 —— 否定性证据"
+
+  - pair: [FM-CTR-NET-UNREACHABLE, FM-APP-AUTH-INCOMPATIBLE]
+    symptom_shared: 应用连不上数据库
+    discriminator_metric: app.datasource.connect_latency_ms
+    rule: "超时（达 connectionTimeoutMs）→ 网络；立即失败 → 认证/协议"
+
+  - pair: [FM-HOST-MEM-PRESSURE, FM-APP-HEAP-PRESSURE]
+    symptom_shared: 容器 OOM 被杀
+    discriminator_metric: host.mem_available_ratio
+    rule: "宿主机内存紧张 → E9 路径；宿主机正常但容器 limit 小 → E12 路径"

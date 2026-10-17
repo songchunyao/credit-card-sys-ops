@@ -1,0 +1,112 @@
+# Git attributes — https://git-scm.com/docs/gitattributes
+#
+# Normalise line endings for every checkout of this project. The repository is
+# developed on mixed platforms, and several offline checks compare file content
+# byte-for-byte (evidence digests, release-consistency self-check), so a stray
+# CRLF would make an otherwise-correct gate report FAIL.
+
+# Default: let Git decide what is text, and always check out LF.
+* text=auto eol=lf
+
+# Explicit text types (redundant with the default above, kept so the intent is
+# greppable and so these paths are never treated as binary).
+*.py       text eol=lf
+*.pyi      text eol=lf
+*.sh       text eol=lf
+*.bash     text eol=lf
+*.md       text eol=lf
+*.markdown text eol=lf
+*.txt      text eol=lf
+*.rst      text eol=lf
+*.yml      text eol=lf
+*.yaml     text eol=lf
+*.json     text eol=lf
+*.jsonl    text eol=lf
+*.toml     text eol=lf
+*.cfg      text eol=lf
+*.ini      text eol=lf
+*.ttl      text eol=lf
+*.rdf      text eol=lf
+*.sparql   text eol=lf
+*.sql      text eol=lf
+*.cql      text eol=lf
+*.env      text eol=lf
+*.example  text eol=lf
+Dockerfile* text eol=lf
+.gitignore     text eol=lf
+.gitattributes text eol=lf
+.editorconfig  text eol=lf
+
+# Container recipes and shell scripts should keep their own line endings out of
+# the diff-noise conversation entirely.
+Makefile text eol=lf
+
+# ---------------------------------------------------------------------------
+# Binary artifacts — never diff, never normalise, never merge as text.
+# ---------------------------------------------------------------------------
+*.tar.gz  binary
+*.tgz     binary
+*.tar     binary
+*.gz      binary
+*.zip     binary
+*.whl     binary
+*.difypkg binary
+*.pdf     binary
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.gif     binary
+*.webp    binary
+*.ico     binary
+*.pyc     binary
+*.pyo     binary
+*.so      binary
+*.dll     binary
+*.exe     binary
+
+# ---------------------------------------------------------------------------
+# GitHub language statistics
+#
+# Everything below was verified to exist in this tree; paths that are generated
+# or derived from another project are excluded from language stats so the
+# repository's language breakdown reflects its own source.
+# ---------------------------------------------------------------------------
+
+# Generated Dify plugin bundles (built by the fork's deterministic packer).
+shared/deploy/plugins/neo4j_cypher_query/dist/** linguist-generated
+
+# Upstream plugin descriptors retained verbatim inside the fork. The upstream
+# project ships no LICENSE file, so these files are marked as vendored rather
+# than presented as this project's own documentation. The rest of the fork's
+# src/ tree carries local modifications and stays counted as project source.
+shared/deploy/plugins/neo4j_cypher_query/src/.difyignore   linguist-vendored
+shared/deploy/plugins/neo4j_cypher_query/src/PRIVACY.md    linguist-vendored
+shared/deploy/plugins/neo4j_cypher_query/src/SECURITY.md   linguist-vendored
+shared/deploy/plugins/neo4j_cypher_query/src/GUIDE.md      linguist-vendored
+
+# Generated run artifacts: gate evidence and self-test logs written by the
+# offline tooling.
+tmp/m5_run_evidence/**   linguist-generated
+tmp/m5_judge_selftest/** linguist-generated
+*_selftest_last_run.log  linguist-generated
+_verify_gate_runner.log  linguist-generated
+
+# Scratch directories left behind by test runs. Their names match the
+# tempfile.mkdtemp(prefix=...) calls in scheme1-kg/tests/test_cc_tools.py
+# and each one only holds a generated _m32_manifest.json.
+m32_*/** linguist-generated
+
+# ---------------------------------------------------------------------------
+# Fingerprinted source tree — Git must store the bytes verbatim.
+#
+# dist/collect-layer/ ships with a per-file bytes/sha256 record in
+# shared/deploy/port/collect-layer.manifest.yaml, and
+# `python shared/deploy/port/pack_collect_layer.py --verify` compares the
+# checked-out bytes against that record. Any line-ending normalisation would
+# change those bytes on a fresh clone (one file in the tree legitimately
+# carries CRLF) and turn a correct tree into a false FAIL, so the whole tree is
+# marked `-text`. This rule is last on purpose: in .gitattributes the last
+# matching pattern wins.
+# ---------------------------------------------------------------------------
+dist/collect-layer/** -text
+

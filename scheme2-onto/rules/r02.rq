@@ -1,0 +1,307 @@
+# ============================================================================
+# scheme2-onto/rules/r02.rq —— 方案2 原生 SPARQL CONSTRUCT 规则（**F2 链规则**）
+# ----------------------------------------------------------------------------
+#   规则执行口径: 见本文件头 + docs/04-appendix-ORSD.md「规则口径」一节
+#   契约: shared/model/fault-modes.yaml（F2 链的全部 detect 模式）
+#   产出: **F-002**（F2 链的结论码）+ 逐模式的 ccp:findingFaultMode
+#
+#   ★ 2026-10-12 路线B 扩展：本文件由「只检测 FM-DB-SLOW-QUERY」扩为 **F2 链的多模式检测器**。
+#     原因与约束（都是硬约束，不是取舍）：
+#       ① `findings.yaml` 固定「链 → 结论码」⇒ F2 链的**全部**模式都产出 F-002，
+#          具体模式由 `ccp:findingFaultMode` 区分；
+#       ② `onto_tbox_check.py` C4.0 断言 `rules/*.rq` **恰好 7 个** ⇒ 不得为 4 个新模式
+#          新开 r08–r11.rq；
+#       ③ 一个 SPARQL 文件只能有一条 CONSTRUCT ⇒ 多模式必须落在 WHERE 的 UNION 分支里，
+#          故 CONSTRUCT 的 faultMode/severity 改用 `?fm` / `?sev` 变量承载。
+#
+#   覆盖的模式（5 个，全部 F2）：
+#     1) FM-DB-SLOW-QUERY      —— 症状（原分支，判据未变）
+#     2) FM-DB-DEADLOCK        —— db.cluster.deadlocks increased
+#     3) FM-DB-IDLE-IN-TX      —— db.instance.idle_in_xact increased
+#     4) FM-DB-SEQ-SCAN        —— db.table.seq_scan increased
+#     5) FM-DB-ROLLBACK-STORM  —— db.cluster.xact_rollback increased
+#
+#   ★ 三值口径（v1.0.3 X-7，与 r03/r04/r06/r07 同构）：每个模式三条路径 ——
+#       A) 基线路径：cc:delta 存在且为正 ⇒ 产 Finding
+#       B) 等效推导路径：两条可比观测（capturedAt 更早 / rawValue 更小）推得 delta ⇒ 产 Finding
+#       U) 不可判：基线不可得 ⇒ **只登记 ccp:unjudgeable***，**不产 Finding**
+#          （既不成立也不证伪；严禁把「delta 缺失」静默当 false）
+#
+#   ★ 原有诚实边界（未变）：判据 1 的 `db.query.mean_exec_ms` 在本快照零观测
+#     ⇒ FM-DB-SLOW-QUERY 分支仍恒 0 行；见 shared/model/zero-instance-ledger.yaml。
+PREFIX cc:    <https://credit-card-ops.ai/onto/topology#>
+PREFIX cco:   <https://credit-card-ops.ai/onto/core#>
+PREFIX ccm:   <https://credit-card-ops.ai/onto/metric#>
+PREFIX ccf:   <https://credit-card-ops.ai/onto/fault#>
+PREFIX ccc:   <https://credit-card-ops.ai/onto/causal#>
+PREFIX cca:   <https://credit-card-ops.ai/onto/action#>
+PREFIX ccp:   <https://credit-card-ops.ai/onto/prov#>
+PREFIX prov:  <http://www.w3.org/ns/prov#>
+PREFIX xsd:   <http://www.w3.org/2001/XMLSchema#>
+PREFIX rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs:  <http://www.w3.org/2000/01/rdf-schema#>
+
+CONSTRUCT {
+  ?finding a ccf:Finding ;
+      ccf:findingCode "F-002" ;
+      ccp:findingSeverity ?sev ;
+      ccp:findingFaultMode ?fm ;
+      ccp:findingFor ?target ;
+      ccp:associatedRule ccp:Rule-r02 ;
+      prov:wasDerivedFrom ?ev .
+  ?uj a cco:InformationEntity ;
+      ccp:unjudgeableFor ?target ;
+      ccp:unjudgeableRule ccp:Rule-r02 ;
+      ccp:unjudgeableReason ?ujReason ;
+      prov:wasDerivedFrom ?ev .
+}
+WHERE {
+  {
+    # --- FM-DB-SLOW-QUERY（原分支，判据未变）---
+    BIND(ccf:FM-DB-SLOW-QUERY AS ?fm)  BIND("major" AS ?sev)
+    ?target a cc:Query ; ccm:meanExecMs ?mean .
+
+    ?tier a ccm:WarningThreshold ;
+          ccm:tierReference "threshold:mean_exec_ms_light#warning" ;
+          ccm:thresholdValue ?limit .
+    FILTER(?mean > ?limit)
+
+    # 关键否定性证据: 数据库实例不可用 ⇒ 归 FM-DB-INSTANCE-DOWN（F7）
+    FILTER NOT EXISTS {
+        ?down a cc:GaussDBInstance ; ccm:up ?up .
+        FILTER(?up = false)
+    }
+
+    ?target cc:hasEvidence ?ev .
+    ?ev cc:metricCode "db.query.mean_exec_ms"^^xsd:string .
+    BIND(IRI(CONCAT("https://credit-card-ops.ai/onto/inst/finding/",
+                    "F-002/",
+                    ENCODE_FOR_URI(STRAFTER(STR(?target), "/inst/")))) AS ?finding)
+  }
+  UNION
+  {
+    # --- FM-DB-DEADLOCK（数据库死锁）A) 基线路径：cc:delta 存在且为正 ---
+    BIND(ccf:FM-DB-DEADLOCK AS ?fm)  BIND("critical" AS ?sev)
+    ?target a cc:GaussDBCluster ; ccm:deadlocks ?now .
+    ?target cc:hasEvidence ?ev .
+    ?ev cc:metricCode "db.cluster.deadlocks"^^xsd:string ;
+        cc:delta ?delta ; cc:deltaWindowS ?window .
+    ?zeroBase ccm:tierReference "baseline:counter_non_zero" ;
+              ccm:baselineValue ?zero .
+    FILTER(xsd:decimal(?delta) > ?zero)
+    FILTER NOT EXISTS { ?ev cc:counterReset true }
+    BIND(IRI(CONCAT("https://credit-card-ops.ai/onto/inst/finding/", "F-002/",
+                    ENCODE_FOR_URI(STRAFTER(STR(?target), "/inst/")))) AS ?finding)
+  }
+  UNION
+  {
+    # --- FM-DB-DEADLOCK B) 等效推导路径：两条可比观测推得 delta ---
+    BIND(ccf:FM-DB-DEADLOCK AS ?fm)  BIND("critical" AS ?sev)
+    ?target a cc:GaussDBCluster ; ccm:deadlocks ?now .
+    ?target cc:hasEvidence ?late , ?earlier .
+    ?late    cc:metricCode "db.cluster.deadlocks"^^xsd:string ; cc:rawValue ?vLate    ; cc:capturedAt ?tLate .
+    ?earlier cc:metricCode "db.cluster.deadlocks"^^xsd:string ; cc:rawValue ?vEarlier ; cc:capturedAt ?tEarlier .
+    FILTER(str(?tEarlier) < str(?tLate))
+    FILTER(xsd:decimal(?vEarlier) < xsd:decimal(?vLate))
+    FILTER NOT EXISTS { ?late cc:counterReset true }
+    FILTER NOT EXISTS { ?earlier cc:counterReset true }
+    BIND(?late AS ?ev)
+    BIND(IRI(CONCAT("https://credit-card-ops.ai/onto/inst/finding/", "F-002/",
+                    ENCODE_FOR_URI(STRAFTER(STR(?target), "/inst/")))) AS ?finding)
+  }
+  UNION
+  {
+    # --- FM-DB-DEADLOCK U) 不可判：基线不可得 ⇒ 只登记 unjudgeable，不产 Finding ---
+    BIND(ccf:FM-DB-DEADLOCK AS ?fm)  BIND("critical" AS ?sev)
+    ?target a cc:GaussDBCluster ; ccm:deadlocks ?now .
+    ?target cc:hasEvidence ?ev .
+    ?ev cc:metricCode "db.cluster.deadlocks"^^xsd:string .
+    FILTER NOT EXISTS {
+      ?target cc:hasEvidence ?evB .
+      ?evB cc:metricCode "db.cluster.deadlocks"^^xsd:string ; cc:delta ?dAny ; cc:deltaWindowS ?wAny .
+      FILTER NOT EXISTS { ?evB cc:counterReset true }
+    }
+    FILTER NOT EXISTS {
+      ?target cc:hasEvidence ?l2 , ?e2 .
+      ?l2 cc:metricCode "db.cluster.deadlocks"^^xsd:string ; cc:capturedAt ?tl2 .
+      ?e2 cc:metricCode "db.cluster.deadlocks"^^xsd:string ; cc:capturedAt ?te2 .
+      FILTER(str(?te2) < str(?tl2))
+    }
+    BIND(IRI(CONCAT("https://credit-card-ops.ai/onto/inst/unjudgeable/", "F-002/",
+                    ENCODE_FOR_URI(STRAFTER(STR(?target), "/inst/")))) AS ?uj)
+    BIND("基线不可用（cc:delta / cc:deltaWindowS 缺失，或 cc:counterReset=true）⇒ 该判据 unjudgeable：既不成立也不证伪；不产 Finding" AS ?ujReason)
+  }
+  UNION
+  {
+    # --- FM-DB-IDLE-IN-TX（持锁不提交堆积）A) 基线路径：cc:delta 存在且为正 ---
+    BIND(ccf:FM-DB-IDLE-IN-TX AS ?fm)  BIND("major" AS ?sev)
+    ?target a cc:GaussDBInstance ; ccm:idleInXact ?now .
+    ?target cc:hasEvidence ?ev .
+    ?ev cc:metricCode "db.instance.idle_in_xact"^^xsd:string ;
+        cc:delta ?delta ; cc:deltaWindowS ?window .
+    ?zeroBase ccm:tierReference "baseline:counter_non_zero" ;
+              ccm:baselineValue ?zero .
+    FILTER(xsd:decimal(?delta) > ?zero)
+    FILTER NOT EXISTS { ?ev cc:counterReset true }
+    BIND(IRI(CONCAT("https://credit-card-ops.ai/onto/inst/finding/", "F-002/",
+                    ENCODE_FOR_URI(STRAFTER(STR(?target), "/inst/")))) AS ?finding)
+  }
+  UNION
+  {
+    # --- FM-DB-IDLE-IN-TX B) 等效推导路径：两条可比观测推得 delta ---
+    BIND(ccf:FM-DB-IDLE-IN-TX AS ?fm)  BIND("major" AS ?sev)
+    ?target a cc:GaussDBInstance ; ccm:idleInXact ?now .
+    ?target cc:hasEvidence ?late , ?earlier .
+    ?late    cc:metricCode "db.instance.idle_in_xact"^^xsd:string ; cc:rawValue ?vLate    ; cc:capturedAt ?tLate .
+    ?earlier cc:metricCode "db.instance.idle_in_xact"^^xsd:string ; cc:rawValue ?vEarlier ; cc:capturedAt ?tEarlier .
+    FILTER(str(?tEarlier) < str(?tLate))
+    FILTER(xsd:decimal(?vEarlier) < xsd:decimal(?vLate))
+    FILTER NOT EXISTS { ?late cc:counterReset true }
+    FILTER NOT EXISTS { ?earlier cc:counterReset true }
+    BIND(?late AS ?ev)
+    BIND(IRI(CONCAT("https://credit-card-ops.ai/onto/inst/finding/", "F-002/",
+                    ENCODE_FOR_URI(STRAFTER(STR(?target), "/inst/")))) AS ?finding)
+  }
+  UNION
+  {
+    # --- FM-DB-IDLE-IN-TX U) 不可判：基线不可得 ⇒ 只登记 unjudgeable，不产 Finding ---
+    BIND(ccf:FM-DB-IDLE-IN-TX AS ?fm)  BIND("major" AS ?sev)
+    ?target a cc:GaussDBInstance ; ccm:idleInXact ?now .
+    ?target cc:hasEvidence ?ev .
+    ?ev cc:metricCode "db.instance.idle_in_xact"^^xsd:string .
+    FILTER NOT EXISTS {
+      ?target cc:hasEvidence ?evB .
+      ?evB cc:metricCode "db.instance.idle_in_xact"^^xsd:string ; cc:delta ?dAny ; cc:deltaWindowS ?wAny .
+      FILTER NOT EXISTS { ?evB cc:counterReset true }
+    }
+    FILTER NOT EXISTS {
+      ?target cc:hasEvidence ?l2 , ?e2 .
+      ?l2 cc:metricCode "db.instance.idle_in_xact"^^xsd:string ; cc:capturedAt ?tl2 .
+      ?e2 cc:metricCode "db.instance.idle_in_xact"^^xsd:string ; cc:capturedAt ?te2 .
+      FILTER(str(?te2) < str(?tl2))
+    }
+    BIND(IRI(CONCAT("https://credit-card-ops.ai/onto/inst/unjudgeable/", "F-002/",
+                    ENCODE_FOR_URI(STRAFTER(STR(?target), "/inst/")))) AS ?uj)
+    BIND("基线不可用（cc:delta / cc:deltaWindowS 缺失，或 cc:counterReset=true）⇒ 该判据 unjudgeable：既不成立也不证伪；不产 Finding" AS ?ujReason)
+  }
+  UNION
+  {
+    # --- FM-DB-SEQ-SCAN（全表扫描（索引失效））A) 基线路径：cc:delta 存在且为正 ---
+    BIND(ccf:FM-DB-SEQ-SCAN AS ?fm)  BIND("major" AS ?sev)
+    ?target a cc:Table ; ccm:seqScan ?now .
+    ?target cc:hasEvidence ?ev .
+    ?ev cc:metricCode "db.table.seq_scan"^^xsd:string ;
+        cc:delta ?delta ; cc:deltaWindowS ?window .
+    ?zeroBase ccm:tierReference "baseline:counter_non_zero" ;
+              ccm:baselineValue ?zero .
+    FILTER(xsd:decimal(?delta) > ?zero)
+    FILTER NOT EXISTS { ?ev cc:counterReset true }
+    BIND(IRI(CONCAT("https://credit-card-ops.ai/onto/inst/finding/", "F-002/",
+                    ENCODE_FOR_URI(STRAFTER(STR(?target), "/inst/")))) AS ?finding)
+  }
+  UNION
+  {
+    # --- FM-DB-SEQ-SCAN B) 等效推导路径：两条可比观测推得 delta ---
+    BIND(ccf:FM-DB-SEQ-SCAN AS ?fm)  BIND("major" AS ?sev)
+    ?target a cc:Table ; ccm:seqScan ?now .
+    ?target cc:hasEvidence ?late , ?earlier .
+    ?late    cc:metricCode "db.table.seq_scan"^^xsd:string ; cc:rawValue ?vLate    ; cc:capturedAt ?tLate .
+    ?earlier cc:metricCode "db.table.seq_scan"^^xsd:string ; cc:rawValue ?vEarlier ; cc:capturedAt ?tEarlier .
+    FILTER(str(?tEarlier) < str(?tLate))
+    FILTER(xsd:decimal(?vEarlier) < xsd:decimal(?vLate))
+    FILTER NOT EXISTS { ?late cc:counterReset true }
+    FILTER NOT EXISTS { ?earlier cc:counterReset true }
+    BIND(?late AS ?ev)
+    BIND(IRI(CONCAT("https://credit-card-ops.ai/onto/inst/finding/", "F-002/",
+                    ENCODE_FOR_URI(STRAFTER(STR(?target), "/inst/")))) AS ?finding)
+  }
+  UNION
+  {
+    # --- FM-DB-SEQ-SCAN U) 不可判：基线不可得 ⇒ 只登记 unjudgeable，不产 Finding ---
+    BIND(ccf:FM-DB-SEQ-SCAN AS ?fm)  BIND("major" AS ?sev)
+    ?target a cc:Table ; ccm:seqScan ?now .
+    ?target cc:hasEvidence ?ev .
+    ?ev cc:metricCode "db.table.seq_scan"^^xsd:string .
+    FILTER NOT EXISTS {
+      ?target cc:hasEvidence ?evB .
+      ?evB cc:metricCode "db.table.seq_scan"^^xsd:string ; cc:delta ?dAny ; cc:deltaWindowS ?wAny .
+      FILTER NOT EXISTS { ?evB cc:counterReset true }
+    }
+    FILTER NOT EXISTS {
+      ?target cc:hasEvidence ?l2 , ?e2 .
+      ?l2 cc:metricCode "db.table.seq_scan"^^xsd:string ; cc:capturedAt ?tl2 .
+      ?e2 cc:metricCode "db.table.seq_scan"^^xsd:string ; cc:capturedAt ?te2 .
+      FILTER(str(?te2) < str(?tl2))
+    }
+    BIND(IRI(CONCAT("https://credit-card-ops.ai/onto/inst/unjudgeable/", "F-002/",
+                    ENCODE_FOR_URI(STRAFTER(STR(?target), "/inst/")))) AS ?uj)
+    BIND("基线不可用（cc:delta / cc:deltaWindowS 缺失，或 cc:counterReset=true）⇒ 该判据 unjudgeable：既不成立也不证伪；不产 Finding" AS ?ujReason)
+  }
+  UNION
+  {
+    # --- FM-DB-ROLLBACK-STORM（事务回滚风暴）A) 基线路径：cc:delta 存在且为正 ---
+    BIND(ccf:FM-DB-ROLLBACK-STORM AS ?fm)  BIND("major" AS ?sev)
+    ?target a cc:GaussDBCluster ; ccm:xactRollback ?now .
+    ?target cc:hasEvidence ?ev .
+    ?ev cc:metricCode "db.cluster.xact_rollback"^^xsd:string ;
+        cc:delta ?delta ; cc:deltaWindowS ?window .
+    ?zeroBase ccm:tierReference "baseline:counter_non_zero" ;
+              ccm:baselineValue ?zero .
+    FILTER(xsd:decimal(?delta) > ?zero)
+    FILTER NOT EXISTS { ?ev cc:counterReset true }
+    BIND(IRI(CONCAT("https://credit-card-ops.ai/onto/inst/finding/", "F-002/",
+                    ENCODE_FOR_URI(STRAFTER(STR(?target), "/inst/")))) AS ?finding)
+  }
+  UNION
+  {
+    # --- FM-DB-ROLLBACK-STORM B) 等效推导路径：两条可比观测推得 delta ---
+    BIND(ccf:FM-DB-ROLLBACK-STORM AS ?fm)  BIND("major" AS ?sev)
+    ?target a cc:GaussDBCluster ; ccm:xactRollback ?now .
+    ?target cc:hasEvidence ?late , ?earlier .
+    ?late    cc:metricCode "db.cluster.xact_rollback"^^xsd:string ; cc:rawValue ?vLate    ; cc:capturedAt ?tLate .
+    ?earlier cc:metricCode "db.cluster.xact_rollback"^^xsd:string ; cc:rawValue ?vEarlier ; cc:capturedAt ?tEarlier .
+    FILTER(str(?tEarlier) < str(?tLate))
+    FILTER(xsd:decimal(?vEarlier) < xsd:decimal(?vLate))
+    FILTER NOT EXISTS { ?late cc:counterReset true }
+    FILTER NOT EXISTS { ?earlier cc:counterReset true }
+    BIND(?late AS ?ev)
+    BIND(IRI(CONCAT("https://credit-card-ops.ai/onto/inst/finding/", "F-002/",
+                    ENCODE_FOR_URI(STRAFTER(STR(?target), "/inst/")))) AS ?finding)
+  }
+  UNION
+  {
+    # --- FM-DB-ROLLBACK-STORM U) 不可判：基线不可得 ⇒ 只登记 unjudgeable，不产 Finding ---
+    BIND(ccf:FM-DB-ROLLBACK-STORM AS ?fm)  BIND("major" AS ?sev)
+    ?target a cc:GaussDBCluster ; ccm:xactRollback ?now .
+    ?target cc:hasEvidence ?ev .
+    ?ev cc:metricCode "db.cluster.xact_rollback"^^xsd:string .
+    FILTER NOT EXISTS {
+      ?target cc:hasEvidence ?evB .
+      ?evB cc:metricCode "db.cluster.xact_rollback"^^xsd:string ; cc:delta ?dAny ; cc:deltaWindowS ?wAny .
+      FILTER NOT EXISTS { ?evB cc:counterReset true }
+    }
+    FILTER NOT EXISTS {
+      ?target cc:hasEvidence ?l2 , ?e2 .
+      ?l2 cc:metricCode "db.cluster.xact_rollback"^^xsd:string ; cc:capturedAt ?tl2 .
+      ?e2 cc:metricCode "db.cluster.xact_rollback"^^xsd:string ; cc:capturedAt ?te2 .
+      FILTER(str(?te2) < str(?tl2))
+    }
+    BIND(IRI(CONCAT("https://credit-card-ops.ai/onto/inst/unjudgeable/", "F-002/",
+                    ENCODE_FOR_URI(STRAFTER(STR(?target), "/inst/")))) AS ?uj)
+    BIND("基线不可用（cc:delta / cc:deltaWindowS 缺失，或 cc:counterReset=true）⇒ 该判据 unjudgeable：既不成立也不证伪；不产 Finding" AS ?ujReason)
+  }
+  UNION
+  {
+    # --- FM-DB-UNUSED-INDEX（P0.9 新增）---
+    BIND(ccf:FM-DB-UNUSED-INDEX AS ?fm)  BIND("major" AS ?sev)
+    ?target a cc:Table ; ccm:unusedIndexCount ?v .
+    ?nzBase ccm:tierReference "baseline:counter_non_zero" ;
+            ccm:baselineValue ?zero .
+    FILTER(?v > ?zero)
+    ?target cc:hasEvidence ?ev .
+    ?ev cc:metricCode "db.table.unused_index_count"^^xsd:string .
+    BIND(IRI(CONCAT("https://credit-card-ops.ai/onto/inst/finding/",
+                    "F-002/",
+                    ENCODE_FOR_URI(STRAFTER(STR(?target), "/inst/")))) AS ?finding)
+  }
+}

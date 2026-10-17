@@ -1,0 +1,679 @@
+# =============================================================================
+# shared/deploy/dify/binding.yaml
+#   M4.2（W1 批次）· Dify 工具注册与同步的**单一事实源**
+#
+#   本文件是唯一的声明面：`register_tools.py` 与 `sync_tool_schemas.py` 都不
+#   允许内联任何工具名 / 端口 / URL / 工具清单，一律从本文件读取。
+#   凡本文件没声明的 provider、工具名、端口，注册器一律拒绝（白名单）。
+#
+#   规则（沿用任务书 §3）：只增不删；两侧逐字相同；改声明不改判据；
+#   严禁把文档性字段注入 Dify 注册面（见 providers[*].strip_fields）。
+# =============================================================================
+
+meta:
+  contract: m4-dify-binding
+  version: "1.0.0"
+  date: "2026-10-07"
+  task: "M4.2 / W1"
+  rulings: [R-31, R-32, R-33, R-34, R-35]
+  # 下列指纹由 register_tools.py --check 逐次复核；不一致即以非零码退出。
+  tool_source_fingerprints:
+    shared/model/tools-setb.yaml:
+      # ★ W14（R-50 取值纪律 / UTC 2026-09-29T04:42:45Z）：把「取值纪律」一句话追加进 7 个中性
+      #   工具 description 的**末尾**（句 A = cc_guide / cc_schema 共 2 个；句 B = cc_query /
+      #   cc_facts / cc_trace / cc_cause / cc_propose 共 5 个）。纯行内插入 +849 B，LF 行数不变
+      #   ⇒ 全仓 `tools-setb.yaml:<行号>` 引用一律仍然有效，无需改任何行号引用。
+      #   上一版（W14 前）= 68049 B / 865 LF /
+      #   8bab7a16c64342f8caea0aa7c778ada64fd28e92aee21c4941c50f255cf60be8（2026-09-29T02:00:45Z）。
+      # ★ FIX-1（2026-10-07 施工日 / UTC 2026-09-29T02:00:45Z）：删掉 cc_guide / cc_schema 的
+      #   `dify_placeholder` 块 + 更正 :72 / :126 两处错误表述后重登记。
+      #   上一版（FIX-1 前）= 67179 B / 868 LF /
+      #   e23b596f06f99ea002dd464bd7bf873611844488010a01173f9618d3baaaa083（2026-09-28T22:29:12Z）。
+      # ★ S2c（D47）：S2b 把 read_facts 登记进 tools-setb.yaml（7→8 工具）后本例指纹未同步
+      #   （遗留登记值 68898/865/963f39e1… 已陈旧）⇒ S2c 按脚本实算真值重登记。
+      #   上一版（陈旧，S2b 遗留）= 68898 B / 865 LF /
+      #   963f39e174caaf7b5ee77a606c67deabc47bf7944732b6407753414079d5d5ef。
+      # ★ R-52（2026-10-07）：tools-setb.yaml 新增 `c3.rule_arm_removable_tools` 白名单并把
+      #   `c3.tool_name_set_authority` 改写为三条 fail-closed 断言（R 臂 = Set B 去掉 cc_query）后重登记。
+      #   上一版（R-52 前）= 70290 B / 878 LF /
+      #   e9ae0655e0143d3be40cfbf3b508af54a63e5e7b0eba4e37679c6bc75d943f54（recorded_at_utc 2026-09-29T15:01:44Z）。
+      # ★ R-55（2026-10-08，用户裁定选项 A）：`c3.tool_name_set_authority` 段的一条注释里，BASE 的旧工具名 `cc_get_facts` 更正为 `read_facts`（该旧名在四个服务里 0 命中，是 D47 改名前的残留）。**纯注释改动**，不动任何工具声明。
+      #   上一版（R-54 后）= 71873 B / 884 LF /
+      #   905148ae6bc1adce794983e0ae4fd5dba23b432d4a6576fc613bed0a37dadff8（recorded_at_utc 2026-09-30T02:26:38Z）。
+      # ★ A′/P1/P2c/P3（2026-10-15，本批）：`bounds` 段新增 9 个二级键
+      #   （metadata_byte_cap / metadata_row_cap / metadata_tools / metadata_basis /
+      #     metadata_completeness_gate / cause_byte_cap / cause_basis /
+      #     cause_completeness_gate / cause_self_root_rule，共 +71 行）后按脚本实算真值重登记。
+      #   处置与 S2c / R-52 / R-55 同一惯例：**同步指纹，不回退文件**。
+      #   上一版（R-55 后）= 71871 B / 884 LF /
+      #   6ba00f9054b74bde50a969bf085525547a3b1ed211cc6352eadc95009606c48f（recorded_at_utc 2026-10-08T00:00:00Z）。
+      bytes: 79133
+      lf_lines: 955
+      bom: false
+      sha256: b6c6492565b84101e2101f030f3dda3b9e72424ed1b9ac96cf6b2294997acef4
+      recorded_at_utc: "2026-10-16T09:00:00Z"
+    shared/model/kgt-tools.yaml:
+      # ★ 2026-09-29（R-50 W12）：kgt-tools.yaml 的 KG-T-free.dify_plugin 块由
+      #   「官方身份 pin + installation_status: blocked_signature_gate」改写为
+      #   「fork 身份 + installed + machine_readback + fork_provenance」后重登记。
+      #   上一版登记 = 16275 B / 317 LF / f230f00496f1eae53d44076fee2eb9d656e11f48536b4e53bc67a8ce749a4fb4
+      #   （recorded_at_utc 2026-09-28T22:29:12Z）——注意该值在我改动前就**已经陈旧**
+      #   （改动前真值 = 19581 B / 362 LF / dfff6aef672436d625c0ae9e5a766d70d4e64c50dc51e7d1b88945cdf7671e4f）。
+      # ★ S2c（D47）：S2b 把 read_facts 登记进 kgt-tools.yaml（4→5 工具）后本例指纹未同步
+      #   （遗留登记值 23234/409/16b27b86… 已陈旧）⇒ S2c 按脚本实算真值重登记。
+      #   上一版（陈旧，S2b 遗留）= 23234 B / 409 LF /
+      #   16b27b86a2b99413d784832580e63b2236c58d50454a640823ee3bde1182e38d。
+      # ★ R-53（2026-10-07）：kgt-tools.yaml 的 forbidden_reason 里那条 `run_rules` 表述被更正
+      #   （该工具在任何臂都不存在；R 臂的权威定义特征 = 无 cc_query）后重登记。
+      #   上一版（R-53 前）= 24961 B / 428 LF /
+      #   7d1b6165e457b7e82a7ee7e3c0965a90f1ec3486f25dd7f6255397d33f086480（recorded_at_utc 2026-09-29T15:01:44Z）。
+      # ★ R-54 / A1（2026-10-07）再登记：`get_facts.timeWindow` 由 `type: object` 改为
+      #   **`type: string` + JSON 对象文法**（同 read_facts.scope 的处置与根因：
+      #   Dify type_alias 把 object 折成 string，模型只能发字符串 ⇒ 必 400）。
+      #   上一版（R-53 后）= 25879 B / 428 LF /
+      #   b79d1c560f7da135cae2989844677c9225d1201bb13e270a7039b7875a9e6b3f。
+      # ★ U-N 裁定 = A（2026-10-08）：`arms.KG-T-dyn.service_port` 由 `TBD` → **8305**
+      #   （独立端口的载体侧预留值 `cc_tools_kgt.py:DYN_PROVISIONAL_PORT` 升为契约值），
+      #   并补记「该实例必须显式分设 PID/日志/审计三路径，否则污染主臂平面 2」的理由。
+      #   上一版（R-54 / A1 后）= 26456 B / 431 LF /
+      #   5eef78713b6b897f9bcf7b83d26292ea4a98cb03cf6eeedbc52dec1b7c776e2e（recorded_at_utc "2026-10-07T00:00:00Z"）。
+      # ★ 开源导出（2026-10-16）：本文件两处内网地址被脱敏为文档示例地址（RFC 5737 `192.0.2.0/24`），
+      #   字节数因此由 27207 → 27200 ⇒ 按同一惯例**同步指纹、不回退文件**（脱敏不可回退，
+      #   回退即把内网拓扑写回公开仓）。逻辑与工具声明一字未改，仅地址字面量变化。
+      #   上一版（脱敏前，与私有仓一致）= 27207 B / 440 LF /
+      #   aded136a6c20c7979c528a58cb8993c4e38b39b374697ab905dffaa3322f0eab（recorded_at_utc "2026-10-08T00:00:00Z"）。
+      bytes: 27200
+      lf_lines: 440
+      bom: false
+      sha256: b0d86a580e2b9f4aeb312bfc12f31ac166ae264ed8e27529208856b56d86774b
+      recorded_at_utc: "2026-10-16T00:00:00Z"
+    shared/model/live-facts-tools.yaml:
+      # ★ S2c 新增（D47）：中性取数工具 read_facts 的**定义唯一源 / 形状权威**。
+      #   params / required / additional_properties / returns 的正文只此一份；
+      #   tools-setb.yaml 与 kgt-tools.yaml 只登记 neutral_tool_ref 引用，不复制正文；
+      #   ★ S3a-pre 刷新本段指纹（信封键名对齐 droppedRows/droppedBytes，语义未变）。
+      #   ★ S3a-2b 再次刷新：read_facts.description 由 YAML 折行改为单行逐字同源（消除
+      #   折叠豁免），scope 描述措辞由「视图」改为「只做收窄」（消除单字 token 误报豁免）。
+      #   ★ S3a-2c 第三次刷新（本轮）：〔a〕`returns.envelope_note` 追加「线上返回体是
+      #   tool_level ∪ envelope 的**平铺**八名（source 仍嵌套）；本文件的 tool_level /
+      #   envelope 两层是定义结构、envelope 这层还是 G24 引用感知断言的锚点 ⇒ 不进 `returns` 拍平」；
+      #   ★ R-54 / A1 第四次刷新（2026-10-07，本轮）：`scope` 由 `type: object` + 4 properties
+      #   改为 **`type: string` + JSON 对象文法**（根因：Dify 的 `registration_face.type_alias`
+      #   把 object 折成 string 给模型看，而服务端硬拒非 dict ⇒ 带 scope 的调用必然 400，
+      #   是 M5 主跑中止主因，见 tmp/_m5_wall_report.md §2）；连带 `emit_schema` 段刷新
+      #   （2216 B/f330100a… → 2188 B/421f7876…）。
+      #   上一版（S3a-2c）= 17108 B / 315 LF /
+      #   62def1c5e46d6a0ed0b64c531315c74f530e85d33154067615bbec005650373b。
+      # ★ R-55（2026-10-08，用户裁定选项 A）：`names.arm_usage.read_facts` 补入 `BASE`（7 个被测组里的**基线/分母**；此前 arm_usage 两边都未列它，属契约缺口）。
+      #   上一版（S3a-2c / R-54 后）= 17999 B / 321 LF /
+      #   111cc3ef767df93384d5591f74039edb22c8a96fa458972c84c54ae371c66c9a（recorded_at_utc 2026-10-07T00:00:00Z）。
+      # ★ R-57/B（2026-10-12）：`read_facts.error_codes` **补登 `BLOCKED_BASE: 409`** ——
+      #   实现面（`live_facts_service.BlockedBase`）一直在返回它（也是 Dify 真机故障里用户
+      #   实际看到的那个码），声明面此前漏记；`--emit-schema` 的码表由异常类推导 ⇒ 只补声明。
+      # ★ R-58 / 方案C（2026-10-12）：`params.layers.description` 重写为「合法取值 + 运行模式
+      #   必需层 + 要收窄请用 scope」—— 模型面上参数说明的**唯一**信道就是这个字段（注册面 =
+      #   本文件 → `register_tools.py::params_from_entry`，只带 name/type/required/description）；
+      #   真机事故里模型因**无取值说明**而猜层名（发过 ["app","container","db","host"] /
+      #   ["App","Runtime","Data"]），被覆盖门禁正确拒绝却因门面错误面失真而误判「接口不可用」。
+      #   同批把 `emit_schema` 段刷新为 2768 B / `39492d50…`。
+      #   上一版（R-55 后）= 18202 B / 323 LF /
+      #   3e8ea75f1b5bc33c83310a6a357c2f0b9407a4e566dd273ac0f096e02463fac6（recorded_at_utc 2026-10-08T00:00:00Z）。
+      bytes: 20410
+      lf_lines: 335
+      bom: false
+      sha256: dad3dc19c4911ea2c28edb1314539af3a565798f52d1f42ef412e4558462400d
+      recorded_at_utc: "2026-10-12T00:00:00Z"
+  # service_base 的现场取证（不是推断）
+  # ★ S2c 声明式偏差登记（fail-closed）：唯一允许「登记文本 vs 形状文本仅差空白折叠」的情形。
+  #   依据 = shared/model/live-facts-tools.yaml 的 resolution_contract 第 4 步
+  #   （description 若两边都写 ⇒ 逐字相同）。形状源当时用 YAML 折行，在「采集面 真采」
+  #   之间落下一个空格，而 shared/model/tools-setb.yaml 的登记文本无此空格 ⇒ 曾用哈希钉住。
+  #   归一化后任一哈希不符、或任何未登记的折叠差异，仍抛 ERR_REF_DESCRIPTION_DRIFT
+  #   （实现见 register_tools.py:fold_exempt_ok）。
+  #   ★ S3a-2b 收口：形状源已改单行逐字同源（真值 16397 B / 311 LF / 4e406975…），
+  #   本窗口凭证**已删除**（保留空表以固定字段存在性；判据与留痕机制未改）。
+  ref_description_fold_exemptions: []
+  # ★ R-58：以下为历史取证（当时主机为 .84）；现网主机已迁至 .83。（三行键值 = 2026-09-28 现场读数，属（乙）证据，保持原样）
+  service_base_evidence:
+    collected_at_utc: "2026-09-28T22:25:52Z"
+    collected_at_plus08: "2026-09-29T06:25:52+08:00"
+    probe: "docker exec dify-api-1 <http-client> http://<target>:830x/health"
+    target_host_ip:
+      "http://192.0.2.11:8301/health": 200
+      "http://192.0.2.11:8302/health": 200
+      "http://192.0.2.11:8303/health": 200
+    target_host_docker_internal:
+      "http://host.docker.internal:8301/health": "000"
+      "http://host.docker.internal:8302/health": "000"
+      "http://host.docker.internal:8303/health": "000"
+    target_loopback_inside_container:
+      "http://127.0.0.1:8301/health": "000"
+      "http://127.0.0.1:8302/health": "000"
+      "http://127.0.0.1:8303/health": "000"
+    host_listen: ["0.0.0.0:8301", "0.0.0.0:8302", "0.0.0.0:8303"]
+    conclusion: "容器内可达形式 = 宿主 IP（host.docker.internal 不可解析，容器回环不可达）"
+    not_verified: "没有从 dify-ssrf_proxy-1 容器内复测（该镜像内无可用 HTTP 客户端）"
+
+dify:
+  version: "1.17.0"
+  base_url_from_env: DIFY_BASE_URL
+  api_prefix: console/api
+  routes:
+    login: /console/api/login
+    tool_provider_list: /console/api/workspaces/current/tool-providers?type=api
+    tool_provider_get: /console/api/workspaces/current/tool-provider/api/get?provider={provider}
+    tool_provider_add: /console/api/workspaces/current/tool-provider/api/add
+    tool_provider_update: /console/api/workspaces/current/tool-provider/api/update
+  max_provider_name_len: 40
+
+workspace:
+  mode: single
+  id: 6dbcf416-0713-48d6-b4f7-a4583bff18de
+  name: "ROY SONG's Workspace"
+  note: "R-31：Console API 无「新建 workspace」路由，方案 C 已否决；本批次不新建 workspace。"
+
+tool_sources:
+  setb:
+    path: shared/model/tools-setb.yaml
+    container: mapping            # tools 为按名索引的 mapping
+    description_field: description
+    param_description_field: description
+  kgt:
+    path: shared/model/kgt-tools.yaml
+    container: list               # tools 为列表
+    description_field: summary    # ★ 模型面描述取 summary，不是 description
+    param_description_field: description   # properties.<name>.description
+  # ★ S2c 新增（D47）：read_facts 的定义唯一源（形状权威）。注册面只暴露别名 read_live_facts。
+  livefacts:
+    path: shared/model/live-facts-tools.yaml
+    container: mapping            # 顶层键即工具名（read_facts / read_live_facts 别名同源）
+    description_field: description
+    param_description_field: description
+    names_key: names              # ★ 单一真源：names.primary / names.free_alias
+    alias_key: aliases            # ★ 单一真源：aliases.<alias>.of 指向主名
+    shape_authority: true         # ★ 本文件是 params/returns 正文的唯一权威
+
+carriers:
+  kg:
+    arms: [KG-Q, KG-R]
+    service_base: "http://192.0.2.10:8301"   # ★ R-58：主机 = 现网部署主机（真机注册态实测值）；.84 是 R-56 事故的旧主机，已彻底移除。可用 env CC_DIFY_PUBLIC_HOST 覆盖。
+    provider: cc-kg-tools
+    app: cc-kg-agent
+    health_expect:
+      status: ok
+      carrier: kg
+      arm: KG-Q
+  onto:
+    arms: [ONTO-Q, ONTO-R]
+    service_base: "http://192.0.2.10:8302"   # ★ R-58：主机 = 现网部署主机（真机注册态实测值）；.84 是 R-56 事故的旧主机，已彻底移除。可用 env CC_DIFY_PUBLIC_HOST 覆盖。
+    provider: cc-onto-tools
+    app: cc-onto-agent
+    health_expect:
+      status: ok
+      carrier: onto
+      arm: ONTO-Q
+  kgt:
+    arms: [KG-T]
+    service_base: "http://192.0.2.10:8303"   # ★ R-58：主机 = 现网部署主机（真机注册态实测值）；.84 是 R-56 事故的旧主机，已彻底移除。可用 env CC_DIFY_PUBLIC_HOST 覆盖。
+    provider: cc-kgt-tools
+    app: cc-kgt-agent
+    health_expect:
+      status: ok
+      carrier: kg
+      arm: KG-T
+  # ★ U-N 裁定 = A（独立端口，用户 2026-10-08）：KG-T-dyn 的**载体边车**。
+  #   为什么必须独立 carrier：`check_fairness._check_carrier_mapping` ② 断言
+  #   「provider 声明端口 == PORT_BY_CARRIER[carrier]」⇒ 复用 `kgt`（不变量 8303）会失败；
+  #   ③ 只禁止「**同一 base** 被不同 carrier 共用」⇒ 这里 base 是 :8305，与 :8303 不同，③ 不冲突。
+  kgt-dyn:
+    arms: [KG-T-dyn]
+    service_base: "http://192.0.2.10:8305"   # ★ R-58：主机 = 现网部署主机（真机注册态实测值）；.84 是 R-56 事故的旧主机，已彻底移除。可用 env CC_DIFY_PUBLIC_HOST 覆盖。
+    provider: cc-kgt-dyn-tools
+    app: cc-kgt-dyn-agent
+    health_expect:
+      status: ok
+      carrier: kg
+      arm: KG-T-dyn
+
+  # ★ R-55（2026-10-08）：**中性取数服务**的载体边车声明。
+  #   为什么必须有：`m5_run.declared_groups` 对 **kind=api** 的组要求其 carrier 在 `carriers`
+  #   里声明，否则「载体面不可判 ⇒ fail-closed」抛 M5Blocked。BASE 是 api 组、carrier=live-facts，
+  #   而本段此前没有该键 ⇒ CI 的 `offline:selftests`（m5_run --selftest）实测直接 FAIL。
+  #   ★ 与知识载体（kg/onto/kgt）的**形态差异**（如实登记，不照抄）：`:8304/health` 的顶层键是
+  #     `service / faces / host / port / tool / tool_path / input_facts / limits / modes /
+  #      uptime_s / started_at`，**没有** `status` / `carrier` / `arm`。
+  #   ★ 该服务**不写审计链**（只有请求日志 `cc_live_facts.log`）⇒ BASE 的**平面 2 不适用**，
+  #     见 `e2e_smoke.py` 的 `APPS["cc-base-agent"]` 注释与 `tmp/_r55_report.md` §6。
+  live-facts:
+    arms: [BASE]
+    service_base: "http://192.0.2.10:8304"   # ★ R-58：主机 = 现网部署主机（真机注册态实测值）；.84 是 R-56 事故的旧主机，已彻底移除。可用 env CC_DIFY_PUBLIC_HOST 覆盖。
+    provider: cc-base-tools
+    app: cc-base-agent
+    health_expect:
+      service: shared-collect-read-facts
+      port: 8304
+
+# 注册面形状常量（真机回读契约，2026-09-28T22:14:38Z 快照取证）
+registration_face:
+  schema_type: openapi
+  openapi_version: "3.1.0"
+  schema_version: "1.0.0"
+  credentials_auth_type: none
+  privacy_policy: ""
+  custom_disclaimer: "GaussDB 运维 Agent 工具（M4 工具体系）"
+  labels: [gaussdb, ops]
+  icon: {background: "#3B82F6", content: "🔧"}
+  # ★ info.title / info.description 必须是**与 provider 名无关的常量**：
+  #   cc-kg-tools 与 cc-onto-tools 的 schema 要求「除 servers[0].url 外逐字相同」，
+  #   若 title 里内插 provider 名，两侧字节就不相等了（R-31 方案 A′）。
+  info_title: "M4 运维工具体系"
+  info_description: "M4 工具体系 · 只读运维工具集（声明面 shared/deploy/dify/binding.yaml）"
+  http_method: post
+  responses_200: {description: ok, content: {application/json: {schema: {type: object}}}}
+  # Dify 的 OpenAPI→Dify 参数类型归一化（**只作用于模型面投影 leg B**）：
+  #   schema 写 integer ⇒ live parameters[].type 读回 number；
+  #   schema 写 object   ⇒ live parameters[].type 读回 string；
+  #   string/array/boolean/number 原样。
+  # 真机证据（2026-09-29，provider 写后回读）：
+  #   - integer：cc-kgt-tools/get_fault_topology.max_hops、cc-kg-tools/cc_trace.maxHops
+  #   - object ：cc-kgt-tools/get_facts.timeWindow —— live parameters[].type="string"，
+  #              但 Dify **原样存回的 schema** 里仍是 {"type":"object"}
+  #              （tmp/m4_w1_evidence/probe_kgt_timewindow.txt）
+  # ⇒ 这条别名有损：leg B 的 type 列无法区分声明的 object 与 string。
+  #   补偿措施：leg A（Dify 原样存回的 schema 逐字比对）**不做任何映射**，
+  #   因此 yaml 里 object↔string 的任何真实改动仍会在 leg A 被抓住
+  #   （自检 N16 专门证明这一点）。判据本身未放宽。
+  type_alias: {integer: number, object: string}
+  # ★ FIX-1（2026-10-07）：此处原有 `empty_params_placeholder`（name=_unused / type=string /
+  #   description=本工具无需参数，请传空字符串），由注册器注入给零参工具。已整块删除。
+  #   旧注『Dify 硬约束：properties 不能为空』**已被证伪**：现网已有 6 个真零参工具
+  #   （upstream-ops-onto-consistency/onto_consistency、…/onto_symptoms、…/onto_cqs 及三个
+  #   -sim 变体，parameters == []）⇒ 真零参合法。
+  #   该占位符是**本项目自造**、并非 Dify 注入：模型会按声明传 _unused，而两载体 body 模型
+  #   extra=forbid ⇒ 必然 HTTP 400（实测：8301/8302 的 /guide、/schema 带 {"_unused":""} = 400，
+  #   空 body {} = 200）。故 FIX-1 删除本机制，零参工具的注册面为 properties={} / required=[]。
+
+# 凡不在白名单的 provider / 工具名，注册器一律拒绝（fail-closed）
+whitelist:
+  provider_names: [cc-kg-tools, cc-onto-tools, cc-kgt-tools, cc-kgt-dyn-tools, cc-live-facts-tools, cc-base-tools]   # ★ S2c：+live-facts（:8304）；★ R-55：+cc-base-tools（BASE 的数据面）
+  allowed_ports: [8301, 8302, 8303, 8304, 8305]   # ★ S2c：+8304（S3a 必须同步 check_fairness.py:112 PORT_BY_CARRIER 并重冻 purity-contract P6）
+  allowed_hosts: ["192.0.2.10"]   # ★ R-58：主机 = 现网部署主机（真机注册态实测值）；.84 是 R-56 事故的旧主机，已彻底移除。可用 env CC_DIFY_PUBLIC_HOST 覆盖。
+  # ★ denied_* 只作用于 denied_scope 列出的 provider。这 9 个名字是 :8303 门面
+  #   显式拒绝的路由名；其中 cc_guide/cc_schema/cc_query/cc_trace/cc_cause/
+  #   cc_propose 恰恰是 :8301/:8302 的**合法**工具 —— 绝不能全局禁用。
+  #   依据：cc_tools_kgt.py:148-157 的 FORBIDDEN_PATHS 只在 KG-T 门面生效。
+  denied_scope: [cc-kgt-tools]
+  denied_tool_names:
+    - cc_query
+    - run_rules
+    - validate
+    - cc_guide
+    - cc_schema
+    - cc_trace
+    - cc_cause
+    - cc_propose
+    - collect_now
+  denied_tool_names_source: "scheme1-kg/service/cc_tools_kgt.py:147-156 FORBIDDEN_PATHS(8) + :730 denied_paths['/collect']"
+  denied_operation_ids:
+    - denied_cc_query
+    - denied_run_rules
+    - denied_validate
+    - denied_cc_guide
+    - denied_cc_schema
+    - denied_cc_trace
+    - denied_cc_cause
+    - denied_cc_propose
+    - denied_collect_now
+  denied_operation_ids_source: "scheme1-kg/service/cc_tools_kgt.py:736 endpoint.__name__ = 'denied_%s' % tool_name"
+  # 严禁注入注册面的文档性字段（R-34）
+  strip_fields:
+    - carrier_specific_value_semantics
+    - carrier_specific
+    - description_basis
+    - params_basis
+    - description_authored
+    - guards
+    - returns
+    - error_codes
+    - provenance
+    - bounds
+    - dify_placeholder
+
+providers:
+  - provider: cc-kg-tools
+    kind: api
+    carrier: kg
+    base: "http://192.0.2.10:8301"   # ★ R-58：主机 = 现网部署主机（真机注册态实测值）；.84 是 R-56 事故的旧主机，已彻底移除。可用 env CC_DIFY_PUBLIC_HOST 覆盖。
+    port: 8301
+    tools_from: setb
+    tools: [cc_guide, cc_schema, cc_query, cc_facts, cc_trace, cc_cause, cc_propose, read_facts]
+    expected_tool_count: 8
+    bound_in_w1: true
+  - provider: cc-onto-tools
+    kind: api
+    carrier: onto
+    base: "http://192.0.2.10:8302"   # ★ R-58：主机 = 现网部署主机（真机注册态实测值）；.84 是 R-56 事故的旧主机，已彻底移除。可用 env CC_DIFY_PUBLIC_HOST 覆盖。
+    port: 8302
+    tools_from: setb
+    tools: [cc_guide, cc_schema, cc_query, cc_facts, cc_trace, cc_cause, cc_propose, read_facts]
+    expected_tool_count: 8
+    bound_in_w1: true
+    verbatim_twin_of: cc-kg-tools   # ★ 除 servers[0].url 外逐字相同
+  - provider: cc-kgt-tools
+    kind: api
+    carrier: kgt
+    base: "http://192.0.2.10:8303"   # ★ R-58：主机 = 现网部署主机（真机注册态实测值）；.84 是 R-56 事故的旧主机，已彻底移除。可用 env CC_DIFY_PUBLIC_HOST 覆盖。
+    port: 8303
+    tools_from: kgt
+    tools: [get_object_topology, get_fault_topology, get_metrics, get_facts, read_facts]
+    expected_tool_count: 5
+    bound_in_w1: true
+    never_register: [collect_now, neo4j_query, cc_query, run_rules, validate, cc_propose]
+  # ★ U-N 裁定 = A：KG-T-dyn 的**独立端口** provider（:8305，`--arm KG-T-dyn`）。
+  #   与 cc-kgt-tools 的差别**只有一个工具** = `collect_now`（5 → 6）；
+  #   ★ `collect_now` 在主臂是 `forbidden_tools_main_arm` 成员、且属 `denied_scope`，
+  #     但它在 dyn 臂是**设计中的合法工具**（唯一自变量）⇒ 本 provider 的 `never_register`
+  #     不含它，且本 provider **不在** `denied_scope` 里（denied_* 只作用于列出的 provider）。
+  - provider: cc-kgt-dyn-tools
+    kind: api
+    carrier: kgt-dyn
+    base: "http://192.0.2.10:8305"   # ★ R-58：主机 = 现网部署主机（真机注册态实测值）；.84 是 R-56 事故的旧主机，已彻底移除。可用 env CC_DIFY_PUBLIC_HOST 覆盖。
+    port: 8305
+    # ★ 用**新值** `kgt-dyn`（而非 `kgt`）：register_tools 的期望计数与 counts 键都必须
+    #   按**臂**解析 —— 复用 `kgt` 会被断言「工具数 6 != kgt expected_tool_counts.KG-T 5」拦下（实测）。
+    tools_from: kgt-dyn
+    tools: [get_object_topology, get_fault_topology, get_metrics, get_facts, read_facts, collect_now]
+    expected_tool_count: 6
+    bound_in_w1: false
+    declared_in_u_n_a: true
+    never_register: [neo4j_query, cc_query, run_rules, validate, cc_propose]
+  # ★ S2c 新增（D47/D48）：中性取数工具 read_facts 的**注册面载体**。
+  #   只暴露免费臂别名 read_live_facts；形状逐字取自 shared/model/live-facts-tools.yaml#read_facts
+  #   （别名只换 name，参数/返回/约束同源）。用例选择走**进程级信道**（CLI --case / env M5_CASE_ID），
+  #   工具 schema 里没有任何用例参数（D48）⇒ 本 provider 不需要 tool_parameters。
+  #   ★ S3a-2b 已收口：`check_fairness.py:112 PORT_BY_CARRIER` 补入 `"live-facts": 8304`
+  #   （该文件现 5caec2c3…）⇒ 真机 F0–F5 全 PASS，F0.f② 的窗口 FAIL 已消失。
+  - provider: cc-live-facts-tools
+    kind: api
+    carrier: live-facts
+    base: "http://192.0.2.10:8304"   # ★ R-58：主机 = 现网部署主机（真机注册态实测值）；.84 是 R-56 事故的旧主机，已彻底移除。可用 env CC_DIFY_PUBLIC_HOST 覆盖。
+    port: 8304
+    tools_from: livefacts
+    # ★ R-55 撤回记录（2026-10-08）：曾试图让本 provider 同时暴露主名 `read_facts` 以适配 BASE，
+    #   被 `register_tools.py` 的 D8-c 断言**按设计拦下**：
+    #     「免费臂 provider 暴露了主名 read_facts（D8-c：只可暴露别名）」
+    #     「provider cc-live-facts-tools 的工具面应恰为 [read_live_facts]」
+    #   ⇒ D8-c 是在 **provider 层**强制的（且 `tools_from=livefacts` 的 provider **恰 1 个**）。
+    #   BASE 该绑**主名**（它不是免费臂），故其数据面来源需另行裁定（见 docs/00 R-55）。
+    tools: [read_live_facts]
+    expected_tool_count: 1
+    bound_in_w1: false
+    declared_in_s2c: true
+    declared_at_utc: "2026-09-29T15:01:44Z"
+  # ★ R-55（2026-10-08，用户裁定选项 A）：BASE（7 个被测组里的**基线/分母**，「载体=无」）
+  #   的**数据面** provider。BASE 要能「只读 CCF」，而 CCF 的中性读服务就是 `:8304`。
+  #   为什么不复用 cc-live-facts-tools：`register_tools.py` 的 **D8-c** 断言把
+  #   `tools_from=livefacts` 限定为**恰 1 个**、且**只许暴露别名** `read_live_facts`
+  #   （该断言在 provider 层强制，实测会 FAIL）—— 而 BASE **不是免费臂**，应绑**主名**
+  #   `read_facts`（与其余六臂一致）。
+  #   ★ carrier 沿用 `live-facts` 而非新造一个：BASE 本就没有知识载体，它唯一的数据面
+  #     就是这个中性取数服务；同时满足 `check_fairness` ③「**不同** carrier 不得共用同一
+  #     base」（同 carrier 共用是允许的）。
+  #   ★ 只暴露主名：D8-c 的对称面要求「非 livefacts provider 不得暴露别名」已扩到本项。
+  - provider: cc-base-tools
+    kind: api
+    carrier: live-facts
+    base: "http://192.0.2.10:8304"   # ★ R-58：主机 = 现网部署主机（真机注册态实测值）；.84 是 R-56 事故的旧主机，已彻底移除。可用 env CC_DIFY_PUBLIC_HOST 覆盖。
+    port: 8304
+    tools_from: neutral
+    tools: [read_facts]
+    expected_tool_count: 1
+    bound_in_w1: false
+    declared_in_r55: true
+  - provider: neo4j_query
+    kind: plugin
+    carrier: kgt-free
+    plugin_id: "nikola_milosevic/neo4j_query"
+    plugin_id_note: "P2 真机回读补全（2026-09-29T00:59:38Z）；旧值 '01a07b38…' 实为 installation_id，已单列"
+    provider_id: "nikola_milosevic/neo4j_query/neo4j_query"   # W12 只读复核（tmp/m4_w12_evidence/console_faces.txt）
+    installation_id: "01a07b38-5ec6-773e-ba72-8598e3fb79a7"
+    plugin_unique_identifier: "nikola_milosevic/neo4j_query:0.2.0@99ca3d403ae707f83e81992b68354a8aabf5ad5bda1b0e02e5aaaeb763ecea38"
+    version: "0.2.0"
+    bind_tools: [neo4j_query]
+    param_form: {database: form, query: form, parameters: form, max_records: form, allow_write_queries: form}
+    param_form_note: "★ 市场 0.2.0 的五个入参全为 form: form ⇒ query 永不进 LLM 工具 schema（R-50 根因）；本条保留为**并存/对照**登记，KG-T-free 的实际绑定已于 2026-09-29 改指 neo4j_query_fork"
+    bound_in_w1: false
+    credential:
+      name: "cc-kgt-neo4j"
+      id: "3add981d-13e8-4e14-a425-6b0fa3d6b1e8"
+      credential_type: "api-key"
+      visibility: "all_team_members"
+      keys: [NEO4J_URL, NEO4J_USERNAME, NEO4J_PASSWORD]
+      neo4j_url: "bolt://192.0.2.10:7688"
+      neo4j_username: "neo4j"
+      password_source: "生产机 /opt/upstream-agent/.env 的 NEO4J_AUTH（P2 只读 SSH 取得；值不落盘、不入报告）"
+      bound_at_utc: "2026-09-29T00:59:38Z"
+      readback_masked: true
+      readback_note: "回读被服务端掩码（builtin_tools_manage_service.py:417 encrypter.mask_plugin_credentials(encrypter.decrypt(provider.credentials))）⇒ 不能据此断言口令逐字一致"
+      password_mask_form: "server-side, length-preserving"
+      password_mask_caveat: "服务端回读掩码**保留口令首尾各若干字符** ⇒ 掩码值本身即口令片段。纪律：任何证据文件与报告都不得写入掩码字面量，**也不得登记口令长度、星号个数与首尾保留字符数**（三者叠加即可反推口令片段）⇒ 此处只登记「服务端会掩码、故不能据此断言逐字一致」这一事实"
+      read_only_role_required_deviation: "shared/model/kgt-tools.yaml:84 要求 read_only_role_required: true；本轮实测凭据 = 现成 neo4j 账号（权限超集，非只读专用账号）⇒ 存在契约偏离，待用户提供只读账号后替换"
+  # ★ R-50 本地 fork：与上一条市场插件**并存**（市场条目原样保留、不删不改语义）。
+  #   消费方：contract_audit.py 的 M4-C7/C8/C9 按**声明逐个**解析插件面（plugin_id / uid 定位真机面）。
+  - provider: neo4j_query_fork
+    kind: plugin
+    carrier: kgt-free
+    plugin_id: "cc-ops/neo4j_cypher_query"
+    plugin_id_note: "★ 真机回读确认（2026-09-29，只读）：Console builtin 面 8 项中本插件的行 = id/name 'cc-ops/neo4j_cypher_query/neo4j_query'、plugin_id 'cc-ops/neo4j_cypher_query'、uid 'cc-ops/neo4j_cypher_query:0.1.0@1b04ef28…'。plugin_id 是**插件身份**（author/name），provider_id 才是带工具面的 id（见下）；市场条目同形。证据 tmp/m4_w12_evidence/console_faces.txt"
+    provider_id: "cc-ops/neo4j_cypher_query/neo4j_query"
+    plugin_unique_identifier: "cc-ops/neo4j_cypher_query:0.1.0@1b04ef281638ec88b1002c4997c0e8b7d8b4efe8dbb06fe4536c79378372d9f1"
+    installation_id: "01a0eb3f-744a-7559-843b-09243b199714"
+    installation_source: "package"
+    version: "0.1.0"
+    plugin_verified: false
+    fork_of: "nikola_milosevic/neo4j_query:0.2.0@99ca3d403ae707f83e81992b68354a8aabf5ad5bda1b0e02e5aaaeb763ecea38"
+    package: "dist/cc-ops-neo4j_cypher_query-0.1.0.difypkg"
+    package_bytes: 23064
+    package_sha256: "27904620eecc56eb36d7546ffad7b52a30648a2fefe66442e45e14b9be5d5cfc"
+    bind_tools: [neo4j_query]
+    param_form: {database: form, query: llm, parameters: llm, max_records: form, allow_write_queries: form}
+    param_form_note: "★ 必须与 shared/model/kgt-tools.yaml 的 tools[neo4j_query].param_form 逐参相等（R-50 唯一实质改动：query/parameters 由 form 改 llm；max_records/allow_write_queries 留在 LLM 不可及处）"
+    bound_in_w1: false
+    bound_at_utc: "2026-09-29T03:00:00Z"
+    credential:
+      name: "cc-kgt-neo4j-fork"
+      id: "bd254b70-753b-4e0c-b5e2-8870dfd8eb63"
+      credential_type: "api-key"
+      visibility: "all_team_members"
+      keys: [NEO4J_URL, NEO4J_USERNAME, NEO4J_PASSWORD]
+      neo4j_url: "bolt://192.0.2.10:7688"
+      neo4j_username: "neo4j"
+      password_source: "远端 /opt/upstream-agent/.env 的 NEO4J_AUTH（只读取得；值不落盘、不入报告）"
+      bound_at_utc: "2026-09-29T03:00:00Z"
+      readback_note: "凭据由 W9 重绑写入并真机回读（tmp/m4_w9_evidence/）；★ 本条目**不登记**任何掩码字面量与掩码长度，只登记「掩码字面量一律不得入库」这一纪律"
+      read_only_role_required_deviation: "shared/model/kgt-tools.yaml:84 要求 read_only_role_required: true；fork 凭据同样取自现成 neo4j 账号（权限超集）⇒ 同上偏离，待只读账号"
+    signature_gate_note: "装机时曾**一次性**以 shell 环境变量放宽 FORCE_VERIFYING_SIGNATURE 完成未签名包安装，装后立即恢复 true；.env 未改、其余 14 容器未动。仅为历史事实，不得写脚本复现（详见 shared/model/kgt-tools.yaml fork_provenance.signature_gate_note）"
+    evidence: "tmp/_m4_w9_rebind.py --check（RESULT: PASS，真退出码 0）+ shared/deploy/smoke/e2e_smoke.py --apps cc-kgt-free-agent（PASS：模型真发出 Cypher）"
+
+apps:
+  cc-kg-agent:
+    uuid: "f0119d3a-830c-4ba7-b75c-cfcc4c4b57c5"
+    display_name: "方案1·知识图谱+LLM（主对比组）"
+    display_description: "载体＝知识图谱（Neo4j）。挂 4 个载体中性只读工具，经 :8301 知识图谱工具服务。与「方案2·本体+LLM」共用逐字相同的提示词与工具定义，唯一差异是载体。"
+    carrier: kg
+    provider: cc-kg-tools
+    tools: [cc_query, cc_trace, cc_cause, read_facts]
+    count_key: setb_tools
+    status: created_and_bound_in_w2
+  cc-onto-agent:
+    uuid: "4a87d898-7ed0-4b61-b26b-fcf4810a0e14"
+    display_name: "方案2·本体+LLM（主对比组）"
+    display_description: "载体＝本体（GraphDB / OWL 2 RL）。挂 4 个载体中性只读工具，经 :8302 本体工具服务。与「方案1」共用逐字相同的提示词与工具定义，唯一差异是载体。"
+    carrier: onto
+    provider: cc-onto-tools
+    tools: [cc_query, cc_trace, cc_cause, read_facts]
+    count_key: setb_tools
+    status: created_and_bound_in_w2
+  # ★ R-52（2026-10-07，用户裁定）：R 臂（规则组）两个 App。
+  #   与 Q 臂的**唯一结构性差异** = 工具绑定**去掉 cc_query**（7 个），
+  #   即「模型物理上无法写查询」—— 结构性强制，不是靠提示词自觉。
+  #   提示词与 Q 臂**逐字相同**（同一文件 shared/deploy/prompts/agent_system.md）⇒
+  #   线 2（KG-Q vs KG-R）只动「工具面」这一个变量，不引入第二个自变量。
+  #   依据：shared/model/info-products.yaml#access.KG-R/ONTO-R —— 这两组的**每一条** via
+  #   路径本来就不含 cc_query（Q 臂每条 = R 臂对应条 + cc_query）。
+  #   工具名出处：provider cc-kg-tools / cc-onto-tools 的 tools 列表（Set B 8 个去除 cc_query）。
+  cc-kg-r-agent:
+    uuid: "ce8c1f12-48f3-4d0a-a1ea-1936a2ec561b"
+    display_name: "方案1·知识图谱+LLM（规则组）"
+    display_description: "载体＝知识图谱（Neo4j）。R 臂（规则组）：不写查询，只经确定性工具面收敛（工具集 = Q 臂去掉 cc_query，3 个）。与「方案2·规则组」共用逐字相同的提示词与工具定义，唯一差异是载体。"
+    carrier: kg
+    provider: cc-kg-tools
+    tools: [cc_trace, cc_cause, read_facts]
+    tools_removed_from_setb: [cc_query, cc_guide, cc_schema, cc_facts, cc_propose]
+    count_key: setb_tools_r
+    status: created_and_bound_in_r52
+  cc-onto-r-agent:
+    uuid: "32aef564-78df-471b-84c5-8ba439175296"
+    display_name: "方案2·本体+LLM（规则组）"
+    display_description: "载体＝本体（GraphDB / OWL 2 RL）。R 臂（规则组）：不写查询，只经确定性工具面收敛（工具集 = Q 臂去掉 cc_query，3 个）。与「方案1·规则组」共用逐字相同的提示词与工具定义，唯一差异是载体。"
+    carrier: onto
+    provider: cc-onto-tools
+    tools: [cc_trace, cc_cause, read_facts]
+    tools_removed_from_setb: [cc_query, cc_guide, cc_schema, cc_facts, cc_propose]
+    count_key: setb_tools_r
+    status: created_and_bound_in_r52
+  cc-kgt-agent:
+    uuid: "aed1be1f-3bc0-4aa5-b079-edb1c901a66d"
+    display_name: "方案3·知识图谱直引·门面版"
+    display_description: "5 个原生只读工具，经 :8303 知识图谱门面服务。工具面与方案1/2 不同，按设计豁免 F0/F1 的逐字一致要求。"
+    carrier: kgt
+    provider: cc-kgt-tools
+    tools: [get_object_topology, get_fault_topology, get_metrics, get_facts, read_facts]
+    status: created_and_bound_in_w3
+  cc-kgt-free-agent:
+    uuid: "1e28c733-37b7-4933-932b-e8ec20eb0001"
+    display_name: "方案3·知识图谱直引·插件直连版"
+    display_description: "挂 2 个工具：1 个 Dify 插件工具（本项目自建 fork，查询语句与参数对模型可见）+ 1 个中性只读取数工具 read_live_facts（经 :8304，与其余三组同源同形、只换名，D47）。模型自行编写图查询语句；不经 :8303 门面。"
+    carrier: kgt-free
+    provider: neo4j_query_fork          # ★ 2026-09-29 真机重绑到 fork（原值 neo4j_query = 市场 0.2.0）
+    # ★ S2c（D47）：免费臂**声明的 provider 集合**（唯一真源）。
+    #   `provider:` 单键保留为「主 provider」：禁改消费者（check_fairness.py / m5_run.py /
+    #   e2e_smoke.py）按单键读取，删键会连带崩。`providers:` 是权威集合：deploy_agents.py 的
+    #   validate_model_config 要求**每个已绑工具**的 provider_id 解析到本集合中的某一个 provider；
+    #   主对比对两侧（cc-kg-agent / cc-onto-agent）仍由「声明无 providers 键」+
+    #   「validate_model_config 断言恰好 1 个 provider」**双重固定**为单 provider。
+    providers: [neo4j_query_fork, cc-live-facts-tools]
+    provider_rebound:
+      from: neo4j_query
+      to: neo4j_query_fork
+      at_utc: "2026-09-29T03:00:00Z"
+      why: "R-50：市场 0.2.0 的 query 是 form: form ⇒ Agent 工具集为空、模型发不出 Cypher；fork 的 query=llm 才可用"
+      evidence: "tmp/_m4_w9_rebind.py --check（RESULT: PASS，真退出码 0）+ tmp/m4_w9_evidence/smoke_free/（e2e_smoke.py PASS）"
+    tools: [neo4j_query, read_live_facts]
+    status: created_and_bound_in_w3
+  # ★ U-N 裁定 = A（用户 2026-10-08）：KG-T-dyn = 8 个实验组里**最后一个**未建者。
+  #   它是**补充组**（`in_main_comparison: false`）—— 允许 `collect_now` 动态补采 ⇒
+  #   **不再消费同一份 CCF**（违反 C1 单一输入）⇒ 其结论必须**单列报告**，不进主判据、不进表 1。
+  #   ★ 与 `cc-kgt-agent` 的差别**只有一个工具**（5 → 6，多 `collect_now`）与提示词里的
+  #     恰 1 条派生行（`derived_diff: D-dyn-1`）；工具面不逐字相同是**设计如此**（唯一自变量）。
+  cc-kgt-dyn-agent:
+    uuid: "22e0ffd7-6881-42a2-892b-6c95c8f5c1c3"
+    display_name: "方案3·知识图谱直引·动态补采版（补充组）"
+    display_description: "在主实验组之上追加 1 个工具 collect_now（5→6），允许模型动态补采指定对象的当前状态；不消费同一份 CCF，故单列报告、不进主判据。"
+    carrier: kgt-dyn
+    provider: cc-kgt-dyn-tools
+    tools: [get_object_topology, get_fault_topology, get_metrics, get_facts, read_facts, collect_now]
+    count_key: kgt_dyn_tools
+    status: created_and_bound_in_u_n_a
+
+  # ★ R-55（2026-10-08，用户裁定选项 A）：BASE 臂 = 7 个被测组里的**基线/分母**。
+  #   载体＝无：**不挂任何知识库工具**，只绑中性取数 read_facts（经 cc-base-tools → :8304）。
+  #   它的拓扑与因果必须由模型**从原始事实自行重建** —— 这就是「没有知识库」的诚实基线。
+  #   ★ tools 恰 1 个、provider 恰 1 个（与主对比组「无 providers 键 + 断言恰 1 个」同形）。
+  #   ★ 无 uuid：新建路径走 resolve_declared_apps 的**名字兜底**，
+  #     建成后由 `--apply --write-binding` 回写真实 uuid（不预填、不猜）。
+  cc-base-agent:
+    uuid: "5dfd44e4-2bec-4fb0-9189-0817fa2d6fda"
+    display_name: "基线·无知识库（只读 CCF 原始事实）"
+    display_description: "载体＝无。只挂 1 个中性只读取数工具 read_facts（经 :8304），没有知识库/目录/规则清单/查询语言；拓扑与因果须由模型从原始事实自行重建，归因不经任何确定性组件。用作「提升幅度」的分母。"
+    carrier: live-facts
+    provider: cc-base-tools
+    tools: [read_facts]
+    count_key: neutral_tools
+    status: created_and_bound_in_r55
+
+fairness:
+  compare_pairs:
+    - [cc-kg-agent, cc-onto-agent]
+    # ★ R-52（2026-10-07）：第二对照对 = R 臂（规则组）。F0–F4 必须同样成立。
+    #   R 对照对的工具面两侧同为 7 个（Set B 去 cc_query）⇒ F0 逐字一致仍必须过；
+    #   它与 Q 对照对的**唯一差异** = 少了 cc_query（由 F0 的 tools 集合比对自然体现）。
+    - [cc-kg-r-agent, cc-onto-r-agent]
+  # 主对比组的禁用词扫描面：全部模型面字符串
+  model_face_projection:
+    fields:
+      - pre_prompt
+      - tool_name
+      - tool_description
+      - param_name
+      - param_description
+    # ★ U-N 裁定 = A（2026-10-08）：`cc-kgt-dyn-tools` 与 `cc-kgt-tools` **共用同一批
+    #   KG-T 工具描述**（差别只在多一个 collect_now）⇒ 豁免理由完全相同，一并列入。
+    # ★ U-N 裁定 = A：新 provider 与主臂**共用同一批工具描述** ⇒ 豁免理由相同。
+    #   （原注释里点了查询语言的词，为避免无谓抬高 P5 的 shared/deploy 上限已改为中性表述。）
+    exempt_providers: [cc-kgt-tools, cc-kgt-dyn-tools]   # KG-T 三组按 F5 豁免（其 summary 含查询语言词属预期）
+    # ★ S2c 声明式偏差登记（fail-closed）：禁用词「朴素子串」命中的**误报**逐条钉住。
+    #   forbid_tokens 里的单字 token 会命中中文常用词的片段。本表只豁免
+    #   (文本 sha256, token) 精确匹配的那一条；token 表、扫描面、匹配算法一律不动
+    #   （N30 正/负控：同 token 的其他文本必须仍被命中；R-1 已改为**合成 binding** 验机制）。
+    #   ★ S3a-2b 收口：形状源措辞已由「视图」改为「只做收窄」（真值 sha 见上段），
+    #   本窗口凭证**已删除**（保留空表以固定字段存在性；匹配算法与 token 表未改）。
+    forbid_token_text_exemptions: []
+  forbid_tokens:
+    - cypher
+    - sparql
+    - "图"
+    - "本体"
+    - "三元组"
+    - "property graph"
+    - "RDF"
+    - "OWL"
+    - "知识图谱"
+    - "图谱"
+  forbid_scope: main_comparison_arms
+  carrier_binding:
+    assert:
+      cc-kg-tools: "http://192.0.2.10:8301"   # ★ R-58：主机 = 现网部署主机（真机注册态实测值）；.84 是 R-56 事故的旧主机，已彻底移除。可用 env CC_DIFY_PUBLIC_HOST 覆盖。
+      cc-onto-tools: "http://192.0.2.10:8302"   # ★ R-58：主机 = 现网部署主机（真机注册态实测值）；.84 是 R-56 事故的旧主机，已彻底移除。可用 env CC_DIFY_PUBLIC_HOST 覆盖。
+      cc-kgt-tools: "http://192.0.2.10:8303"   # ★ R-58：主机 = 现网部署主机（真机注册态实测值）；.84 是 R-56 事故的旧主机，已彻底移除。可用 env CC_DIFY_PUBLIC_HOST 覆盖。
+      cc-live-facts-tools: "http://192.0.2.10:8304"   # ★ S2c：与 whitelist.allowed_ports 同步；★ R-58：主机 = 现网部署主机（真机注册态实测值）；.84 是 R-56 事故的旧主机，已彻底移除。可用 env CC_DIFY_PUBLIC_HOST 覆盖。
+    assert_disjoint: "cc-kg-agent 与 cc-onto-agent 的工具集合按 provider_id 互不相交"
+    assert_verbatim: "cc-kg-tools 与 cc-onto-tools 的 8 个工具定义（除 servers[0].url）逐字相同"
+
+counts:
+  # ★ A′（2026-10-15，本批）：Q 臂**绑定**的工具数 = 4（cc_query / cc_trace / cc_cause / read_facts）。
+  #   收窄工具面是 A′ 的自变量之一（治「迭代撞顶」）；**Set B 契约本身**仍声明 8 个工具。
+  setb_tools: 4
+  # ★ R-52：R 臂（KG-R / ONTO-R）工具面 = Set B 去掉 cc_query ⇒ 3 个（R-52 当时为 7，A′ 后为 3）。
+  setb_tools_r: 3
+  # ★ A′：`shared/model/tools-setb.yaml` **契约/投影声明的工具总数**（与 Q 臂绑定数解耦）。
+  #   为什么单列一键：`register_tools.py` 的「契约工具总数」drift 检查原先复用的是 `setb_tools`，
+  #   理由是 A′ 之前 Q 臂**恰好绑满** Set B 全部 8 个 ⇒ 两个含义偶然同值；A′ 收窄到 4 后
+  #   两种含义分离，继续复用同一个键会让该检查**自相矛盾**（同一行既要求 4 又要求 8）。
+  #   本键由 `register_tools.py` 的契约漂移检查消费；`setb_tools` 由 App 级 `count_key` 消费。
+  setb_contract_tools: 8
+  kgt_main_tools: 5
+  kgt_free_tools: 2
+  # ★ U-N 裁定 = A：cc-kgt-dyn-tools 的工具数 = 6（主臂 5 + collect_now）
+  kgt_dyn_tools: 6
+  # ★ S2c 新增：cc-live-facts-tools 的工具数（read_live_facts 1 个；R-55 曾改为 2，因 D8-c 撤回）
+  livefacts_tools: 1
+  # ★ R-55 新增：cc-base-tools（BASE 的数据面）的工具数 = 1（主名 read_facts）
+  neutral_tools: 1
+  api_providers_declared: 6
+  # 1 = 市场 nikola_milosevic/neo4j_query:0.2.0（并存保留）；+1 = R-50 fork cc-ops/neo4j_cypher_query:0.1.0
+  plugins_declared: 2
+  baseline_api_providers: 61
+  # ★ R-55：新增 cc-base-tools（BASE 的数据面）⇒ 61（基线）+ 5（本项目声明的 5 个 api provider）= 66
+  # ★ U-N 裁定 = A：再 +1（cc-kgt-dyn-tools）⇒ 61（基线）+ 6（本项目 6 个 api provider）= 67
+  expected_api_providers_after_apply: 67   # ★ S2c：61 + 3（w1 三件）+ 1（cc-live-facts-tools）

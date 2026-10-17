@@ -1,0 +1,98 @@
+# ═══════════════════════════════════════════════════════════════════════════
+#  Dockerfile.onto —— 方案2 知识服务（ONTO-Q，GraphDB + OWL）:8302
+# ═══════════════════════════════════════════════════════════════════════════
+#  内容：scheme2-onto/service/cc_tools_onto.py（Set B 八工具，与 KG 侧**逐字同形**）
+#        + 契约层 shared/
+#  载体：GraphDB 10.8.0，走 HTTP（:7200），仓库默认 `cc-ops`
+#
+#  构建（构建上下文 = 仓库根）：
+#      docker build -f Dockerfile.onto -t cc-ops/onto:<tag> .
+#
+#  ★ 同形约束（硬约束 C3）：本镜像与 Dockerfile.kg 的工具名/参数/顶层返回字段
+#    必须逐字一致，唯一允许差异是 cc_query.query 的取值语言（SPARQL vs Cypher）。
+#    ⇒ **两个 Dockerfile 的 Python 依赖版本必须保持同一组**，否则
+#      /openapi.json 会因框架版本差异漂移，把同形门禁做成假红。
+#  ★ 镜像内零密钥：目标 GraphDB 实测 auth_type=none，故本服务不需要凭据；
+#    若目标启用了 Basic 认证，用 CC_GRAPHDB_USER / CC_GRAPHDB_PASSWORD 运行时注入。
+# ═══════════════════════════════════════════════════════════════════════════
+
+FROM python:3.12-slim AS builder
+
+ARG PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
+ARG PIP_TRUSTED_HOST=mirrors.aliyun.com
+ENV PIP_INDEX_URL=${PIP_INDEX_URL} \
+    PIP_TRUSTED_HOST=${PIP_TRUSTED_HOST} \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1
+
+# ★ 与 Dockerfile.kg 同一组版本（见文件头「同形约束」）
+WORKDIR /build
+RUN pip install --no-cache-dir --prefix=/install \
+        "fastapi==0.136.3" \
+        "pydantic==2.13.4" \
+        "uvicorn==0.49.0" \
+        "starlette==1.2.1" \
+        "requests==2.34.2" \
+        "PyYAML==6.0.3"
+
+
+FROM python:3.12-slim
+
+ARG APT_MIRROR=mirrors.ustc.edu.cn
+
+LABEL org.opencontainers.image.title="CC-Ops ONTO Knowledge Service" \
+      org.opencontainers.image.description="信用卡跨层运维 · 方案2 知识服务（ONTO-Q :8302）" \
+      org.opencontainers.image.source="https://github.com/songchunyao/credit-card-sys-ops"
+
+RUN sed -i "s|deb.debian.org|${APT_MIRROR}|g" /etc/apt/sources.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true \
+    && if grep -rqs "deb.debian.org" /etc/apt/sources.list /etc/apt/sources.list.d/ ; then \
+         echo "错误：apt 换源未生效（APT_MIRROR='${APT_MIRROR}'），拒绝继续构建"; exit 1; \
+       fi \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends curl tini ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /install /usr/local
+
+WORKDIR /app
+COPY shared/       /app/shared/
+COPY scheme2-onto/ /app/scheme2-onto/
+
+# ── 构建期闭包断言 ──────────────────────────────────────────────────────────
+# 契约装载（install.sh ④.1）会在本镜像里跑 scheme2-onto/tools/load_tbox.py，
+# 它要读 ontology/ 下的 7 份 TTL 与 shared/ 的命名契约。缺件时**构建即失败**，
+# 好过在目标机上把"镜像缺文件"误判成"GraphDB 装不上"。
+RUN set -e; \
+    for f in \
+      scheme2-onto/service/cc_tools_onto.py \
+      scheme2-onto/tools/load_tbox.py \
+      scheme2-onto/ontology/cc-core.ttl \
+      shared/model/tools-setb.yaml \
+      shared/mapping/type-map.yaml \
+      shared/deploy/targets.yaml ; do \
+      if [ ! -f "/app/$f" ]; then echo "错误：布局契约缺件 /app/$f"; exit 1; fi; \
+    done; \
+    echo "布局契约齐备（6 件）"
+
+RUN find /app -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true \
+    && mkdir -p /var/lib/cc-ops/audit \
+    && groupadd -g 10001 cco && useradd -u 10001 -g cco -m -s /bin/bash cco \
+    && chown -R cco:cco /app /var/lib/cc-ops
+USER cco
+
+ENV CC_TOOLS_ONTO_HOST=0.0.0.0 \
+    CC_TOOLS_ONTO_PORT=8302 \
+    CC_AUDIT_LOG=/var/lib/cc-ops/audit/cc_tools_onto_audit.jsonl \
+    CC_GRAPHDB_URL=http://127.0.0.1:7200 \
+    CC_GRAPHDB_REPOSITORY=cc-ops \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app
+
+EXPOSE 8302
+
+HEALTHCHECK --interval=30s --timeout=6s --start-period=30s --retries=3 \
+    CMD curl -fsS "http://127.0.0.1:8302/health" >/dev/null || exit 1
+
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["python", "scheme2-onto/service/cc_tools_onto.py", "--serve", "--host", "0.0.0.0", "--port", "8302"]

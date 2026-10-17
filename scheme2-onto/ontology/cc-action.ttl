@@ -1,0 +1,233 @@
+# ============================================================================
+# scheme2-onto/ontology/cc-action.ttl  ·  方案2 建议动作模块（cca:）
+# ----------------------------------------------------------------------------
+# 职责（docs/04:112 原文）：`cc-action.ttl` | `cca:` | 建议动作 + 风险等级 | 契约「—」
+#
+# ★★ 诚实声明（最重要的一条）：docs/04 对 cc-action **没有给出任何契约**
+#   （§3 模块表该行「契约」列为「—」，全文只有 docs/04:112 这一行提到本模块；
+#    §5 SHACL 形状清单与 §6 规则表都没有动作词表）。因此本模块是方案2 侧
+#   **自定的最小封闭集**，不是从契约推导的。自定范围仅限：
+#     · 3 个风险等级、7 个动作（与 F1..F7 链 / F-001..F-007 一一对应）、
+#       7 条动作提案（dry-run 语义）；
+#     · 动作名与代码由我命名（命名风格沿用契约的 upperCamel 代码风格，
+#       如 ACT-EXPAND-APP-POOL）。
+#   ★ 已进末条报告的「诚实清单」第 2 条。
+#
+# ★ 镜像方案1 的**约束**（docs/03:72 / docs/03:383）：
+#   · docs/03:72 `CREATE CONSTRAINT cc_uq_action_code ... REQUIRE n.actionCode IS UNIQUE`
+#     ⇒ 本体侧用 **OWL 2 原生键公理** `owl:hasKey` 表达（见文件末）。这是「同一约束、
+#       两种载体」的对照点：Neo4j 只能靠 DDL 建唯一约束，OWL 用 hasKey 公理即可，
+#       且该公理参与一致性推理。
+#   · docs/03:383 `cc_propose(...) → 建议动作（executed=false）｜强制 dry_run`
+#     ⇒ 每个提案个体显式带 cca:executed false / cca:dryRun true（与 docs/00 裁决 5
+#       「只提议不执行」一致）。⚠ 值约束本身**不**由 OWL 表达（OWL 只能**断言**取值，
+#       不能要求「必须为 false」，因为 CWA 下才能判否）⇒ 该约束是 SHACL 补足项
+#       （见 ccs:ActionProposalShape 的 sh:hasValue false），本条也进诚实清单。
+#
+# ★ OWL 原生 vs SHACL 补足（docs/04 §D6，分开计）：
+#   OWL 原生（本模块）：rdfs:subClassOf / domain / range / owl:inverseOf /
+#     **owl:hasKey**（动作代码唯一性）/ owl:AllDifferent（3 个风险等级互斥）。
+#   SHACL 补足（ccs:）：actionCode 非空且匹配 ^ACT-、riskCode 枚举 ∈ {low,medium,high}、
+#     executed 必须为 false、每个提案恰好 1 个动作与 1 个发现、动作必须挂到故障模式或根因。
+# ============================================================================
+@prefix cca:     <https://credit-card-ops.ai/onto/action#> .
+@prefix ccf:     <https://credit-card-ops.ai/onto/fault#> .
+@prefix cc:      <https://credit-card-ops.ai/onto/topology#> .
+@prefix cco:     <https://credit-card-ops.ai/onto/core#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix dcat:    <http://www.w3.org/ns/dcat#> .
+
+cca: a owl:Ontology , dcat:Dataset ;
+    dcterms:title "信用卡跨层运维本体 · 建议动作模块（cc-action）"@zh ;
+    dcterms:description "3 个风险等级 + 7 个建议动作 + 7 条 dry-run 提案。★ 契约缺位，本模块为方案2 自定最小封闭集。"@zh ;
+    cco:contractSource "docs/04-方案2设计（本体+LLM）.md:112（职责行）；★ 契约为「—」，动作词表为自定" ;
+    skos:note "动作**只提议、不执行**：所有提案 executed=false、dryRun=true（docs/00 裁决 5；镜像 docs/03:383 的 cc_propose）。"@zh ;
+    skos:note "动作与故障模式的绑定关系（actionOnFault）源自 F1..F7 链的收敛路径，不是运维手册抄录；命令模板一律不写（避免把「建议」写成「操作规程」）。"@zh .
+
+# ===========================================================================
+# 1) 类
+# ===========================================================================
+cca:Action a owl:Class ;
+    rdfs:subClassOf cco:InformationEntity ;
+    rdfs:label "建议动作（型式）"@zh ;
+    rdfs:comment "一类可被建议的处置动作的**型式**（如「扩容连接池」），不是一次执行记录。"@zh ;
+    cco:rigidity "+R" ; cco:identity "-I" ; cco:unity "+U" ; cco:dependence "-D" ;
+    cco:contractSource "自定（docs\\04 未给契约）" .
+
+cca:ActionProposal a owl:Class ;
+    rdfs:subClassOf cco:InformationEntity ;
+    rdfs:label "动作提案"@zh ;
+    rdfs:comment "针对某个诊断发现提出的**一次**建议（dry-run）：executed=false。"@zh ;
+    cco:rigidity "+R" ; cco:identity "-I" ; cco:unity "+U" ; cco:dependence "-D" ;
+    cco:contractSource "自定（语义镜像 docs/03:383 cc_propose 的 executed=false 约定）" .
+
+cca:RiskLevel a owl:Class ;
+    rdfs:subClassOf cco:InformationEntity ;
+    rdfs:label "风险等级"@zh ;
+    rdfs:comment "low | medium | high 三个枚举个体（OWL 原生 AllDifferent 互斥）。"@zh ;
+    cco:rigidity "+R" ; cco:identity "-I" ; cco:unity "+U" ; cco:dependence "-D" ;
+    cco:contractSource "自定（docs\\04:112 提到「风险等级」但未给枚举）" .
+
+# ===========================================================================
+# 2) 对象属性
+# ===========================================================================
+cca:actionOnFault a owl:ObjectProperty ; rdfs:domain cca:Action ;
+    rdfs:range [ a owl:Class ; owl:unionOf ( ccf:FaultMode ccf:RootCause ) ] ;
+    rdfs:label "针对故障模式/根因"@zh ;
+    rdfs:comment "把动作挂到故障模式或叶子根因（后者用于 F5 的排除法收敛结果）。"@zh .
+cca:actionRisk a owl:ObjectProperty ; rdfs:domain cca:Action ; rdfs:range cca:RiskLevel ;
+    rdfs:label "风险等级"@zh .
+cca:proposalAction a owl:ObjectProperty ; rdfs:domain cca:ActionProposal ; rdfs:range cca:Action ;
+    owl:inverseOf cca:actionProposals ;
+    rdfs:label "提案动作"@zh .
+cca:actionProposals a owl:ObjectProperty ; rdfs:domain cca:Action ; rdfs:range cca:ActionProposal ;
+    rdfs:label "该动作的提案"@zh .
+cca:proposalForFinding a owl:ObjectProperty ; rdfs:domain cca:ActionProposal ; rdfs:range ccf:Finding ;
+    owl:inverseOf cca:findingProposals ;
+    rdfs:label "提案针对的发现"@zh .
+cca:findingProposals a owl:ObjectProperty ; rdfs:domain ccf:Finding ; rdfs:range cca:ActionProposal ;
+    rdfs:label "发现的提案"@zh .
+
+# ===========================================================================
+# 3) 数据属性
+# ===========================================================================
+cca:actionCode a owl:DatatypeProperty ; rdfs:domain cca:Action ; rdfs:range xsd:string ;
+    rdfs:comment "动作代码（唯一；见 owl:hasKey）。"@zh .
+cca:displayName a owl:DatatypeProperty ; rdfs:domain cca:Action ; rdfs:range xsd:string .
+cca:rationale a owl:DatatypeProperty ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( cca:Action cca:ActionProposal ) ] ; rdfs:range xsd:string ;
+    rdfs:comment "为什么这个动作对症（引用故障模式的判据）。域含提案：提案也要写「为什么这样建议」。"@zh .
+cca:expectedEffect a owl:DatatypeProperty ; rdfs:domain cca:Action ; rdfs:range xsd:string .
+cca:sideEffectNote a owl:DatatypeProperty ; rdfs:domain cca:Action ; rdfs:range xsd:string .
+cca:preconditionNote a owl:DatatypeProperty ; rdfs:domain cca:Action ; rdfs:range xsd:string .
+# ★ `cco:riskLevel` 的**声明**在 cc-core.ttl:152（owl:AnnotationProperty）——
+#   本模块**不**重复声明（若在此再声明为 owl:DatatypeProperty，会与 core 的声明
+#   相互冲突 ⇒ 已被本注释替换掉）。此处只把它当**注解属性**使用：
+#   值 = 风险等级字符串，与 cca:actionRisk 指向的个体同源（两处都写便于 SPARQL 直查）。
+cca:riskCode a owl:DatatypeProperty ; rdfs:domain cca:RiskLevel ; rdfs:range xsd:string .
+cca:proposalCode a owl:DatatypeProperty ; rdfs:domain cca:ActionProposal ; rdfs:range xsd:string .
+cca:executed a owl:DatatypeProperty ; rdfs:domain cca:ActionProposal ; rdfs:range xsd:boolean ;
+    rdfs:comment "★ 恒为 false（只提议不执行）；「必须为 false」由 SHACL 补足。"@zh .
+cca:dryRun a owl:DatatypeProperty ; rdfs:domain cca:ActionProposal ; rdfs:range xsd:boolean ;
+    rdfs:comment "★ 恒为 true（镜像 docs/03:383 的强制 dry_run）。"@zh .
+
+# ===========================================================================
+# 4) 3 个风险等级（OWL 原生 AllDifferent 互斥）
+# ===========================================================================
+cca:Risk-Low a cca:RiskLevel ; cca:riskCode "low" ; rdfs:label "低风险"@zh ;
+    skos:note "只读/可回滚的观测或参数查询类动作。"@zh .
+cca:Risk-Medium a cca:RiskLevel ; cca:riskCode "medium" ; rdfs:label "中风险"@zh ;
+    skos:note "需要变更运行参数、可回滚但影响在线流量。"@zh .
+cca:Risk-High a cca:RiskLevel ; cca:riskCode "high" ; rdfs:label "高风险"@zh ;
+    skos:note "涉及数据库主备切换等有中断窗口的动作。"@zh .
+[ a owl:AllDifferent ; owl:distinctMembers ( cca:Risk-Low cca:Risk-Medium cca:Risk-High ) ] .
+
+# ===========================================================================
+# 5) 7 个建议动作（与 F1..F7 / F-001..F-007 一一对应）
+# ===========================================================================
+cca:ACT-EXPAND-APP-POOL a cca:Action ;
+    cca:actionCode "ACT-EXPAND-APP-POOL" ; cca:displayName "扩大应用侧连接池上限" ;
+    cca:actionOnFault ccf:FM-APP-POOL-EXHAUSTED ; cca:actionRisk cca:Risk-Medium ; cco:riskLevel "medium" ;
+    cca:rationale "对症 ccf:J-pool-2：app.datasource.active_connections 已达 JdbcDataSource.maxPoolSize；扩上限前须先确认数据库侧未贴顶（见 ccc:D1 的否定性证据）。" ;
+    cca:expectedEffect "acquire_wait_ms 回落、pending_threads 归零。" ;
+    cca:preconditionNote "connectsTo 的下游 DatabaseSessionPool 未达 session_used_ratio_severe#critical；否则扩池只是把压力推给数据库。" ;
+    cca:sideEffectNote "数据库侧连接数同步上升，可能触发 FM-DB-SESSION-POOL-FULL。" ;
+    cco:contractSource "自定（docs\\04 未给契约）" ; rdfs:label "扩大应用侧连接池上限"@zh .
+cca:ACT-OPTIMIZE-SLOW-QUERY a cca:Action ;
+    cca:actionCode "ACT-OPTIMIZE-SLOW-QUERY" ; cca:displayName "优化慢查询（改写/加索引/终止长事务）" ;
+    cca:actionOnFault ccf:FM-DB-SLOW-QUERY ; cca:actionRisk cca:Risk-Medium ; cco:riskLevel "medium" ;
+    cca:rationale "对症 ccf:J-slowq-1：db.query.mean_exec_ms 超过 mean_exec_ms_light#warning（实测均值 30.8s，档位待重标）。" ;
+    cca:expectedEffect "db.query.mean_exec_ms 回落；E1/E4 的会话堆积缓解。" ;
+    cca:preconditionNote "需先用 Query/Table 链路定位具体 SQL（cc:runsQuery + cc:Table）。" ;
+    cca:sideEffectNote "终止长事务可能中断未提交业务。" ;
+    cco:contractSource "自定（docs\\04 未给契约）" ; rdfs:label "优化慢查询"@zh .
+cca:ACT-RAISE-CPU-LIMIT a cca:Action ;
+    cca:actionCode "ACT-RAISE-CPU-LIMIT" ; cca:displayName "提高容器 CPU 配额（或降低同宿主机争抢）" ;
+    cca:actionOnFault ccf:FM-CTR-CPU-THROTTLED ; cca:actionRisk cca:Risk-Medium ; cco:riskLevel "medium" ;
+    cca:rationale "对症 ccf:J-throttle-1：container.cpu_throttled_periods 增长，且 E7 条件（host.cpu_usage_ratio > cpu_usage_ratio_severe#critical）成立。" ;
+    cca:expectedEffect "限流周期停止增长，app.endpoint.p99_ms 回落。" ;
+    cca:preconditionNote "必须同时看宿主机（cc:hosts/runsIn 链路）——只看容器会误判为应用自身慢。" ;
+    cca:sideEffectNote "抬高配额会加剧同宿主机其他实例的争抢。" ;
+    cco:contractSource "自定（docs\\04 未给契约）" ; rdfs:label "提高容器 CPU 配额"@zh .
+cca:ACT-RAISE-MEM-LIMIT a cca:Action ;
+    cca:actionCode "ACT-RAISE-MEM-LIMIT" ; cca:displayName "提高容器内存 limit（或排查堆泄漏）" ;
+    cca:actionOnFault ccf:FM-CTR-OOM-KILLED ; cca:actionRisk cca:Risk-Medium ; cco:riskLevel "medium" ;
+    cca:rationale "对症 ccf:J-oom-1：container.oom_kill_total 增长；F4 的两条路径必须先用 ccc:D3 区分（E9 路径要先看 host.mem_available_ratio，E12 路径才看 Container.memLimitMb）。" ;
+    cca:expectedEffect "OOM 计数停止增长，实例重启（E10/E11）随之消失。" ;
+    cca:preconditionNote "路径甲（宿主机紧张）时提高单容器 limit 无效，须先在宿主机侧处置。" ;
+    cca:sideEffectNote "加大 limit 可能诱发宿主机级 OOM。" ;
+    cco:contractSource "自定（docs\\04 未给契约）" ; rdfs:label "提高容器内存 limit"@zh .
+cca:ACT-FIX-JDBC-AUTH a cca:Action ;
+    cca:actionCode "ACT-FIX-JDBC-AUTH" ; cca:displayName "修正 JDBC 连接串/驱动版本/认证方式" ;
+    cca:actionOnFault ccf:FM-APP-AUTH-INCOMPATIBLE ; cca:actionRisk cca:Risk-High ; cco:riskLevel "high" ;
+    cca:rationale "对症 ccf:FM-APP-AUTH-INCOMPATIBLE 的 4 条排除法前提（见 ccf:J-rcenc-1..4）：只有在「DB 在线 ∧ 网络可达 ∧ 立即失败」全部成立时才收敛到此根因。" ;
+    cca:expectedEffect "app.datasource.connect_fail_total 停止增长。" ;
+    cca:preconditionNote "★ 必须先排除 F6（超时而非立即失败）与 F7（切换事件），否则会把网络问题当成认证问题。" ;
+    cca:sideEffectNote "改认证方式需与应用发布同步，避免滚动重启期间大面积连接失败。" ;
+    cco:contractSource "自定（docs\\04 未给契约）" ; rdfs:label "修正 JDBC 认证配置"@zh .
+cca:ACT-CHECK-NETWORK-PATH a cca:Action ;
+    cca:actionCode "ACT-CHECK-NETWORK-PATH" ; cca:displayName "排查容器到数据库的网络路径" ;
+    cca:actionOnFault ccf:FM-CTR-NET-UNREACHABLE ; cca:actionRisk cca:Risk-Low ; cco:riskLevel "low" ;
+    cca:rationale "对症 ccf:J-net-a1：app.datasource.connect_latency_ms 达到 JdbcDataSource.connectionTimeoutMs（超时而非立即失败）。" ;
+    cca:expectedEffect "定位丢包/ACL/路由问题，恢复连接建立。" ;
+    cca:preconditionNote "与 ccc:D2 配合：超时 → 网络；立即失败 → 认证。" ;
+    cca:sideEffectNote "只读排查，无副作用。" ;
+    cco:contractSource "自定（docs\\04 未给契约）" ; rdfs:label "排查容器到数据库的网络路径"@zh .
+cca:ACT-FAILOVER-DB a cca:Action ;
+    cca:actionCode "ACT-FAILOVER-DB" ; cca:displayName "数据库实例主备切换/拉起" ;
+    cca:actionOnFault ccf:FM-DB-INSTANCE-DOWN ; cca:actionRisk cca:Risk-High ; cco:riskLevel "high" ;
+    cca:rationale "对症 ccf:J-down-a1/b1：db.instance.up 为 false 或 db.cluster.switchover_total 增长。" ;
+    cca:expectedEffect "实例恢复在线，连接瞬时中断结束（E14/E15）。" ;
+    cca:preconditionNote "需确认备库状态与复制延迟；切换有中断窗口。" ;
+    cca:sideEffectNote "切换瞬间会话全部断开，会叠加 FM-APP-DS-CONNECT-FAIL。" ;
+    cco:contractSource "自定（docs\\04 未给契约）" ; rdfs:label "数据库实例切换"@zh .
+
+# ===========================================================================
+# 6) 7 条动作提案（dry-run：executed=false / dryRun=true）
+# ===========================================================================
+cca:P-001 a cca:ActionProposal ; cca:proposalCode "P-001" ; cca:proposalAction cca:ACT-EXPAND-APP-POOL ;
+    cca:proposalForFinding ccf:F-001 ; cca:executed false ; cca:dryRun true ;
+    cca:rationale "r01 命中 FM-APP-POOL-EXHAUSTED 且 ccf:J-pool-dist 成立（数据库侧正常）⇒ 处置点在应用侧。" .
+cca:P-002 a cca:ActionProposal ; cca:proposalCode "P-002" ; cca:proposalAction cca:ACT-OPTIMIZE-SLOW-QUERY ;
+    cca:proposalForFinding ccf:F-002 ; cca:executed false ; cca:dryRun true ;
+    cca:rationale "r02 命中 FM-DB-SLOW-QUERY。" .
+cca:P-003 a cca:ActionProposal ; cca:proposalCode "P-003" ; cca:proposalAction cca:ACT-RAISE-CPU-LIMIT ;
+    cca:proposalForFinding ccf:F-003 ; cca:executed false ; cca:dryRun true ;
+    cca:rationale "r03 命中 FM-CTR-CPU-THROTTLED（宿主机侧有反证）。" .
+cca:P-004 a cca:ActionProposal ; cca:proposalCode "P-004" ; cca:proposalAction cca:ACT-RAISE-MEM-LIMIT ;
+    cca:proposalForFinding ccf:F-004 ; cca:executed false ; cca:dryRun true ;
+    cca:rationale "r04 命中 FM-CTR-OOM-KILLED；两条路径由 ccc:D3 区分后再定处置。" .
+cca:P-005 a cca:ActionProposal ; cca:proposalCode "P-005" ; cca:proposalAction cca:ACT-FIX-JDBC-AUTH ;
+    cca:proposalForFinding ccf:F-005 ; cca:executed false ; cca:dryRun true ;
+    cca:rationale "r05 以排除法收敛到叶子根因 ccf:FM-APP-AUTH-INCOMPATIBLE（4 条前提全成立）。" .
+cca:P-006 a cca:ActionProposal ; cca:proposalCode "P-006" ; cca:proposalAction cca:ACT-CHECK-NETWORK-PATH ;
+    cca:proposalForFinding ccf:F-006 ; cca:executed false ; cca:dryRun true ;
+    cca:rationale "r06 命中 FM-CTR-NET-UNREACHABLE（超时路径）。" .
+cca:P-007 a cca:ActionProposal ; cca:proposalCode "P-007" ; cca:proposalAction cca:ACT-FAILOVER-DB ;
+    cca:proposalForFinding ccf:F-007 ; cca:executed false ; cca:dryRun true ;
+    cca:rationale "r07 命中 FM-DB-INSTANCE-DOWN（实例不可用或切换计数增长）。" .
+
+# ===========================================================================
+# 7) OWL 原生约束（与方案1 的 DDL 唯一约束逐条对照）
+# ===========================================================================
+# docs/03:72  CREATE CONSTRAINT cc_uq_action_code ... REQUIRE n.actionCode IS UNIQUE
+#   ⇒ 本体侧用 OWL 2 键公理表达；同样的诉求在 Neo4j 里只能靠 DDL 建约束、
+#     不参与本体推理，而 OWL 的 hasKey 是**公理**（在本体闭包内可机检、可推理）。
+cca:Action         owl:hasKey ( cca:actionCode ) .
+cca:ActionProposal owl:hasKey ( cca:proposalCode ) .
+
+# ===========================================================================
+# 8) 契约偏差登记
+# ===========================================================================
+# 自定-1 契约缺位：docs/04 只有 docs/04:112 一行职责描述，无动作词表、无风险等级枚举、
+#       无 SHACL 形状。本模块的 3 个等级 / 7 个动作 / 7 条提案全部为方案2 自定。
+# 自定-2 cca:rationale / expectedEffect / sideEffectNote / preconditionNote 四个描述性
+#       属性同为自定；它们不引入任何契约外的**事实**（只写方案2 侧的处置逻辑）。
+# 自定-3 动作**不**携带命令模板 / 参数（避免把建议写成操作规程）；执行面在方案2 之外。
+# 契约缺口  契约没有给出「动作 → 故障模式」的映射表；本模块按 F1..F7 链的一对一
+#       收敛关系绑定（每条链一个动作），并用 ccf:J-rcenc-* / ccc:D1..D3 作为前提引用。

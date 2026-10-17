@@ -1,0 +1,21 @@
+[Unit]
+Description=upstream-ops v3 采集层（数据面 :8187）
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=600
+StartLimitBurst=30
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/upstream-agent
+Environment=PYTHONPATH=/opt/upstream-agent
+Environment=SVC_PORT=8187
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/cc-venv/bin/python -m uvicorn service.app_collect:app --host 0.0.0.0 --port 8187 --workers 1
+Restart=on-failure
+RestartSec=15
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

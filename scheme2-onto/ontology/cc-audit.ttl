@@ -1,0 +1,278 @@
+# ============================================================================
+# scheme2-onto/ontology/cc-audit.ttl  ·  方案2 审计/溯源模块（ccp:）
+# ----------------------------------------------------------------------------
+# 职责（docs/04 §3 模块表）：PROV-O 挂接（规则执行 → 发现 → 建议动作 的溯源链）。
+# 命名空间（逐字取自 type-map.yaml#namespaces.onto）：ccp = .../onto/prov#
+#
+# ★ 与 SOSA 一样，PROV-O 用 `dcterms:references` 引用而**不用** owl:imports：
+#   owl:imports 在装载时要求可解析到远端本体文档（本机无网络保证，且会让
+#   GraphDB 装载变慢/失败）；dcterms:references 只声明「引用了这套词汇」，
+#   而本文件对 PROV-O 词项的使用是**逐词项显式子类/子属性对齐**（见下）。
+#   ★ 这条属方案2 自定工程取舍，已进末条报告诚实清单。
+#
+# ★ T1 需要「每个 owl:Class 至少有 1 个实例」⇒ 本模块补齐三样在 TBox 侧原本
+#   没有个体、却在 cc-fault/cc-action 里被引用的类：
+#     · ccf:Finding  的 7 个个体 ccf:F-001..F-007（docs/04 §6 规则表）
+#     · ccp:Rule     的 7 个个体 ccp:Rule-r01..r07
+#     · ccp:RuleExecution 的 7 个个体 ccp:Exec-r01..r07（同时供 T7 使用）
+#
+# ★ OWL 原生 vs SHACL 补足（docs/04 §D6，分开计）：
+#   OWL 原生（本模块）：rdfs:subClassOf（对齐 PROV-O/cco: 顶层）/ domain / range /
+#     owl:inverseOf / owl:AllDifferent（7 条规则、7 次执行两两不同）。
+#   SHACL 补足（ccs:）：ruleCode 必须匹配 ^r0[1-7]$、ruleFile 必须是
+#     scheme2-onto/rules/*.rq 形态、每次执行必须恰好产出一个发现、executionId 非空。
+# ============================================================================
+@prefix ccp:     <https://credit-card-ops.ai/onto/prov#> .
+@prefix ccf:     <https://credit-card-ops.ai/onto/fault#> .
+@prefix cca:     <https://credit-card-ops.ai/onto/action#> .
+@prefix ccm:     <https://credit-card-ops.ai/onto/metric#> .
+@prefix cc:      <https://credit-card-ops.ai/onto/topology#> .
+@prefix cco:     <https://credit-card-ops.ai/onto/core#> .
+@prefix prov:    <http://www.w3.org/ns/prov#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix dcat:    <http://www.w3.org/ns/dcat#> .
+
+ccp: a owl:Ontology , dcat:Dataset ;
+    dcterms:title "信用卡跨层运维本体 · 审计与溯源模块（cc-audit）"@zh ;
+    dcterms:description "7 条规则 + 7 次规则执行 + 7 个诊断发现 + 2 个代理，全部挂到 PROV-O；执行链 rule → finding → proposal 可端到端追。"@zh ;
+    cco:contractSource "docs/04-方案2设计（本体+LLM）.md §3（cc-audit 行）+ §7 G10（审计要求）" ;
+    dcterms:references <http://www.w3.org/ns/prov#> ;
+    skos:note "★ 用 dcterms:references 而非 owl:imports 引用 PROV-O：避免装载期远端抓取，逐词项对齐更可控。"@zh ;
+    skos:note "本模块只**声明**审计结构；真正的执行日志（时间戳、返回行数、耗时）属运行时数据，不在 TBox。"@zh .
+
+# ===========================================================================
+# 1) 类（与 PROV-O / cco: 顶层对齐）
+# ===========================================================================
+ccp:Rule a owl:Class ;
+    rdfs:subClassOf cco:InformationEntity ;
+    rdfs:label "规则"@zh ;
+    rdfs:comment "一条 SPARQL CONSTRUCT 规则（r01..r07）；个体在 TBox 侧登记，规则文本在 scheme2-onto/rules/。"@zh ;
+    cco:rigidity "+R" ; cco:identity "-I" ; cco:unity "+U" ; cco:dependence "-D" ;
+    cco:contractSource "docs/04 §6 规则表（r01..r07 → F-001..F-007）" .
+
+ccp:RuleExecution a owl:Class ;
+    rdfs:subClassOf prov:Activity , cco:Occurrent ;
+    rdfs:label "规则执行"@zh ;
+    rdfs:comment "一次规则运行（prov:Activity）：关联代理、消耗指标、产出发现。"@zh ;
+    cco:rigidity "-R" ; cco:identity "-I" ; cco:unity "-U" ; cco:dependence "-D" ;
+    cco:contractSource "docs/04 §7 G10（审计）+ PROV-O Activity" .
+
+ccp:ProbeAgent a owl:Class ;
+    rdfs:subClassOf prov:Agent , cco:Continuant ;
+    rdfs:label "代理"@zh ;
+    rdfs:comment "执行方：本体查询代理（LLM）或采集器。"@zh ;
+    cco:rigidity "+R" ; cco:identity "-I" ; cco:unity "+U" ; cco:dependence "-D" ;
+    cco:contractSource "docs/04 §3（cc_query 护栏 G10）+ PROV-O Agent" .
+
+ccp:HumanOperator a owl:Class ;
+    rdfs:subClassOf ccp:ProbeAgent ;
+    rdfs:label "人类运维人员"@zh ;
+    rdfs:comment "审批方：动作提案的批准者（PROV-O 里 actedOnBehalfOf 的另一端）。"@zh ;
+    cco:rigidity "+R" ; cco:identity "+I" ; cco:identityCriterion "自然人同一性（走工号）" ;
+    cco:unity "+U" ; cco:dependence "-D" .
+
+# 跨模块对齐：发现与证据都是 PROV 的 Entity
+ccf:Finding rdfs:subClassOf prov:Entity .
+cc:Evidence rdfs:subClassOf prov:Entity .
+
+# ===========================================================================
+# 2) 对象属性
+# ===========================================================================
+ccp:appliesRule a owl:ObjectProperty ; rdfs:domain ccp:RuleExecution ; rdfs:range ccp:Rule ;
+    rdfs:label "执行了哪条规则"@zh .
+ccp:hasRuleInput a owl:ObjectProperty ; rdfs:domain ccp:RuleExecution ; rdfs:range ccm:Metric ;
+    rdfs:label "规则读入的指标"@zh ;
+    rdfs:comment "把「规则 → 指标」变成可查询的链接（方案1 侧只有字符串 code）。"@zh .
+ccp:producedFinding a owl:ObjectProperty ; rdfs:domain ccp:RuleExecution ; rdfs:range ccf:Finding ;
+    owl:inverseOf ccp:findingFromExecution ;
+    rdfs:label "产出发现"@zh .
+ccp:findingFromExecution a owl:ObjectProperty ; rdfs:domain ccf:Finding ; rdfs:range ccp:RuleExecution ;
+    rdfs:label "发现的来源执行"@zh .
+ccp:proposedAction a owl:ObjectProperty ; rdfs:domain ccp:RuleExecution ; rdfs:range cca:ActionProposal ;
+    rdfs:label "提出的建议动作"@zh ;
+    rdfs:comment "端到端链：RuleExecution → Finding → ActionProposal（executed=false）。"@zh .
+ccp:detectsFaultMode a owl:ObjectProperty ; rdfs:domain ccp:Rule ; rdfs:range ccf:FaultMode ;
+    rdfs:label "规则针对的故障模式"@zh .
+ccp:ruleProducesFinding a owl:ObjectProperty ; rdfs:domain ccp:Rule ; rdfs:range ccf:Finding ;
+    rdfs:label "规则可产出的发现"@zh .
+ccp:associatedRule a owl:ObjectProperty ; rdfs:domain ccf:Finding ; rdfs:range ccp:Rule ;
+    rdfs:label "发现所属规则"@zh .
+ccp:findingFaultMode a owl:ObjectProperty ; rdfs:domain ccf:Finding ; rdfs:range ccf:FaultMode ;
+    rdfs:label "发现指向的故障模式"@zh .
+
+# ---- ★ v1.0.3（X-7）不可判条目（unjudgeable）登记用的对象属性。
+#      依据 = shared/model/fault-modes.yaml#meta.predicate_semantics.unjudgeable_policy：
+#      「delta 缺失 ⇒ 条目 unjudgeable：既不成立也不证伪；规则不得据此判故障成立；
+#        按 WARN『待标定/不可机判』处理并登记 zero-instance-ledger.yaml。禁止静默转 false。」
+#      ★ 刻意**不新增类**（新类会触发完整性门禁 T1 的「每类 ≥1 实例」要求，而这类个体
+#        只在运行时由规则的 CONSTRUCT 产出、静态 TBox 里不应伪造实例）：登记的个体
+#        类型用既有 `cco:InformationEntity`（cc-core 定义），规则模板形如
+#        `?uj a cco:InformationEntity ; ccp:unjudgeableJudgment ... ; ...`。
+#      ★ 也刻意**不复用** ccp:associatedRule（其 domain=ccf:Finding，会把 ?uj 反推成
+#        Finding —— 而 unjudgeable 恰恰**不是** Finding）。
+ccp:unjudgeableJudgment a owl:ObjectProperty ; rdfs:domain cco:InformationEntity ; rdfs:range ccf:Judgment ;
+    rdfs:label "不可判的判据"@zh ;
+    cco:contractSource "shared/model/fault-modes.yaml#/meta/predicate_semantics/unjudgeable_policy（个体由 scheme2-onto/rules/r03,r04,r06,r07.rq 的 CONSTRUCT 模板承载）"@zh .
+ccp:unjudgeableFor a owl:ObjectProperty ; rdfs:domain cco:InformationEntity ; rdfs:range cco:Entity ;
+    rdfs:label "不可判条目针对的对象"@zh ;
+    cco:contractSource "shared/model/fault-modes.yaml#/meta/predicate_semantics/unjudgeable_policy（个体由 scheme2-onto/rules/r03,r04,r06,r07.rq 的 CONSTRUCT 模板承载）"@zh .
+ccp:unjudgeableRule a owl:ObjectProperty ; rdfs:domain cco:InformationEntity ; rdfs:range ccp:Rule ;
+    rdfs:label "产出该不可判登记的规则"@zh ;
+    cco:contractSource "shared/model/fault-modes.yaml#/meta/predicate_semantics/unjudgeable_policy（个体由 scheme2-onto/rules/r03,r04,r06,r07.rq 的 CONSTRUCT 模板承载）"@zh .
+
+# ===========================================================================
+# 3) 数据属性
+# ===========================================================================
+ccp:ruleCode a owl:DatatypeProperty ; rdfs:domain ccp:Rule ; rdfs:range xsd:string .
+ccp:ruleFile a owl:DatatypeProperty ; rdfs:domain ccp:Rule ; rdfs:range xsd:string ;
+    rdfs:comment "规则文件路径（可机检：必须落在 scheme2-onto/rules/ 下）。"@zh .
+ccp:ruleName a owl:DatatypeProperty ; rdfs:domain ccp:Rule ; rdfs:range xsd:string .
+ccp:executionId a owl:DatatypeProperty ; rdfs:domain ccp:RuleExecution ; rdfs:range xsd:string .
+ccp:recordedAt a owl:DatatypeProperty ; rdfs:domain ccp:RuleExecution ; rdfs:range xsd:dateTime ;
+    rdfs:comment "本 TBox 侧的占位时刻 = 契约快照时刻（真实执行时刻属运行时数据）。"@zh .
+ccp:agentName a owl:DatatypeProperty ; rdfs:domain ccp:ProbeAgent ; rdfs:range xsd:string .
+ccp:agentKind a owl:DatatypeProperty ; rdfs:domain ccp:ProbeAgent ; rdfs:range xsd:string ;
+    rdfs:comment "llm-agent | collector。"@zh .
+ccp:findingTitle a owl:DatatypeProperty ; rdfs:domain ccf:Finding ; rdfs:range xsd:string .
+ccp:findingSeverity a owl:DatatypeProperty ; rdfs:domain ccf:Finding ; rdfs:range xsd:string .
+ccp:unjudgeableReason a owl:DatatypeProperty ; rdfs:domain cco:InformationEntity ; rdfs:range xsd:string ;
+    rdfs:comment "★ v1.0.3（X-7）：不可判原因（如「cc:delta 缺失，无法判定 increased」）。规则不得据此判故障成立；登记对象见 zero-instance-ledger.yaml。"@zh ;
+    cco:contractSource "shared/model/fault-modes.yaml#/meta/predicate_semantics/unjudgeable_policy（个体由 scheme2-onto/rules/r03,r04,r06,r07.rq 的 CONSTRUCT 模板承载）"@zh .
+
+# ===========================================================================
+# 4) 2 个代理
+# ===========================================================================
+ccp:Agent-cc-query a ccp:ProbeAgent ;
+    ccp:agentName "cc_query（本体查询代理）" ; ccp:agentKind "llm-agent" ;
+    prov:actedOnBehalfOf ccp:Agent-operator ;
+    rdfs:label "本体查询代理"@zh .
+ccp:Agent-probe-collector a ccp:ProbeAgent ;
+    ccp:agentName "探针采集器（os.ssh / container:prometheus / gaussdb.collect / app:http）" ;
+    ccp:agentKind "collector" ; rdfs:label "采集器"@zh .
+ccp:Agent-operator a ccp:HumanOperator ;
+    ccp:agentName "运维人员（动作审批方）" ; ccp:agentKind "human" ; rdfs:label "运维人员"@zh .
+
+# ===========================================================================
+# 5) 7 条规则 + 7 个发现 + 7 次执行（docs/04 §6 规则表）
+# ===========================================================================
+ccp:Rule-r01 a ccp:Rule ; ccp:ruleCode "r01" ; ccp:ruleName "应用侧连接池耗尽" ;
+    ccp:ruleFile "scheme2-onto/rules/r01.rq" ; ccp:detectsFaultMode ccf:FM-APP-POOL-EXHAUSTED ;
+    ccp:ruleProducesFinding ccf:F-001 ; rdfs:label "r01 应用侧连接池耗尽"@zh .
+ccp:Rule-r02 a ccp:Rule ; ccp:ruleCode "r02" ; ccp:ruleName "数据库慢查询" ;
+    ccp:ruleFile "scheme2-onto/rules/r02.rq" ; ccp:detectsFaultMode ccf:FM-DB-SLOW-QUERY ;
+    ccp:ruleProducesFinding ccf:F-002 ; rdfs:label "r02 数据库慢查询"@zh .
+ccp:Rule-r03 a ccp:Rule ; ccp:ruleCode "r03" ; ccp:ruleName "容器 CPU 限流" ;
+    ccp:ruleFile "scheme2-onto/rules/r03.rq" ; ccp:detectsFaultMode ccf:FM-CTR-CPU-THROTTLED ;
+    ccp:ruleProducesFinding ccf:F-003 ; rdfs:label "r03 容器 CPU 限流"@zh .
+ccp:Rule-r04 a ccp:Rule ; ccp:ruleCode "r04" ; ccp:ruleName "容器 OOM 被杀" ;
+    ccp:ruleFile "scheme2-onto/rules/r04.rq" ; ccp:detectsFaultMode ccf:FM-CTR-OOM-KILLED ;
+    ccp:ruleProducesFinding ccf:F-004 ; rdfs:label "r04 容器 OOM 被杀"@zh .
+ccp:Rule-r05 a ccp:Rule ; ccp:ruleCode "r05" ; ccp:ruleName "JDBC 认证/驱动不兼容（排除法）" ;
+    ccp:ruleFile "scheme2-onto/rules/r05.rq" ; ccp:detectsFaultMode ccf:FM-APP-DS-CONNECT-FAIL ;
+    ccp:ruleProducesFinding ccf:F-005 ; rdfs:label "r05 JDBC 认证/驱动不兼容（排除法）"@zh .
+ccp:Rule-r06 a ccp:Rule ; ccp:ruleCode "r06" ; ccp:ruleName "容器网络不可达" ;
+    ccp:ruleFile "scheme2-onto/rules/r06.rq" ; ccp:detectsFaultMode ccf:FM-CTR-NET-UNREACHABLE ;
+    ccp:ruleProducesFinding ccf:F-006 ; rdfs:label "r06 容器网络不可达"@zh .
+ccp:Rule-r07 a ccp:Rule ; ccp:ruleCode "r07" ; ccp:ruleName "数据库实例故障/切换" ;
+    ccp:ruleFile "scheme2-onto/rules/r07.rq" ; ccp:detectsFaultMode ccf:FM-DB-INSTANCE-DOWN ;
+    ccp:ruleProducesFinding ccf:F-007 ; rdfs:label "r07 数据库实例故障/切换"@zh .
+[ a owl:AllDifferent ; owl:distinctMembers ( ccp:Rule-r01 ccp:Rule-r02 ccp:Rule-r03 ccp:Rule-r04
+    ccp:Rule-r05 ccp:Rule-r06 ccp:Rule-r07 ) ] .
+ccp:Rule owl:hasKey ( ccp:ruleCode ) .
+
+ccf:F-001 a ccf:Finding ; ccf:findingCode "F-001" ; ccp:findingTitle "应用侧连接池耗尽" ;
+    ccp:findingSeverity "critical" ; ccp:associatedRule ccp:Rule-r01 ; ccp:findingFaultMode ccf:FM-APP-POOL-EXHAUSTED ;
+    rdfs:label "F-001 应用侧连接池耗尽"@zh .
+ccf:F-002 a ccf:Finding ; ccf:findingCode "F-002" ; ccp:findingTitle "数据库慢查询" ;
+    ccp:findingSeverity "major" ; ccp:associatedRule ccp:Rule-r02 ; ccp:findingFaultMode ccf:FM-DB-SLOW-QUERY ;
+    # ★ P0.9：F2 链的规则（r02.rq）已扩为多模式检测 ⇒ 同一结论码下并列登记全部模式
+    ccp:findingFaultMode ccf:FM-DB-DEADLOCK , ccf:FM-DB-IDLE-IN-TX , ccf:FM-DB-SEQ-SCAN ,
+        ccf:FM-DB-ROLLBACK-STORM , ccf:FM-DB-UNUSED-INDEX ;
+    rdfs:label "F-002 数据库慢查询"@zh .
+ccf:F-003 a ccf:Finding ; ccf:findingCode "F-003" ; ccp:findingTitle "容器 CPU 限流" ;
+    ccp:findingSeverity "major" ; ccp:associatedRule ccp:Rule-r03 ; ccp:findingFaultMode ccf:FM-CTR-CPU-THROTTLED ;
+    rdfs:label "F-003 容器 CPU 限流"@zh .
+ccf:F-004 a ccf:Finding ; ccf:findingCode "F-004" ; ccp:findingTitle "容器 OOM 被杀" ;
+    ccp:findingSeverity "critical" ; ccp:associatedRule ccp:Rule-r04 ; ccp:findingFaultMode ccf:FM-CTR-OOM-KILLED ;
+    # ★ P0.9：F4（宿主/容器资源耗尽链）新增宿主磁盘两类
+    ccp:findingFaultMode ccf:FM-HOST-DISK-FULL , ccf:FM-HOST-DISK-IO-ERROR ;
+    rdfs:label "F-004 容器 OOM 被杀"@zh .
+ccf:F-005 a ccf:Finding ; ccf:findingCode "F-005" ; ccp:findingTitle "JDBC 认证/驱动不兼容（叶子根因，排除法）" ;
+    ccp:findingSeverity "critical" ; ccp:associatedRule ccp:Rule-r05 ; ccp:findingFaultMode ccf:FM-APP-AUTH-INCOMPATIBLE ;
+    rdfs:label "F-005 JDBC 认证/驱动不兼容"@zh .
+ccf:F-006 a ccf:Finding ; ccf:findingCode "F-006" ; ccp:findingTitle "容器网络不可达" ;
+    ccp:findingSeverity "critical" ; ccp:associatedRule ccp:Rule-r06 ; ccp:findingFaultMode ccf:FM-CTR-NET-UNREACHABLE ;
+    # ★ P0.9：F6（网络链）新增宿主网卡 down
+    ccp:findingFaultMode ccf:FM-HOST-NET-IFACE-DOWN ;
+    rdfs:label "F-006 容器网络不可达"@zh .
+ccf:F-007 a ccf:Finding ; ccf:findingCode "F-007" ; ccp:findingTitle "数据库实例故障/切换" ;
+    ccp:findingSeverity "critical" ; ccp:associatedRule ccp:Rule-r07 ; ccp:findingFaultMode ccf:FM-DB-INSTANCE-DOWN ;
+    # ★ P0.9：F7（主备链）新增复制中断
+    ccp:findingFaultMode ccf:FM-DB-REPLICATION-LAG ;
+    rdfs:label "F-007 数据库实例故障/切换"@zh .
+[ a owl:AllDifferent ; owl:distinctMembers ( ccf:F-001 ccf:F-002 ccf:F-003 ccf:F-004 ccf:F-005
+    ccf:F-006 ccf:F-007 ) ] .
+
+ccp:Exec-r01 a ccp:RuleExecution ; ccp:executionId "exec-r01@ccf-20260928T134833Z-eb634e" ;
+    ccp:appliesRule ccp:Rule-r01 ; ccp:recordedAt "2026-09-28T13:48:33Z"^^xsd:dateTime ;
+    ccp:hasRuleInput ccm:m_app_datasource_pending_threads , ccm:m_app_datasource_active_connections , ccm:m_app_datasource_acquire_wait_ms ;
+    ccp:producedFinding ccf:F-001 ; ccp:proposedAction cca:P-001 ;
+    prov:wasAssociatedWith ccp:Agent-cc-query ; rdfs:label "r01 执行"@zh .
+ccp:Exec-r02 a ccp:RuleExecution ; ccp:executionId "exec-r02@ccf-20260928T134833Z-eb634e" ;
+    ccp:appliesRule ccp:Rule-r02 ; ccp:recordedAt "2026-09-28T13:48:33Z"^^xsd:dateTime ;
+    ccp:hasRuleInput ccm:m_db_query_mean_exec_ms ;
+    ccp:producedFinding ccf:F-002 ; ccp:proposedAction cca:P-002 ;
+    prov:wasAssociatedWith ccp:Agent-cc-query ; rdfs:label "r02 执行"@zh .
+ccp:Exec-r03 a ccp:RuleExecution ; ccp:executionId "exec-r03@ccf-20260928T134833Z-eb634e" ;
+    ccp:appliesRule ccp:Rule-r03 ; ccp:recordedAt "2026-09-28T13:48:33Z"^^xsd:dateTime ;
+    ccp:hasRuleInput ccm:m_container_cpu_throttled_periods , ccm:m_host_cpu_usage_ratio ;
+    ccp:producedFinding ccf:F-003 ; ccp:proposedAction cca:P-003 ;
+    prov:wasAssociatedWith ccp:Agent-cc-query ; rdfs:label "r03 执行"@zh .
+ccp:Exec-r04 a ccp:RuleExecution ; ccp:executionId "exec-r04@ccf-20260928T134833Z-eb634e" ;
+    ccp:appliesRule ccp:Rule-r04 ; ccp:recordedAt "2026-09-28T13:48:33Z"^^xsd:dateTime ;
+    ccp:hasRuleInput ccm:m_container_oom_kill_total , ccm:m_host_mem_available_ratio , ccm:m_container_mem_working_set_mb ;
+    ccp:producedFinding ccf:F-004 ; ccp:proposedAction cca:P-004 ;
+    prov:wasAssociatedWith ccp:Agent-cc-query ; rdfs:label "r04 执行"@zh .
+ccp:Exec-r05 a ccp:RuleExecution ; ccp:executionId "exec-r05@ccf-20260928T134833Z-eb634e" ;
+    ccp:appliesRule ccp:Rule-r05 ; ccp:recordedAt "2026-09-28T13:48:33Z"^^xsd:dateTime ;
+    ccp:hasRuleInput ccm:m_db_instance_up , ccm:m_app_datasource_connect_latency_ms , ccm:m_app_datasource_connect_fail_total ;
+    ccp:producedFinding ccf:F-005 ; ccp:proposedAction cca:P-005 ;
+    prov:wasAssociatedWith ccp:Agent-cc-query ; rdfs:label "r05 执行（排除法）"@zh .
+ccp:Exec-r06 a ccp:RuleExecution ; ccp:executionId "exec-r06@ccf-20260928T134833Z-eb634e" ;
+    ccp:appliesRule ccp:Rule-r06 ; ccp:recordedAt "2026-09-28T13:48:33Z"^^xsd:dateTime ;
+    ccp:hasRuleInput ccm:m_app_datasource_connect_latency_ms , ccm:m_app_datasource_connect_fail_total ;
+    ccp:producedFinding ccf:F-006 ; ccp:proposedAction cca:P-006 ;
+    prov:wasAssociatedWith ccp:Agent-cc-query ; rdfs:label "r06 执行"@zh .
+ccp:Exec-r07 a ccp:RuleExecution ; ccp:executionId "exec-r07@ccf-20260928T134833Z-eb634e" ;
+    ccp:appliesRule ccp:Rule-r07 ; ccp:recordedAt "2026-09-28T13:48:33Z"^^xsd:dateTime ;
+    ccp:hasRuleInput ccm:m_db_instance_up , ccm:m_db_cluster_switchover_total ;
+    ccp:producedFinding ccf:F-007 ; ccp:proposedAction cca:P-007 ;
+    prov:wasAssociatedWith ccp:Agent-cc-query ; rdfs:label "r07 执行"@zh .
+[ a owl:AllDifferent ; owl:distinctMembers ( ccp:Exec-r01 ccp:Exec-r02 ccp:Exec-r03 ccp:Exec-r04
+    ccp:Exec-r05 ccp:Exec-r06 ccp:Exec-r07 ) ] .
+
+# ===========================================================================
+# 6) 契约偏差登记
+# ===========================================================================
+# 自定-1 docs/04 §3 只写「cc-audit | ccp: | PROV-O 挂接 | —」一行；「挂到什么粒度」
+#        没有规格 ⇒ 本模块自定粒度：Rule / RuleExecution / ProbeAgent 三类 +
+#        rule → execution → finding → proposal 四段链（链的每一段都有引用依据：
+#        §6 规则表给 rule/finding，docs/00 裁决 5 给 executed=false）。
+# 自定-2 用 dcterms:references 代替 owl:imports（工程取舍，见文件头）。
+# 自定-3 ccp:recordedAt 的取值是**契约快照时刻**（2026-09-28T13:48:33Z），
+#        不是真实规则执行时刻；写死只为让 TBox 个体自洽，真实时刻属运行时数据。
+# X-7    v1.0.3 裁定：increased / decreased 需要窗口基线（observation.delta），
+#        基线缺失时判据 **unjudgeable**（既不成立也不证伪；不得判故障成立；按 WARN
+#        登记 zero-instance-ledger.yaml；严禁静默当 false）。本模块承接「登记」的
+#        类型侧：ccp:unjudgeableJudgment / unjudgeableFor / unjudgeableRule /
+#        unjudgeableReason 四个属性，个体类型复用既有 cco:InformationEntity
+#        （**不新增类**，理由见 §2 末尾注释）。登记个体由规则 CONSTRUCT 在运行时产出
+#        （见 scheme2-onto/rules/r03,r04,r06,r07.rq），静态 TBox 不伪造实例。
+#        ★ 契约的 zero-instance-ledger.yaml 属 shared/model（只读、由 G16
+#        shared/verify/zero_instance_gate.py 管辖）；方案2 侧不写该文件，只提供
+#        可被它引用的 ABox 个体与本文档口径。

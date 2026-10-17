@@ -1,0 +1,403 @@
+schema: fi-carrier-divergences/1
+meta:
+  version: 1.1.0
+  date: '2026-10-13'
+  measured_on: ccf-20261013T125036Z-9f23f5
+  measured_with:
+    ccf: fi-e2e/out/c1fix/cpu_throttle/ccf.json
+    symptom_set:
+    - FM-APP-ENDPOINT-SLOW
+    - FM-HOST-MEM-PRESSURE
+    cause_max_hops: 4
+    note: 两侧同一 snapshotId、同一症状集、同一 maxHops；C1 由 fi.py 前置闸门断言成立后方才测量
+  totals_at_measurement:
+    compared_fault_codes: 12
+    diverging_field_pairs: 9
+    undeclared: 0
+    note: diverging_field_pairs = (码,字段) 对的去重计数；7 条独立 + 2 条派生（CD-08/CD-09）
+  disposition_enum:
+    carrier_native: 载体原生表达力差异（LPG 边属性 vs OWL 关系属性 / 条款挂法不同）——按设计保留，不抹平
+    to_investigate: 尚未定位到根因，已登记待查（不得当已知无害）
+    harness_artifact: 两侧一致性由测试器自身口径造成，非载体属性
+  divergence_set_is_symptom_set_dependent: ★ 分歧集**依赖症状集**：同一对载体，换一组症状码就会暴露新的 (码,字段) 分歧。例：症状集 {FM-APP-ENDPOINT-SLOW, FM-HOST-MEM-PRESSURE} 下 FM-HOST-MEM-PRESSURE 无分歧；而在 cpu_throttle 自产的 6 个症状码下出现 CD-10..CD-13。⇒ 登记须连同**症状集**一起记；「未声明 = 0」只对**该症状集**成立。批次报告必须同时给出「本次症状集」与未声明数。
+  totals_at_measurement_updated:
+    entries: 24
+    note: CD-20..CD-24 由**新启用的 componentInstance 维度**首次扫描即发现（45 行）⇒ CD-19 不是孤例而是**系统性**问题：实例选择差异覆盖 ≥6 个码。
+  entry_semantics: '★ 登记的是「**该 (码,字段) 存在分歧**」这一**事实**，kg/onto 取值是**证据**而非**断言**：实测分歧取值随**症状集**变化。故分类器默认 value_check=kind_only（(码,字段) 已登记即算 declared，并回显当轮实测值）；若某条也想钉住取值，在该条显式写 value_check: exact。真正的回归信号 = 出现**未登记的 (码,字段)**。'
+  resolution_2026_10_13_instfix:
+    what: 实例选择键对齐 + ONTO `determined` 定义修正（已部署并验证）
+    before_after:
+      instance_agreement: 21/35 → 34/35
+      determined_agreement: 31/35 → 32/35
+      onto_top1: 不再是 FM-APP-POOL-EXHAUSTED（该常量是 determined 定义错的产物）
+      ranking_effect: container_pause 例：KG top1 由 sat=0 的常量变为 FM-DB-LOCK-WAIT（sat=1）⇒ 排序修正与实例修正**叠加生效**
+    not_yet_fixed: ★ 诚实边界：`satisfiedClauses>0` **没有改善**（KG 1→1、ONTO 0→0）。两侧现在选同一个实例了，但**该实例上期望码的判据条款确实不成立** ⇒ 问题已从「排序/选择失真」转为**实质问题**：故障是否真的产生了契约判据所要求的条件，或指标证据是否被归到该码的组件实例上。
+entries:
+- id: CD-01
+  code: FM-APP-POOL-EXHAUSTED
+  field: determined
+  kg: false
+  onto: true
+  disposition: to_investigate
+  claim: 同一快照同一症状集下，该码在 ONTO 侧被判「全部条款可判定」，KG 侧判「有 UNK 条款」。
+  evidence:
+    snapshot: ccf-20261013T125036Z-9f23f5
+    kg:
+      determined: false
+      satisfiedClauses: 0
+      totalClauses: 4
+      undeterminedClauses: 3
+    onto:
+      determined: true
+      satisfiedClauses: 0
+      totalClauses: 4
+      undeterminedClauses: 3
+  hypothesis: 该码 4 条判据含 `app.datasource.pending_threads`（该指标在本环境**无采集通道**） 与两条阈值条款；两侧对「无观测条款是否计入 undetermined」的处理不同。 ★ 注意 KG 侧 undeterminedClauses=3 而 determined=false、ONTO 侧同为 3 但 determined=true ⇒ **两侧的 determined 与 undeterminedClauses 之间存在口径不一致**（这才是真问题）。
+  next: 查两侧 determined 的赋值处，统一为「undeterminedClauses == 0 ⇒ determined」
+- id: CD-02
+  code: FM-APP-DS-CONNECT-FAIL
+  field: totalClauses
+  kg: 3
+  onto: 1
+  disposition: carrier_native
+  claim: 两侧该码的判据条款条数不同（3 vs 1）。
+  evidence:
+    snapshot: ccf-20261013T125036Z-9f23f5
+    note: 契约 fault-modes.yaml 该码的 detect.all_of 只有 1 条（connect_fail_total increased）⇒ **ONTO 侧的 1 条与契约一致**，KG 侧多出 2 条
+  hypothesis: KG 侧把识别/排除条款（如排除项 db.instance.up / connect_latency_ms）也并入了 totalClauses， 而 ONTO 侧只计 necessary 条款。契约的 `detect` 只声明 all_of/any_of 主体， 「排除条款是否计入」在契约里**未规定** ⇒ 这属于契约真空，两侧各按自己的读法实现。
+  next: 契约补一句「totalClauses 的计数口径（是否含 exclusion/区分/排除条款）」
+- id: CD-03
+  code: FM-DB-LOCK-WAIT
+  field: totalClauses
+  kg: 2
+  onto: 5
+  disposition: carrier_native
+  claim: 两侧该码的判据条款条数不同（2 vs 5）。
+  evidence:
+    snapshot: ccf-20261013T125036Z-9f23f5
+    note: 契约该码 detect.all_of 为 2 条（wait_event in_enum + xact_age_s > 阈值）⇒ **KG 侧的 2 条与契约一致**
+  hypothesis: ONTO 侧把该码的 5 条判据个体都算进 totalClauses（可能含 tier 展开或区分条款）， KG 侧只算契约 all_of 的 2 条。与 CD-02 同源（计数口径未规定）。
+  next: 与 CD-02 合并处理：契约明确 totalClauses 口径
+- id: CD-04
+  code: FM-APP-HEAP-PRESSURE
+  field: relationPriority
+  kg: causes
+  onto: conditional_causes
+  disposition: carrier_native
+  claim: 同一因果路径上，入边关系类型两侧读法不同（causes vs conditional_causes）。
+  evidence:
+    snapshot: ccf-20261013T125036Z-9f23f5
+  hypothesis: LPG 侧边只有 `CC_CAUSES` / `CC_CONDITIONAL_CAUSES` 两种标签， 而 OWL 侧同一对节点间可能同时存在 `causes` 与 `conditional_causes` 两条关系 ⇒ 「取哪一条」的优先级两侧不同。契约 causal-edges.yaml 的 `relation_enum` 没有规定「多关系并存时取哪条」。
+  next: 契约补「同一对节点多关系并存时的取值优先级」
+- id: CD-05
+  code: FM-HOST-CPU-CONTENTION
+  field: relationPriority
+  kg: causes
+  onto: conditional_causes
+  disposition: carrier_native
+  claim: 同 CD-04，入边关系类型读法不同。
+  evidence:
+    snapshot: ccf-20261013T125036Z-9f23f5
+  hypothesis: 同 CD-04。
+  next: 同 CD-04（合并处理）
+- id: CD-06
+  code: FM-DB-INSTANCE-DOWN
+  field: undeterminedClauses
+  kg: 1
+  onto: 2
+  disposition: to_investigate
+  claim: 同一码的 UNK 条款数不同（1 vs 2），而 totalClauses 相同（2）。
+  evidence:
+    snapshot: ccf-20261013T125036Z-9f23f5
+    kg:
+      totalClauses: 2
+      undeterminedClauses: 1
+    onto:
+      totalClauses: 2
+      undeterminedClauses: 2
+  hypothesis: 该码为 any_of 形式（`db.instance.up is_false` ∨ `db.cluster.switchover_total increased`）。 `db.cluster.switchover_total` 在本环境**无采集通道** ⇒ 该条必为 UNK； 另一条 `db.instance.up` 图上**有**观测 ⇒ 应为可判定。 两侧对该条是否可判定的结论不同 ⇒ 与 CD-01 同源（观测/属性解析差异）。
+  next: 查两侧对 db.instance.up 的观测归属解析
+- id: CD-07
+  code: FM-DB-SESSION-POOL-FULL
+  field: undeterminedClauses
+  kg: 1
+  onto: 2
+  disposition: to_investigate
+  claim: 同一码的 UNK 条款数不同（1 vs 2），而 totalClauses 相同（2）。
+  evidence:
+    snapshot: ccf-20261013T125036Z-9f23f5
+    kg:
+      totalClauses: 2
+      undeterminedClauses: 1
+    onto:
+      totalClauses: 2
+      undeterminedClauses: 2
+  hypothesis: 该码 2 条判据为 `db.pool.session_used_ratio > 阈值` 与 `db.pool.conn_rejected_total increased`。后者在本环境**无采集通道** ⇒ 必为 UNK； 前者图上有观测 ⇒ 应可判定。与 CD-01 / CD-06 同源。
+  next: 与 CD-01/CD-06 合并排查：两侧对同一观测的可判定性判定为何不同
+- id: CD-08
+  code: FM-APP-DS-CONNECT-FAIL
+  field: undeterminedClauses
+  kg: 3
+  onto: 1
+  disposition: carrier_native
+  claim: UNK 条款数不同（3 vs 1）。
+  evidence:
+    snapshot: ccf-20261013T125036Z-9f23f5
+  hypothesis: '**CD-02 的派生后果**：该码 totalClauses 本就不同（KG 3 / ONTO 1）， 条款集合不同 ⇒ UNK 计数必然随之不同。独立排查无意义， 与 CD-02 同源（契约未规定 totalClauses 是否含排除/区分条款）。'
+  next: 随 CD-02 一并处理（契约补计数口径）
+- id: CD-09
+  code: FM-DB-LOCK-WAIT
+  field: undeterminedClauses
+  kg: 2
+  onto: 5
+  disposition: carrier_native
+  claim: UNK 条款数不同（2 vs 5）。
+  evidence:
+    snapshot: ccf-20261013T125036Z-9f23f5
+  hypothesis: '**CD-03 的派生后果**（totalClauses KG 2 / ONTO 5）。同 CD-08。'
+  next: 随 CD-03 一并处理
+- id: CD-10
+  code: FM-HOST-MEM-PRESSURE
+  field: determined
+  kg: true
+  onto: false
+  disposition: to_investigate
+  claim: 同一码在同一快照下，KG 判「全部条款可判定」而 ONTO 判「有 UNK 条款」。
+  evidence:
+    snapshot: ccf-20261013T140032Z-465e2e
+    symptom_set:
+    - FM-APP-ENDPOINT-SLOW
+    - FM-CTR-CPU-THROTTLED
+    - FM-DB-IDLE-IN-TX
+    - FM-DB-ROLLBACK-STORM
+    - FM-DB-SEQ-SCAN
+    - FM-DB-UNUSED-INDEX
+    source_case: fi-e2e/out/suite50/03-cpu_throttle
+  hypothesis: 该码唯一判据是 `host.mem_available_ratio < threshold:mem_available_ratio_severe#critical`；契约该档 = 0.05、部署图经 N1 已核对为 0.05 ⇒ 两侧阈值一致。剩余差异只能来自「观测归属 / 阈值档位解析」：ONTO 侧仍报未标定（见 CD-11）。
+  next: 查 ONTO 侧该码的 tier 解析路径（N1 修的是 tbox 取值，档位解析另有路径）
+- id: CD-11
+  code: FM-HOST-MEM-PRESSURE
+  field: undeterminedClauses
+  kg: 0
+  onto: 1
+  disposition: to_investigate
+  claim: UNK 条款数 0 vs 1（同一码 totalClauses 均为 1）。
+  evidence:
+    snapshot: ccf-20261013T140032Z-465e2e
+    source_case: fi-e2e/out/suite50/03-cpu_throttle
+  hypothesis: CD-10 的同一根因：ONTO 侧把该阈值档判为未标定 ⇒ 该条 UNK；KG 侧判为可判定。
+  next: 与 CD-10 合并排查
+- id: CD-12
+  code: FM-HOST-MEM-PRESSURE
+  field: relationPriority
+  kg: causes
+  onto: conditional_causes
+  disposition: carrier_native
+  claim: 入边关系类型读法不同（同 CD-04/CD-05）。
+  evidence:
+    snapshot: ccf-20261013T140032Z-465e2e
+    source_case: fi-e2e/out/suite50/03-cpu_throttle
+  hypothesis: 同 CD-04：多关系并存时的取值优先级未在契约中规定。
+  next: 随 CD-04 一并处理
+- id: CD-13
+  code: FM-HOST-CPU-CONTENTION
+  field: undeterminedClauses
+  kg: 1
+  onto: 2
+  disposition: to_investigate
+  claim: UNK 条款数 1 vs 2（同一码 totalClauses 均为 2）。
+  evidence:
+    snapshot: ccf-20261013T140032Z-465e2e
+    source_case: fi-e2e/out/suite50/03-cpu_throttle
+  hypothesis: 该码 2 条判据为 `host.load1 > threshold:load1_per_core_light#warning`（契约该档 null = 未标定）与 `host.cpu_usage_ratio > threshold:cpu_usage_ratio_severe#critical`（契约已标定）。两侧对「未标定档」的计数口径不同 ⇒ 与 CD-01/CD-06/CD-07 同源。
+  next: 与 CD-01/CD-06/CD-07 合并：统一「未标定档是否计入 undeterminedClauses」
+- id: CD-14
+  code: FM-APP-HEAP-PRESSURE
+  field: determined
+  kg: null
+  onto: null
+  disposition: to_investigate
+  claim: 同一码该字段两侧不等（determined，3 例）
+  evidence:
+    measured_in: fi-e2e/out/suite50（固定分母 50 条批次）
+    occurrences: 3
+    note: ★ 本批每例的**症状集不同**（判据层按各故障实际检出），故 `kg`/`onto` 未固定单值 —— 取值随症状集变。这也说明分歧集是症状集相关的（见 meta.divergence_set_is_symptom_set_dependent）。
+  hypothesis: 同类根的四种表现之一：① `determined` —— 两侧对「无观测/未标定条款是否算 UNK」的口径不同；② `totalClauses` —— 契约未规定计数是否含排除/区分条款；③ `undeterminedClauses` —— ①②的派生；④ `relationPriority` —— 同一对节点多关系并存时契约未规定取值优先级。
+  next: 按 meta.divergence_set_is_symptom_set_dependent 的口径：需要**固定同一症状集**再测量一次，才能给出可复算的 kg/onto 定值并据此定位根因
+- id: CD-15
+  code: FM-APP-HEAP-PRESSURE
+  field: totalClauses
+  kg: null
+  onto: null
+  disposition: to_investigate
+  claim: 同一码该字段两侧不等（totalClauses，3 例）
+  evidence:
+    measured_in: fi-e2e/out/suite50（固定分母 50 条批次）
+    occurrences: 3
+    note: ★ 本批每例的**症状集不同**（判据层按各故障实际检出），故 `kg`/`onto` 未固定单值 —— 取值随症状集变。这也说明分歧集是症状集相关的（见 meta.divergence_set_is_symptom_set_dependent）。
+  hypothesis: 同类根的四种表现之一：① `determined` —— 两侧对「无观测/未标定条款是否算 UNK」的口径不同；② `totalClauses` —— 契约未规定计数是否含排除/区分条款；③ `undeterminedClauses` —— ①②的派生；④ `relationPriority` —— 同一对节点多关系并存时契约未规定取值优先级。
+  next: 按 meta.divergence_set_is_symptom_set_dependent 的口径：需要**固定同一症状集**再测量一次，才能给出可复算的 kg/onto 定值并据此定位根因
+- id: CD-16
+  code: FM-APP-HEAP-PRESSURE
+  field: undeterminedClauses
+  kg: null
+  onto: null
+  disposition: to_investigate
+  claim: 同一码该字段两侧不等（undeterminedClauses，3 例）
+  evidence:
+    measured_in: fi-e2e/out/suite50（固定分母 50 条批次）
+    occurrences: 3
+    note: ★ 本批每例的**症状集不同**（判据层按各故障实际检出），故 `kg`/`onto` 未固定单值 —— 取值随症状集变。这也说明分歧集是症状集相关的（见 meta.divergence_set_is_symptom_set_dependent）。
+  hypothesis: 同类根的四种表现之一：① `determined` —— 两侧对「无观测/未标定条款是否算 UNK」的口径不同；② `totalClauses` —— 契约未规定计数是否含排除/区分条款；③ `undeterminedClauses` —— ①②的派生；④ `relationPriority` —— 同一对节点多关系并存时契约未规定取值优先级。
+  next: 按 meta.divergence_set_is_symptom_set_dependent 的口径：需要**固定同一症状集**再测量一次，才能给出可复算的 kg/onto 定值并据此定位根因
+- id: CD-17
+  code: FM-DB-LOCK-WAIT
+  field: determined
+  kg: null
+  onto: null
+  disposition: to_investigate
+  claim: 同一码该字段两侧不等（determined，1 例）
+  evidence:
+    measured_in: fi-e2e/out/suite50（固定分母 50 条批次）
+    occurrences: 1
+    note: ★ 本批每例的**症状集不同**（判据层按各故障实际检出），故 `kg`/`onto` 未固定单值 —— 取值随症状集变。这也说明分歧集是症状集相关的（见 meta.divergence_set_is_symptom_set_dependent）。
+  hypothesis: 同类根的四种表现之一：① `determined` —— 两侧对「无观测/未标定条款是否算 UNK」的口径不同；② `totalClauses` —— 契约未规定计数是否含排除/区分条款；③ `undeterminedClauses` —— ①②的派生；④ `relationPriority` —— 同一对节点多关系并存时契约未规定取值优先级。
+  next: 按 meta.divergence_set_is_symptom_set_dependent 的口径：需要**固定同一症状集**再测量一次，才能给出可复算的 kg/onto 定值并据此定位根因
+- id: CD-18
+  code: FM-DB-LOCK-WAIT
+  field: relationPriority
+  kg: null
+  onto: null
+  disposition: carrier_native
+  claim: 同一码该字段两侧不等（relationPriority，1 例）
+  evidence:
+    measured_in: fi-e2e/out/suite50（固定分母 50 条批次）
+    occurrences: 1
+    note: ★ 本批每例的**症状集不同**（判据层按各故障实际检出），故 `kg`/`onto` 未固定单值 —— 取值随症状集变。这也说明分歧集是症状集相关的（见 meta.divergence_set_is_symptom_set_dependent）。
+  hypothesis: 同类根的四种表现之一：① `determined` —— 两侧对「无观测/未标定条款是否算 UNK」的口径不同；② `totalClauses` —— 契约未规定计数是否含排除/区分条款；③ `undeterminedClauses` —— ①②的派生；④ `relationPriority` —— 同一对节点多关系并存时契约未规定取值优先级。
+  next: 按 meta.divergence_set_is_symptom_set_dependent 的口径：需要**固定同一症状集**再测量一次，才能给出可复算的 kg/onto 定值并据此定位根因
+- id: CD-19
+  code: FM-HOST-MEM-PRESSURE
+  field: componentInstance
+  kg: host:build-host
+  onto: host:host-3
+  disposition: to_investigate
+  claim: 两侧给**同一个故障码**选中了**不同的组件实例**；被选实例有无观测，直接决定该码的判据能否求值 —— 这是 ONTO 侧 `satisfiedClauses` 恒为 0、以及 CD-10/CD-11 的**根因**。
+  evidence:
+    snapshot: 批次 suite50 重投 03-cpu_throttle / 06-java_oom_leak 后现场查询
+    symptom_set:
+    - FM-APP-ENDPOINT-SLOW
+    - FM-CTR-CPU-THROTTLED
+    kg:
+      componentInstance: host:build-host
+      satisfiedClauses: 0
+      totalClauses: 1
+      determined: true
+      undeterminedClauses: 0
+    onto:
+      componentInstance: host:host-3
+      satisfiedClauses: 0
+      totalClauses: 1
+      determined: false
+      undeterminedClauses: 1
+    aggregate:
+      note: suite50 全批统计：KG 122 个候选里 **9 个**有 satisfiedClauses>0；ONTO 126 个候选里 **0 个** ⇒ ONTO 侧**从无任何判据条款被满足**。
+      kg_satisfied_candidates: 9
+      kg_candidates: 122
+      onto_satisfied_candidates: 0
+      onto_candidates: 126
+  hypothesis: 两侧的「最优实例」选择在**全部候选 satisfiedClauses 均为 0** 时退化为 tie-break。KG 侧（`cc_tools.py:2196-2218`）的 tie-break 是 `object_id < best.componentInstance`（字典序最小者胜）⇒ 选中 `host:build-host`（该实例**有** `host.mem_available_ratio` 观测）；ONTO 侧的同名选择逻辑 tie-break 不同 ⇒ 选中 `host:host-3`（**无**观测）⇒ 该条款判 UNK。★ 这与 2026-10-13 已修的**排序键**问题属同一类（在「全零并列」时由 tie-break 决定结果），但位置更靠上游、影响更致命：排序只影响名次，实例选择**决定判据能否求值**。
+  next: 把两侧的实例选择键改为「satisfiedClauses 降序 → **undeterminedClauses 升序（宁可选能判定的实例）** → totalClauses 降序 → objectId 升序」并逐字对齐两侧；先离线用两侧的候选响应复核（无需重跑注入），再部署验证。
+  resolved: &id001
+    fixed_by: 2026-10-13 实例选择键对齐（两侧逐字同语义）
+    change: 键由「satisfied↑, id 方向各自不同」改为 「satisfied↓ → undetermined↑ → total↓ → id↑」；同时修正 ONTO 侧 `determined` 的**定义错误**（原 `any(outcome is not None)` ⇒「任一可判即算已判定」；现 `全部条款无 UNK`，与 KG 侧逐字同语义）
+    verification:
+      samples: 重投 4 例（cpu_throttle / java_oom_leak / conn_kill / container_pause），同一 CCF、同一 /cause 入参
+      instance_agreement:
+        before: 21/35
+        after: 34/35
+      determined_agreement:
+        before: 31/35
+        after: 32/35
+    rollback: cc-ops/kg:ci-arm64-v1-pre-instfix / cc-ops/onto:ci-arm64-v1-pre-instfix
+- id: CD-20
+  code: FM-HOST-CPU-CONTENTION
+  field: componentInstance
+  kg: null
+  onto: null
+  disposition: to_investigate
+  claim: 两侧给该码选中了**不同的组件实例**（12 例）。
+  evidence:
+    measured_in: fi-e2e/out/suite50（固定分母 50 条）
+    occurrences: 12
+    note: 取值随快照/症状集变，故不固定单值；与 CD-19 同源
+  hypothesis: 与 CD-19 同一根因：全部候选 `satisfiedClauses` 均为 0 时，「最优实例」的选择退化为 tie-break，两侧 tie-break 不同 ⇒ 选中不同实例 ⇒ 被选实例有无观测决定判据能否求值。★ 本维度是 2026-10-13 新增到差异比对的字段，**首次启用即抓到 45 行**，说明它此前完全没被监控。
+  next: 随 CD-19 一并处理：两侧实例选择键逐字对齐（satisfied↓ → undetermined↑ → total↓ → id↑）
+  resolved: *id001
+- id: CD-21
+  code: FM-DB-INSTANCE-DOWN
+  field: componentInstance
+  kg: null
+  onto: null
+  disposition: to_investigate
+  claim: 两侧给该码选中了**不同的组件实例**（10 例）。
+  evidence:
+    measured_in: fi-e2e/out/suite50（固定分母 50 条）
+    occurrences: 10
+    note: 取值随快照/症状集变，故不固定单值；与 CD-19 同源
+  hypothesis: 与 CD-19 同一根因：全部候选 `satisfiedClauses` 均为 0 时，「最优实例」的选择退化为 tie-break，两侧 tie-break 不同 ⇒ 选中不同实例 ⇒ 被选实例有无观测决定判据能否求值。★ 本维度是 2026-10-13 新增到差异比对的字段，**首次启用即抓到 45 行**，说明它此前完全没被监控。
+  next: 随 CD-19 一并处理：两侧实例选择键逐字对齐（satisfied↓ → undetermined↑ → total↓ → id↑）
+  resolved: *id001
+- id: CD-22
+  code: FM-DB-LOCK-WAIT
+  field: componentInstance
+  kg: null
+  onto: null
+  disposition: to_investigate
+  claim: 两侧给该码选中了**不同的组件实例**（10 例）。
+  evidence:
+    measured_in: fi-e2e/out/suite50（固定分母 50 条）
+    occurrences: 10
+    note: 取值随快照/症状集变，故不固定单值；与 CD-19 同源
+  hypothesis: 与 CD-19 同一根因：全部候选 `satisfiedClauses` 均为 0 时，「最优实例」的选择退化为 tie-break，两侧 tie-break 不同 ⇒ 选中不同实例 ⇒ 被选实例有无观测决定判据能否求值。★ 本维度是 2026-10-13 新增到差异比对的字段，**首次启用即抓到 45 行**，说明它此前完全没被监控。
+  next: 随 CD-19 一并处理：两侧实例选择键逐字对齐（satisfied↓ → undetermined↑ → total↓ → id↑）
+  resolved: *id001
+- id: CD-23
+  code: FM-DB-SESSION-POOL-FULL
+  field: componentInstance
+  kg: null
+  onto: null
+  disposition: to_investigate
+  claim: 两侧给该码选中了**不同的组件实例**（10 例）。
+  evidence:
+    measured_in: fi-e2e/out/suite50（固定分母 50 条）
+    occurrences: 10
+    note: 取值随快照/症状集变，故不固定单值；与 CD-19 同源
+  hypothesis: 与 CD-19 同一根因：全部候选 `satisfiedClauses` 均为 0 时，「最优实例」的选择退化为 tie-break，两侧 tie-break 不同 ⇒ 选中不同实例 ⇒ 被选实例有无观测决定判据能否求值。★ 本维度是 2026-10-13 新增到差异比对的字段，**首次启用即抓到 45 行**，说明它此前完全没被监控。
+  next: 随 CD-19 一并处理：两侧实例选择键逐字对齐（satisfied↓ → undetermined↑ → total↓ → id↑）
+  resolved: *id001
+- id: CD-24
+  code: FM-APP-HEAP-PRESSURE
+  field: componentInstance
+  kg: null
+  onto: null
+  disposition: to_investigate
+  claim: 两侧给该码选中了**不同的组件实例**（3 例）。
+  evidence:
+    measured_in: fi-e2e/out/suite50（固定分母 50 条）
+    occurrences: 3
+    note: 取值随快照/症状集变，故不固定单值；与 CD-19 同源
+  hypothesis: 与 CD-19 同一根因：全部候选 `satisfiedClauses` 均为 0 时，「最优实例」的选择退化为 tie-break，两侧 tie-break 不同 ⇒ 选中不同实例 ⇒ 被选实例有无观测决定判据能否求值。★ 本维度是 2026-10-13 新增到差异比对的字段，**首次启用即抓到 45 行**，说明它此前完全没被监控。
+  next: 随 CD-19 一并处理：两侧实例选择键逐字对齐（satisfied↓ → undetermined↑ → total↓ → id↑）
+  resolved: *id001
+agreed_at_measurement:
+- field: rank
+  note: 12 个码中 10 个名次完全相同；名次差异全部可由 CD-01/CD-03/CD-06 解释
+- field: relationPriority
+  note: '**形态**已统一（两侧都发契约关系名）；取值差异见 CD-04/CD-05'
+- field: undeterminedClauses
+  note: '**类型**已统一（两侧皆整数）；取值差异见 CD-06'
+- field: satisfiedClauses
+  note: 12 个码全部相同（本轮全为 0）
+- field: isLeafRootCandidate
+  note: 未发现分歧

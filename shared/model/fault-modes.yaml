@@ -1,0 +1,451 @@
+# ============================================================================
+# shared/model/fault-modes.yaml  ·  场景契约 · 故障模式目录（中性名）
+# ----------------------------------------------------------------------------
+# 23 条故障模式，覆盖 docs/01 §6 的 7 条跨层故障链。
+#   ★ 2026-10-12 路线B：14 → 18（新增 FM-DB-DEADLOCK / FM-DB-IDLE-IN-TX /
+#     FM-DB-SEQ-SCAN / FM-DB-ROLLBACK-STORM，全部挂现有 F2 链）。
+# ★ 完整故障词表 = 本文件 23 条 detect 模式 ∪ causal-edges.yaml 声明的排除法叶子
+#   （当前 1 条：FM-APP-AUTH-INCOMPATIBLE，detection_mode: exclusion）⇒ 共 24 码。
+#   见 meta.fault_vocabulary（裁定 X-10）。
+# 两方案各自原生实现（KG: :FaultMode 节点 + Cypher 规则；ONTO: 类 + 规则）。
+#
+# 判据（detect）写法约定 —— ★ 两类条件，二选一（v1.0.1 修订）：
+#   (a) 阈值 / 属性引用：{metric, op, operand}
+#       operand 必须为字符串引用，二选一：
+#         · entity_property:<类型>.<属性>          —— 绑到实体自带配置
+#         · threshold:<名称>#<warning|critical>    —— 档位**必填**
+#         ★ 档位不得省略：threshold 条目带 warning / critical 两个档，
+#           「取哪一档」若靠隐含约定，规则语义就不唯一（门禁 G3 会报 ERROR）。
+#           命名约定：`*_light` 档位为 warning，`*_severe` / `*_high` 档位为 critical。
+#       **禁止**在 operand 里写数字字面量（threshold_policy.hardcode_forbidden）。
+#   (b) 符号 / 状态谓词：{metric, predicate}
+#       predicate ∈ meta.predicate_enum。用于「有增长 / 有下降 / 非零 / 为真 /
+#       为假 / 取值在枚举内」这类判定 —— 它们**不是阈值**，因此不受
+#       hardcode_forbidden 约束，也不必为它们造出语义空洞的阈值名。
+#       ★ 依据：contract_gates.py（G3 门禁）发现原条文「规则里不得出现数字字面量」
+#         按字面无法执行 —— 14 条故障模式里有 10 条用 operand: 0（★ 现有 18 条）（形如 delta > 0
+#         =「只要有增长」）或 operand: false。那是符号判定，不是阈值。
+#   (c) 取值枚举：{metric, predicate: in_enum, values: [...]}
+#   (d) 判据分组（★ v1.0.3 裁定 X-5）：detect 可含并列的 all_of / any_of 两组。
+#       组内：all_of 全部成立；any_of 至少一条成立。
+#       组间：**AND**（all_of 组成立 ∧ any_of 组成立）；缺省组视为中性成立。
+#       ★ 禁止组间 OR —— all_of 一旦可被 OR 掉就失去「必需条件」的含义，且单条弱
+#         证据（如仅 uptime 下降）即可触发，与本项目「宁可少报、不可误报」的精度
+#         取向相反。载体侧（方案1 / 方案2 规则体）必须实现本语义。
+#
+# 谓词语义（★ v1.0.3 裁定 X-7）：increased / decreased **需要窗口基线**，判据落在
+#   observation.delta（见 shared/model/ccf.schema.json $defs.observation.delta）。
+#   delta 缺失 ⇒ 该条目 unjudgeable：既不成立也不证伪，按 WARN「待标定/不可机判」
+#   处理并登记 shared/model/zero-instance-ledger.yaml；**严禁静默当作 false**。
+# ============================================================================
+
+meta:
+  version: "1.0.3"
+  contract_of: "01-场景建模与范围定义.md §5.2"
+  severity_enum: [info, warning, major, critical]
+  # ★ 符号 / 状态谓词枚举（写法 (b)）—— 这些判定不含阈值比较
+  predicate_enum: [increased, decreased, non_zero, is_true, is_false, in_enum]
+  # ★ v1.0.3 新增：detect 分组语义（裁定 X-5 —— 原契约未定义，实为契约缺陷）
+  detect_semantics:
+    groups: [all_of, any_of]
+    within_all_of: "组内全部条目成立"
+    within_any_of: "组内至少一条成立"
+    between_groups: "AND —— all_of 组成立 ∧ any_of 组成立"
+    missing_group: "缺省组视为中性成立（不构成否定）"
+    forbidden: "组间 OR（会把 all_of 降级为可选，单条弱证据即可触发）"
+    rationale: "all_of 承载『必需条件』、any_of 承载『任一路径即可的弱证据』；分组仅在组间为 AND 时才有语义。并列写法共 3 处：FM-APP-INSTANCE-RESTART、FM-CTR-NET-UNREACHABLE、FM-DB-INSTANCE-DOWN。"
+  # ★ v1.0.3 新增：符号 / 状态谓词的判定口径（裁定 X-7 —— increased/decreased 无基线）
+  predicate_semantics:
+    increased: "observation.delta 存在且为正"
+    decreased: "observation.delta 存在且为负"
+    non_zero: "observation.value 存在且不等于 0"
+    is_true: "observation.value 为 true"
+    is_false: "observation.value 为 false"
+    in_enum: "observation.valueText ∈ values[]"
+    baseline_required: [increased, decreased]
+    unjudgeable_policy: "delta 缺失 ⇒ 条目 unjudgeable：既不成立也不证伪；规则不得据此判故障成立；按 WARN『待标定/不可机判』处理并登记 zero-instance-ledger.yaml。禁止静默转 false。"
+  # ★ v1.0.3 新增：故障词表的完整边界（裁定 X-10 —— 跨契约引用原先不可解析）
+  fault_vocabulary:
+    detect_modes: 23
+    exclusion_leaf_source: "shared/model/causal-edges.yaml#leaf_root_causes[].subtype"
+    exclusion_leaves: [FM-APP-AUTH-INCOMPATIBLE]
+    total_codes: 24
+    rule: "任何跨契约引用（causal-edges 的 leaf_root_causes.subtype / discriminators.pair[*]、findings.yaml 的规则载体、规则文件头）必须解析到 fault_modes[].code ∪ exclusion_leaves 之一；否则门禁报 ERROR。"
+    note: "exclusion_leaves 的权威仍在 causal-edges.yaml（那里承载 detection_mode: exclusion 与 exclusion_requirements）；此处只声明词表边界，避免同一事实两处定义。"
+
+fault_modes:
+
+  # ===== 应用层 =====
+  - code: FM-APP-POOL-EXHAUSTED
+    name: 应用侧连接池耗尽
+    layer: App
+    component_type: JdbcDataSource
+    severity: critical
+    reversible: true
+    chain: [F1, F2]
+    detect:
+      all_of:
+        - {metric: app.datasource.pending_threads, predicate: non_zero}
+        - {metric: app.datasource.active_connections, op: ">=", operand: "entity_property:JdbcDataSource.maxPoolSize"}
+        - {metric: app.datasource.acquire_wait_ms, op: ">", operand: "threshold:acquire_wait_ms_light#warning"}
+    distinguishing_evidence:
+      - {metric: db.pool.session_used_ratio, op: "<", operand: "threshold:session_used_ratio_light#warning", note: "数据库侧正常 → 定界到应用层"}
+
+  - code: FM-APP-DS-CONNECT-FAIL
+    name: 数据源连接建立失败
+    layer: App
+    component_type: JdbcDataSource
+    severity: critical
+    reversible: false
+    chain: [F5, F6, F7]
+    detect:
+      all_of:
+        - {metric: app.datasource.connect_fail_total, predicate: increased}
+    note: "★ 叶子歧义点：F5(认证)/F6(网络)/F7(切换) 共享此节点，靠子判据区分"
+
+  - code: FM-APP-ENDPOINT-SLOW
+    name: 应用端点响应劣化
+    layer: App
+    component_type: AppEndpoint
+    severity: major
+    reversible: true
+    chain: [F1, F2, F3, F4, F5, F6, F7]
+    detect:
+      all_of:
+        - {metric: app.endpoint.p99_ms, op: ">", operand: "entity_property:AppEndpoint.sloP99Ms"}
+    note: "最上层症状，7 条链的共同出口"
+
+  - code: FM-APP-INSTANCE-RESTART
+    name: 应用实例重启
+    layer: App
+    component_type: AppInstance
+    severity: major
+    reversible: true
+    chain: [F4]
+    detect:
+      any_of:
+        - {metric: app.uptime_s, predicate: decreased}
+      all_of:
+        - {metric: container.restart_total, predicate: increased}
+
+  - code: FM-APP-HEAP-PRESSURE
+    name: 应用堆内存压力
+    layer: App
+    component_type: AppInstance
+    severity: warning
+    reversible: true
+    chain: [F4]
+    detect:
+      all_of:
+        - {metric: app.heap_used_ratio, op: ">", operand: "threshold:heap_used_ratio_light#warning"}
+        - {metric: app.gc_pause_ms, op: ">", operand: "threshold:gc_pause_ms_light#warning"}
+
+  # ===== 承载层 =====
+  - code: FM-CTR-OOM-KILLED
+    name: 容器 OOM 被杀
+    layer: Runtime
+    component_type: Container
+    severity: critical
+    reversible: true
+    chain: [F4]
+    detect:
+      all_of:
+        - {metric: container.oom_kill_total, predicate: increased}
+    note: "F4 唯一证据源；宿主机指标可能完全正常"
+
+  - code: FM-CTR-CPU-THROTTLED
+    name: 容器被 CPU 限流
+    layer: Runtime
+    component_type: Container
+    severity: major
+    reversible: true
+    chain: [F3]
+    detect:
+      all_of:
+        - {metric: container.cpu_throttled_periods, predicate: increased}
+    note: "★ 容器 cpu_usage_ratio 可能不高——只看容器会误判为应用自身慢"
+
+  - code: FM-CTR-NET-UNREACHABLE
+    name: 容器网络不可达
+    layer: Runtime
+    component_type: Container
+    severity: critical
+    reversible: true
+    chain: [F6]
+    detect:
+      any_of:
+        - {metric: app.datasource.connect_latency_ms, op: ">", operand: "entity_property:JdbcDataSource.connectionTimeoutMs"}
+      all_of:
+        - {metric: app.datasource.connect_fail_total, predicate: increased}
+    note: "与 F5 的区分：超时（网络）而非立即失败（认证）"
+
+  - code: FM-HOST-CPU-CONTENTION
+    name: 宿主机 CPU 争抢
+    layer: Runtime
+    component_type: Host
+    severity: major
+    reversible: true
+    chain: [F3]
+    detect:
+      all_of:
+        - {metric: host.load1, op: ">", operand: "threshold:load1_per_core_light#warning"}
+        - {metric: host.cpu_usage_ratio, op: ">", operand: "threshold:cpu_usage_ratio_severe#critical"}
+
+  - code: FM-HOST-MEM-PRESSURE
+    name: 宿主机内存紧张
+    layer: Runtime
+    component_type: Host
+    severity: major
+    reversible: true
+    chain: [F4]
+    detect:
+      all_of:
+        - {metric: host.mem_available_ratio, op: "<", operand: "threshold:mem_available_ratio_severe#critical"}
+
+  # ===== 数据层 =====
+  - code: FM-DB-SLOW-QUERY
+    name: 数据库慢查询
+    layer: Data
+    component_type: Query
+    severity: major
+    reversible: true
+    chain: [F2]
+    detect:
+      all_of:
+        - {metric: db.query.mean_exec_ms, op: ">", operand: "threshold:mean_exec_ms_light#warning"}
+    note: "实测样本：平均 30.8s / TOP 51.9s（upstream-eval 真实数据）"
+
+  - code: FM-DB-SESSION-POOL-FULL
+    name: 数据库会话池耗尽
+    layer: Data
+    component_type: DatabaseSessionPool
+    severity: critical
+    reversible: true
+    chain: [F2]
+    detect:
+      all_of:
+        - {metric: db.pool.session_used_ratio, op: ">", operand: "threshold:session_used_ratio_severe#critical"}
+        - {metric: db.pool.conn_rejected_total, predicate: increased}
+    note: "与 FM-APP-POOL-EXHAUSTED 语义互斥，绝不可混判"
+
+  - code: FM-DB-LOCK-WAIT
+    name: 数据库锁等待
+    layer: Data
+    component_type: Session
+    severity: major
+    reversible: true
+    chain: [F2]
+    detect:
+      all_of:
+        - {metric: db.session.wait_event, predicate: in_enum, values: [LockMgrLock, transactionid, relation, tuple]}
+        - {metric: db.session.xact_age_s, op: ">", operand: "threshold:xact_age_s_light#warning"}
+
+  - code: FM-DB-INSTANCE-DOWN
+    name: 数据库实例故障/切换
+    layer: Data
+    component_type: GaussDBInstance
+    severity: critical
+    reversible: true
+    chain: [F7]
+    detect:
+      any_of:
+        - {metric: db.instance.up, predicate: is_false}
+        - {metric: db.cluster.switchover_total, predicate: increased}
+
+  # ===== 数据层 · ★ 2026-10-12 P0.5/路线B 新增（4 码）=====
+  #   为什么能加：P0-A 把这四个指标的证据补进了 CCF，P0.5 又给累计量补了窗口 delta
+  #   ⇒ `predicate: increased` 由 unjudgeable 变为**可机判**。
+  #   ★ 四条的判据**全部只用 increased**，不引入任何新阈值（threshold_policy 零硬编码）。
+  #   ★ 全部挂在**现有 F2 链**上：不新开链 ⇒ 不增加规则文件数（门禁 C4.0 锁 7）。
+  #   ★ 与现有码的分工（避免语义重叠）：
+  #       FM-DB-LOCK-WAIT   = 会话**在等**锁（wait_event/xact_age）
+  #       FM-DB-IDLE-IN-TX  = 会话**持**锁不提交（idle in transaction）——互补，不可互推
+  #       FM-DB-SLOW-QUERY  = 症状（执行时间长）
+  #       FM-DB-SEQ-SCAN    = 成因（索引失效 ⇒ 顺序扫描）
+  #       FM-DB-DEADLOCK / FM-DB-ROLLBACK-STORM = 事务级失败（死锁 abort / 回滚）
+  #   对应 cardsim 的注入故障：sql_deadlock / sql_idle_in_tx / sql_full_scan+sql_fuzzy_like /
+  #       biz_unique_conflict（见被测系统仓 cardsim 的 RUNTIME-INVENTORY.md 与 FAULTS.md）。
+  - code: FM-DB-DEADLOCK
+    name: 数据库死锁
+    layer: Data
+    component_type: GaussDBCluster
+    severity: critical
+    reversible: true
+    chain: [F2]
+    detect:
+      all_of:
+        - {metric: db.cluster.deadlocks, predicate: increased}
+    note: "累计量（pg_stat_database.deadlocks）⇒ 必须靠采集侧窗口 delta 判定（P0.5）。死于死锁的事务被 DB 主动 abort，会连带抬升回滚率。"
+
+  - code: FM-DB-IDLE-IN-TX
+    name: 持锁不提交堆积（idle in transaction）
+    layer: Data
+    component_type: GaussDBInstance
+    severity: major
+    reversible: true
+    chain: [F2]
+    detect:
+      all_of:
+        - {metric: db.instance.idle_in_xact, predicate: increased}
+    note: "与 FM-DB-LOCK-WAIT 互补：本条是**持有**锁却不提交（可能是长事务/慢处理/忘记提交），后者是**等待**锁。漏提交会把后续竞争者拖进锁等待链。"
+
+  - code: FM-DB-SEQ-SCAN
+    name: 全表扫描（索引失效）
+    layer: Data
+    component_type: Table
+    severity: major
+    reversible: true
+    chain: [F2]
+    detect:
+      all_of:
+        - {metric: db.table.seq_scan, predicate: increased}
+    note: "逐表判定（P0.5 的 delta 键含 obj_id）。对应注入：函数包裹条件 / 前置通配 LIKE。是 FM-DB-SLOW-QUERY 的**成因**之一，但不等价：慢查询也可能源于锁等待或网络。"
+
+  - code: FM-DB-ROLLBACK-STORM
+    name: 事务回滚风暴
+    layer: Data
+    component_type: GaussDBCluster
+    severity: major
+    reversible: true
+    chain: [F2]
+    detect:
+      all_of:
+        - {metric: db.cluster.xact_rollback, predicate: increased}
+    note: "累计量 ⇒ 靠窗口 delta。对应注入：固定幂等键的唯一键冲突（biz_unique_conflict）。与 FM-DB-DEADLOCK 的区别：死锁只是回滚的**一种**成因，纯冲突回滚不产生 deadlock 计数。"
+
+
+  - code: FM-HOST-DISK-FULL
+    name: 宿主磁盘空间耗尽
+    layer: Runtime
+    component_type: Host
+    severity: critical
+    reversible: true
+    chain: [F4]
+    detect:
+      all_of:
+        - {metric: host.fs_max_used_pct, op: ">", operand: threshold:fs_usage_pct_light#warning}
+    note: "★ P0.8 新增（数据来自 P0.7）：`host.fs_max_used_pct` = 各挂载点使用率最大值。**唯一的真阈值**（fs_usage_pct_light），rationale 里已如实声明它是政策阈值而非统计标定。挂 F4（宿主资源耗尽）—— 与 FM-HOST-MEM-PRESSURE 同族。"
+
+  - code: FM-HOST-DISK-IO-ERROR
+    name: 宿主磁盘 I/O 错误
+    layer: Runtime
+    component_type: Host
+    severity: critical
+    reversible: true
+    chain: [F4]
+    detect:
+      all_of:
+        - {metric: host.disk_io_errors_total, predicate: non_zero}
+    note: "★ P0.8 新增。★ **判据语义要看清**：该指标是**累计量**（自启动以来的 I/O 错误数），`non_zero` 表示『**曾经**出现过 I/O 错误』，**不是**『本窗口正在出错』。严格的窗口判据需 os 探针补窗口 delta（未做，属已知欠账）。★ 本条同时修掉一个『只在不出事时上报』的缺陷（原实现对出错时才不发 node 级事实）。"
+
+  - code: FM-HOST-NET-IFACE-DOWN
+    name: 宿主网卡 down
+    layer: Runtime
+    component_type: Host
+    severity: critical
+    reversible: true
+    chain: [F6]
+    detect:
+      all_of:
+        - {metric: host.net_iface_down_count, predicate: non_zero}
+    note: "★ P0.8 新增。`non_zero` = 至少一块纳管网卡不是 up。挂 F6（网络）——与 FM-CTR-NET-UNREACHABLE 的区别：那是**容器**到 DB 不可达，这是**宿主网卡本身** down。"
+
+  - code: FM-DB-REPLICATION-LAG
+    name: 主备复制延迟/中断
+    layer: Data
+    component_type: GaussDBCluster
+    severity: critical
+    reversible: true
+    chain: [F7]
+    detect:
+      all_of:
+        - {metric: db.cluster.replication_not_streaming_count, predicate: non_zero}
+    note: "★ P0.8 新增。判据用 `replication_not_streaming_count non_zero`（任一 sender 不在 Streaming）而**不用** lag 字节阈值 —— 后者需要一条我现在无法诚实标定的阈值（只有 2 个健康样本）。挂 F7（DB 实例故障/切换）—— 与 FM-DB-INSTANCE-DOWN 同链，主备中断是其前兆。"
+
+  - code: FM-DB-UNUSED-INDEX
+    name: 索引未使用（索引失效）
+    layer: Data
+    component_type: Table
+    severity: major
+    reversible: true
+    chain: [F2]
+    detect:
+      all_of:
+        - {metric: db.table.unused_index_count, predicate: non_zero}
+    note: "★ P0.8 新增。`non_zero` = 该表存在从未被扫描过的索引。与 FM-DB-SEQ-SCAN 互补：那条看**顺序扫描增多**（表象），这条看**索引建了没用**（成因）。★ 注意：idx_scan=0 也见于『表刚建』或『统计已重置』⇒ 需结合 uptime 排除，当前未做。"
+
+# ---------------------------------------------------------------------------
+# 阈值个体（threshold_policy：必须带 rationale，必须有来源）
+# warning / critical 两档，单位与对应指标一致。
+# 说明：本表数值为**待标定**占位，必须在 T1 期用真实值域标定后写入。
+#       直接沿用既有项目数值是错的——实测显示大量旧阈值与生产值域相差 70×-700×。
+# ---------------------------------------------------------------------------
+thresholds:
+  - name: acquire_wait_ms_light
+    metric: app.datasource.acquire_wait_ms
+    warning: 520
+    critical: 1560
+    rationale: "★ 2026-10-12 标定（原两档均为 null ⇒ FM-APP-POOL-EXHAUSTED 不可机判）。样本 = 真机历史日志全部轮次的 `连接池获取 … 耗时=Xms`，n=91，**按应用自身判据分层**剔除启动填充：INFO 层 n=64（p50=1 / p90=207 / p95=260 / max=4695 ms），WARN『连接池获取偏慢』层 n=27（min=532 / p50=671 / max=4914 ms）。健康期 P95=260 × k=2.0 ⇒ warning=520；warning × k_crit=3.0 ⇒ critical=1560。★ 交叉验证：应用自判『偏慢』的最小耗时 = 532 ms，与统计法 520 ms 相差仅 2.3% ⇒ 两种独立方法吻合。★ 单位 ms，来源见 tmp/_p0a_backup 与本轮报告。"
+
+  - name: session_used_ratio_light
+    metric: db.pool.session_used_ratio
+    warning: 0.5
+    critical: 1
+    rationale: "按用户裁定 ①(A)：健康期 P95=0.00092（n=11；来源 docs/02 §15（11 有效样本；时窗 2026-10-09T12:54:58.818088 … 2026-10-09T12:59:06.120200；采集层 旧载体机:8187，启动命令取自 shared/deploy/port/collect-layer.manifest.yaml））× k=2.0 ⇒ 0.00184；域下限=0.5（健康期近空闲（P95=0.00092）⇒ 纯 P95×2=0.0018 无运维意义；0.5 = 「会话池已用一半」这一**运维上有意义的界线**（★ 声明值，非实测））；域上限=1（metrics.yaml#range[1]）⇒ warning=0.5；×k_crit=3.0 ⇒ critical=1"
+  - name: session_used_ratio_severe
+    metric: db.pool.session_used_ratio
+    warning: 0.8
+    critical: 1
+    rationale: "按用户裁定 ①(A)：健康期 P95=0.00092（n=11；来源 docs/02 §15（11 有效样本；时窗 2026-10-09T12:54:58.818088 … 2026-10-09T12:59:06.120200；采集层 旧载体机:8187，启动命令取自 shared/deploy/port/collect-layer.manifest.yaml））× k=2.0 ⇒ 0.00184；域下限=0.8（★ 与 light 分开声明：若 severe 也用 0.5，则 `critical = warning×3` 会被域上限 1.0 封顶 ⇒ light/severe 两档**取值相同**（X19 也会失去区分度）。0.8 = 「池只剩两成余量」（★ 声明值））；域上限=1（metrics.yaml#range[1]）⇒ warning=0.8；×k_crit=3.0 ⇒ critical=1"
+  - name: heap_used_ratio_light
+    metric: app.heap_used_ratio
+    warning: 0.75
+    critical: 0.90
+    rationale: "待标定：JVM 常规经验值，需实测 GC 行为后定档"
+  - name: gc_pause_ms_light
+    metric: app.gc_pause_ms
+    warning: 200
+    critical: 1000
+    rationale: "待标定"
+  - name: load1_per_core_light
+    metric: host.load1
+    normalize_by: cpuCores
+    warning: null
+    critical: null
+    rationale: "★ 用户裁定 ②(A)：**改为按 Host.cpuCores 归一化**（判据比较 `host.load1 / Host.cpuCores`，不再是绝对值）。rationale 原文「load1 > cpuCores * k」的矛盾由此消解：归一化写在契约（本条的 normalize_by）＋判据实现里，detect 子句仍只引用阈值名。★ **当前不可机判**：基线里带 host.load1 的对象是 host-dn_6001/6002，而**它们的 attrs 没有 cpuCores**（只有 node-01 有 64）⇒ 求值器按 UNK 处理（宁缺勿造，不得当 false）。★ 标定被同一原因阻塞：无 per-core 观测 ⇒ 两档保持 null。★ 需要采集层为 os 层主机采集核数（见 docs/10 §7）。"
+  - name: cpu_usage_ratio_severe
+    metric: host.cpu_usage_ratio
+    warning: 0.2284
+    critical: 0.6852
+    rationale: "按用户裁定 ①(A)：健康期 P95=0.1142（n=11；来源 docs/02 §15（11 有效样本；时窗 2026-10-09T12:54:58.818088 … 2026-10-09T12:59:06.120200；采集层 旧载体机:8187，启动命令取自 shared/deploy/port/collect-layer.manifest.yaml））× k=2.0 ⇒ 0.2284；域下限=0.0（P95×2=0.2284 本身有意义（不设下限）；上限取 metrics.yaml#range[1]=1.0）；域上限=1（metrics.yaml#range[1]）⇒ warning=0.2284；×k_crit=3.0 ⇒ critical=0.6852"
+  - name: mem_available_ratio_severe
+    metric: host.mem_available_ratio
+    warning: 0.15
+    critical: 0.05
+    rationale: "待标定"
+  - name: mean_exec_ms_light
+    metric: db.query.mean_exec_ms
+    warning: 1000
+    critical: 10000
+    rationale: "待标定：既有项目档位 mean_exec_time_ms_light = (100, 1000)ms，但实测慢 SQL 平均 30.8s，档位需重设"
+  - name: dead_tuple_ratio_light
+    metric: db.table.dead_tuple_ratio
+    warning: 0.1
+    critical: 0.3
+    rationale: "按用户裁定 ①(A)：健康期 P95=0.0（n=11；来源 docs/02 §15（11 有效样本；时窗 2026-10-09T12:54:58.818088 … 2026-10-09T12:59:06.120200；采集层 旧载体机:8187，启动命令取自 shared/deploy/port/collect-layer.manifest.yaml））× k=2.0 ⇒ 0.0；域下限=0.1（健康期恒为 0 ⇒ P95×2=0 会**每次触发**；0.1 = 业界常用的死元组比例注意线（★ 声明值，非实测））；域上限=1（metrics.yaml#range[1]）⇒ warning=0.1；×k_crit=3.0 ⇒ critical=0.3"
+  - name: xact_age_s_light
+    metric: db.session.xact_age_s
+    warning: 300
+    critical: 900
+    rationale: "待标定"
+  - name: qps_high
+    metric: app.endpoint.qps
+    warning: null
+    critical: null
+    rationale: "待标定：需应用侧真实 QPS 值域。用于 causal-edges.yaml 的 E6 条件边（高并发触发正反馈环）。★ 该条在 v1.0.0 时被 E6 引用但本表未定义——属悬空引用，由 contract_gates.py（G3）发现，v1.0.1 补齐"
+
+  - name: fs_usage_pct_light
+    metric: host.fs_max_used_pct
+    warning: 80
+    critical: 90
+    rationale: "★ 2026-10-13 P0.8 新增。★ **如实声明：这是「政策阈值」，不是统计标定** —— 与同族的 session_used_ratio_light（0.5/1.0）一样，容量的可用性边界由运维惯例给出，而非由观测分布推出（磁盘使用率健康态本就随业务增长单调上升，P95×k 无意义）。取值依据：① 80/90 = 容量告警的工程惯例；② 留 10% 写入余量给 WAL/临时文件（磁盘写满会直接让实例不可写）；③ 实测本集群最小余量 = 100% − 32.0% = **68%**（当前 3 个 DB 节点 + 应用节点的 fs_max_used_pct 最大值为 32.0%）⇒ 80% 距现状有充足空间，不会误报。★ 待 T1 期按真实容量增长曲线重新标定。"

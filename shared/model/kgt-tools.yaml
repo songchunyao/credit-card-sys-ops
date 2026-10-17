@@ -1,0 +1,441 @@
+# =============================================================================
+# KG-T 工具面契约（方案3：知识图谱直引 + LLM）
+# =============================================================================
+# 目的：把 docs/09-方案3设计（知识图谱直引+LLM）.md §2/§3 的接口规格落成**机读**形式，
+#       供 F5 门禁（shared/verify/f5_kgt_gate.py）与施工期 schema 校验共同消费。
+#
+# ★ 与 shared/model/info-products.yaml 的分工：
+#     info-products.yaml  回答「每个实验组能不能拿到每类信息」——是 C3/G8 的依据；
+#     本文件              回答「KG-T 这 5 个工具长什么样」——是 F5 与实现的依据。
+#   两者必须一致：本文件 access_tools 与 info-products.yaml#access.KG-T.tools 逐字相同。
+#
+# ★ 本文件不是生成器（docs/00 裁决 3）：它描述契约，不生成实现。
+# =============================================================================
+meta:
+  contract: kgt-tools
+  version: 1.1.0
+  date: 2026-10-04
+  owner_doc: docs/09-方案3设计（知识图谱直引+LLM）.md
+  related:
+    - "docs/00 裁决 9（方案3 / KG-T）"
+    - "docs/00 裁决 10（提示词变体）"
+    - "docs/09 §3 知识消费契约"
+    - "docs/05 §2.5 KG-T 独立工具面"
+    - "shared/model/info-products.yaml §二 access.KG-T"
+    - "docs/06 §5 门禁 G8"
+    - "docs/00 裁决 12（KG-T-free：Neo4j 插件直连）"
+    - "docs/09 §16 KG-T-free 插件直连变体"
+
+# -----------------------------------------------------------------------------
+# 一、组与部署
+# -----------------------------------------------------------------------------
+arms:
+  KG-T:
+    in_main_comparison: true
+    service_module: scheme1-kg/service/topology_reader.py
+    service_port: 8303
+    dify_app: cc-kgt-agent
+    dify_tool_provider: cc-kgt-tools
+    audit_chain: service-side-per-call   # ★ 审计链由知识服务侧逐调用落盘，不是 Agent 工具
+  KG-T-dyn:
+    in_main_comparison: false            # ★ 违反 C1（单一输入），单列报告
+    service_module: scheme1-kg/service/topology_reader.py
+    # ★ 2026-10-08（U-N 裁定 = 选项 A「独立端口」；用户裁定）：
+    #   `TBD` → **8305**。理由与代价：`cc_tools_kgt.py` 的臂开关是**进程级**的
+    #   （`--arm KG-T` 模式下 `/collect` 被 deny、工具面 5 个），同一进程无法同时服务两臂
+    #   ⇒ 唯一不动服务实现的路径就是**第二个实例**（`--arm KG-T-dyn`，6 个工具）。
+    #   载体侧本已预留 `cc_tools_kgt.py:DYN_PROVISIONAL_PORT = 8305`，本行即把它升为契约值。
+    #   ★ 该实例必须显式分设 PID/日志/审计三路径，否则会与主臂**同名**：
+    #     `CC_KGT_PIDFILE=..._dyn.pid` / `CC_KGT_LOG=..._dyn.log` /
+    #     `CC_KGT_AUDIT_LOG=..._dyn_audit.jsonl`（后者尤其关键 —— 共用一个审计链会污染
+    #     主臂的平面 2 判据）。
+    service_port: 8305
+    dify_app: cc-kgt-dyn-agent
+    dify_tool_provider: cc-kgt-tools
+    note: "在主实验组 4 工具之上追加 collect_now；collect_now 允许动态补采"
+
+  KG-T-free:
+    in_main_comparison: true
+    carrier: neo4j-shared-with-KG-Q-KG-R-KG-T   # ★ 同一实例、同一张图（docs/03 §1）
+    access_mode: plugin-direct                  # ★ 自由查询（与 KG-T 的 preset-interface 相对）
+    attribution: llm                            # ★ 归因主体 = LLM；工具面不含 cc_cause
+    service_port: null                          # ★ 完全不经 :8303 门面（用户 m01621 的字面要求）
+    dify_app: cc-kgt-free-agent
+    dify_plugin:
+      provider_id: cc-ops/neo4j_cypher_query/neo4j_query  # ★ R-50 本地 fork（官方 = nikola_milosevic/neo4j_query）
+      provider_type: plugin
+      plugin_name: neo4j_cypher_query
+      plugin_version: 0.1.0
+      plugin_verified: false                    # ★ fork manifest.yaml 自述 verified: false（未签名社区包）
+      # ★ 真机安装事实（Dify 1.17 / 租户 6dbcf416-0713-48d6-b4f7-a4583bff18de / 主机 192.0.2.10）
+      installation_status: installed            # ★ 与 fork_provenance.installation_status 必须相等（E13-i 断言）
+      plugin_unique_identifier: cc-ops/neo4j_cypher_query:0.1.0@1b04ef281638ec88b1002c4997c0e8b7d8b4efe8dbb06fe4536c79378372d9f1
+      installation_id: 01a0eb3f-744a-7559-843b-09243b199714
+      installation_source: package              # ★ 上传 difypkg 安装（非 marketplace）
+      credential:                               # ★ fork 专用凭据（与市场插件的 cc-kgt-neo4j 并存）
+        name: cc-kgt-neo4j-fork
+        id: bd254b70-753b-4e0c-b5e2-8870dfd8eb63
+        credential_type: api-key
+        # ★ R-47：口令只登记来源与形态，绝不落任何字面量（含掩码字面量）
+        password_source: "远端 /opt/upstream-agent/.env 的 NEO4J_AUTH（只读取得；值不落盘、不入报告）"
+        neo4j_url: bolt://192.0.2.10:7688
+        neo4j_username: neo4j
+      bound_app:
+        name: cc-kgt-free-agent
+        uuid: 8c3dbcc4-1ddf-4508-b2f3-36f8a5be6899
+        tool_name: neo4j_query                    # ★ 不变：check_fairness.py:1227-1253 按 tool_name 集合判等
+      package: dist/cc-ops-neo4j_cypher_query-0.1.0.difypkg  # 离线打包/导入（银行内网无 marketplace）
+      package_bytes: 23064
+      package_sha256: 27904620eecc56eb36d7546ffad7b52a30648a2fefe66442e45e14b9be5d5cfc
+      package_build_script: shared/deploy/plugins/neo4j_cypher_query/build_pkg.py
+      runner: { language: python, version: "3.12" }
+      resource_memory_bytes: 268435456          # 256 MiB（manifest.resource.memory）
+      read_only_role_required: true             # ★ Neo4j 侧只读账号（用户 m01643 确认可提供）
+      allow_write_queries_default: false        # ★ 插件默认即只读
+      # ★ 真机回读快照（2026-09-29，只读 Console API；不是推断）
+      #   本块是「实现/声明/真机」三腿中的**真机腿的冻结副本**：E13-i 断言它与声明面逐字相等，
+      #   与 --dify-readback 的现场回读互为交叉验证（现场回读是权威，本块是留痕）。
+      machine_readback:
+        plugin_unique_identifier: cc-ops/neo4j_cypher_query:0.1.0@1b04ef281638ec88b1002c4997c0e8b7d8b4efe8dbb06fe4536c79378372d9f1
+        installation_id: 01a0eb3f-744a-7559-843b-09243b199714
+        provider_id: cc-ops/neo4j_cypher_query/neo4j_query
+        plugin_version: 0.1.0
+        tool_name: neo4j_query
+        param_form: { database: form, query: llm, parameters: llm, max_records: form, allow_write_queries: form }
+        query_required: true
+        max_records_default: 1000
+        allow_write_queries_default: false
+        credential_name: cc-kgt-neo4j-fork
+        credential_id: bd254b70-753b-4e0c-b5e2-8870dfd8eb63
+        observed_at_utc: "2026-09-29"
+        evidence: tmp/m4_w9_evidence/
+      # ★ R-50：fork 溯源 + 与官方包的**身份面**偏离（显式登记；实体面逐字对齐）
+      #   门禁（shared/verify/f5_kgt_gate.py E13-a/b/i/j）按本块**声明驱动**：
+      #   凡与官方值不同的字段必须在此逐条登记 official/declared/reason，无声漂移仍 FAIL。
+      fork_provenance:
+        installation_status: installed                # ★ 与 dify_plugin.installation_status 一致（原为 blocked_signature_gate）
+        # ★ 如实登记：安装时**一次性**放宽签名闸，装后已立刻恢复原值。
+        #   这不是可复现的交付步骤，只是历史事实（不得据此写脚本复现）。
+        signature_gate_note: >-
+          本地构建的 .difypkg 未签名（签名放在 zip comment，Dify 私钥不在本机，本版本无工作区自签名能力），
+          而 Dify 1.17 的 plugin_daemon 置 FORCE_VERIFYING_SIGNATURE=true ⇒ 直接上传被拒
+          （HTTP 400 bad signature）。落地方案：以**一次性 shell 环境变量**临时放宽该闸完成安装
+          （cd /opt/dify/docker && FORCE_VERIFYING_SIGNATURE=false docker compose up -d --no-deps --force-recreate plugin_daemon），
+          **`.env` 文件未改、其余 14 个容器未动**；安装完成后该变量**立即恢复为 true**，并已真机回读确认。
+          /app/storage 为 bind mount ⇒ 已装 fork 仍在盘上。★ 一次性部署动作，不是交付物，不得写脚本复现。
+        install_blocked_before_relaxation: >-
+          【历史，已被上一字段取代，保留为留痕】放宽前：真机 upload/pkg = HTTP 400 bad signature，
+          彼时「声明面 = fork」与「真机已装 = 市场插件 0.2.0」不一致；该不一致由 W9 的重绑 + 本次安装消除。
+        upstream_unique_identifier: nikola_milosevic/neo4j_query:0.2.0@99ca3d403ae707f83e81992b68354a8aabf5ad5bda1b0e02e5aaaeb763ecea38
+        upstream_pkg_sha256: b0f457e6c5404321dbd86cd19f689c7292d4a3cd66c5ce191ffecea68dd12f41
+        upstream_source_digest: 296a38b70700c26970fbce4e4db2691df44068cdad0f7e95a9a2419daf4e05fa
+        source_tree: shared/deploy/plugins/neo4j_cypher_query/src
+        byte_identical_files: [main.py, provider/neo4j_query.py, tools/neo4j_query.py]
+        deviations_from_official:
+          - field: provider_id
+            official: nikola_milosevic/neo4j_query
+            declared: cc-ops/neo4j_cypher_query/neo4j_query
+            reason: >-
+              R-50：官方 0.2.0 的五个入参全为 form: form ⇒ query 永不进 LLM 工具 schema
+              （core/tools/__base/tool.py:188），Agent 侧静默丢失该工具；换身份才能与市场插件并存。
+          - field: plugin_version
+            official: 0.2.0
+            declared: 0.1.0
+            reason: "R-50：fork 自身版本号，避免与上游 0.2.0 混淆。"
+          - field: param_form.query
+            official: form
+            declared: llm
+            reason: >-
+              ★ fork 的唯一实质改动：query 交回 LLM 可见（官方形态 required 且无 default ⇒
+              必触发 core/plugin/entities/parameters.py:255 抛点，插件整体不可用）。
+          - field: param_form.parameters
+            official: form
+            declared: llm
+            reason: "R-50 选项 A 的字面要求（query 与可选 parameters 转 llm）；其余三参数保持 form。"
+        unchanged_vs_official: [tool_name, params_name_type_required, param_form.database,
+                                param_form.max_records, param_form.allow_write_queries,
+                                query_max_chars, max_records_default, write_guard_impl]
+    audit_chain: neo4j-query-log                # ★ 弱于 KG-T：插件不回传 queryText/elapsedMs/rowCount
+    why_single_tool: >
+      ★ 用户 m01621 原话「不通过 8303 的服务门面」。get_facts / get_metrics 等都是 :8303 上的
+      端点，故一律不得出现在本组。IP-FACT 只能经图谱里的 :Evidence 节点获得（见 docs/03 Q08），
+      ⇒ 本组对 :Evidence 的投影有硬依赖（R16 / M1.5c）。
+
+# -----------------------------------------------------------------------------
+# 二、工具定义（4 个；★ 主实验组一个不多、一个不少）
+# -----------------------------------------------------------------------------
+tools:
+  - tool_name: get_object_topology
+    method: post
+    path: /topology/object
+    summary: "取对象关系拓扑子图（四层：App / Runtime / Data）"
+    request:
+      type: object
+      properties:
+        scope:
+          type: string
+          description: "对象 id，或层名（App / Runtime / Data），或 * 表示全图"
+      required: [scope]
+    response:
+      type: object
+      properties:
+        nodes: { type: array }
+        edges: { type: array }
+        truncated: { type: boolean }
+        hopsUsed: { type: integer }
+      required: [nodes, edges, truncated]
+    defaults:
+      maxHopDepth: 9
+    hard_limits:
+      maxHopDepth: 9
+    # ★ M1.5c 口径说明（由 contract_gates.py 的 X16 机检）：
+    #   `topology.yaml#topology_facts.max_hop_depth` 在 M1.5c 后是 **10**——那是
+    #   「9 跳业务链 hop_path + 1 跳（Table → 其 `:CC_Evidence` 节点）」，含派生注释边。
+    #   对象关系拓扑的遍历**只走业务链**（= len(hop_path) - 1 = 9 跳）：`:CC_HAS_EVIDENCE`
+    #   是 **annotation 边**，把它算进深度会让「证据」变成「业务对象」，并把 167 个证据
+    #   节点整个灌进工具返回。故本工具的上限恒等于 hop_path 的业务跳数，与
+    #   `max_hop_depth` 不是同一个数——两个口径都在契约里，X16 负责禁止二者漂移。
+    traversal_scope:
+      includes_relations: business_only
+      excludes_derived_relations: [HAS_EVIDENCE]
+      basis: "topology.yaml#topology_facts.hop_path（9 跳业务链）"
+    must_reach_paths:
+      - "CreditCardApp/AppInstance -> Container -> Host"
+      - "CreditCardApp/AppInstance -> JdbcDataSource -> GaussDBCluster -> GaussDBInstance -> ConnectionPool -> Session -> Query -> Table"
+
+  - tool_name: get_fault_topology
+    method: post
+    path: /topology/fault
+    summary: "取故障因果子图（有界 BFS，★ 禁止 Cypher 变长路径）"
+    request:
+      type: object
+      properties:
+        code:
+          type: string
+          description: "故障模式码，如 FM-DB-SLOW-QUERY"
+        max_hops:
+          type: integer
+          description: "展开深度；默认 4，服务端硬上限 4（夹取，不报错）"
+      required: [code]
+    response:
+      type: object
+      properties:
+        root: { type: string }
+        nodes: { type: array }
+        edges: { type: array }
+        depths: { type: object }
+        cyclesEncountered: { type: array }
+        truncated: { type: boolean }
+      required: [root, nodes, edges, truncated]
+    defaults:
+      max_hops: 4
+    hard_limits:
+      max_hops: 4
+    algorithm:
+      kind: bounded-bfs
+      # ★ 三条不可让步的性质（docs/09 §5.2）
+      rules:
+        - "visited 集去环；重复访问只记入 cyclesEncountered，不继续展开"
+        - "relates_to 边原样返回，★ 但绝不沿它继续展开"
+        - "depth > max_hops 立即停止；出参必须回显 truncated"
+      forbidden_implementations:
+        - "MATCH p=(a)-[:CAUSES*1..n]->(b)"
+        - "任意形式的变长路径枚举"
+      rationale: >
+        因果图成环（shared/model/causal-edges.yaml#meta.cycles 已声明 **1 个有向环** = FM-APP-POOL-EXHAUSTED ↔ FM-APP-ENDPOINT-SLOW，即 E5 + E6），
+        变长路径在环上会路径爆炸；且 LPG 不感知公理，声明 owl:TransitiveProperty 等于没声明。
+    relation_passthrough: [causes, conditional_causes, relates_to]
+
+  - tool_name: get_metrics
+    method: post
+    path: /metrics
+    summary: "取指定对象的指标读数"
+    request:
+      type: object
+      properties:
+        objects: { type: array }
+      required: [objects]
+    response:
+      type: array
+      item_fields: [object, metric_code, value, unit, ts, threshold_ref, source]
+    discipline:
+      - "★ 只返回 threshold_ref 引用，不返回阈值数字（门禁 G3：零数字字面量）"
+      - "字段与 shared/model/metrics.yaml 逐一对齐"
+
+  - tool_name: get_facts
+    method: post
+    path: /facts
+    summary: "取 CCF 原始事实记录（支撑 C5 事实有据与 false_claim 判定）"
+    request:
+      type: object
+      properties:
+        objectType: { type: string }
+        objectId: { type: string }
+        metricCodes: { type: array }
+        # ★ R-54 / A1（2026-10-07）：原为 `type: object`，但 Dify 的 type_alias 把 object
+        #   折成 string 给模型看 ⇒ 模型只能发字符串、服务端却要 object ⇒ 必 400。
+        #   改为 string + 显式 JSON 对象文法（与 read_facts.scope 同一处置；根因见 tmp/_m5_wall_report.md §2）。
+        timeWindow: { type: string, description: "传一个 JSON 对象字符串，键取 {from,to} 或 {since,until}（RFC3339 时间串）；例 {\"from\":\"2026-09-28T15:00:00Z\",\"to\":\"2026-09-28T16:00:00Z\"}。不传 / null / \"{}\" 都表示不设时间窗。" }
+      required: [objectType]
+    response:
+      type: array
+      item_fields: [record_id, record_type, payload, ts, snapshot_id]
+    discipline:
+      - "返回**原始记录**，不是加工后的结论"
+
+  - tool_name: read_facts
+    method: post
+    path: /tools/read_facts
+    summary: "中性读数：按**本进程固定的用例**确定性重建（判决模式），或在未固定用例时向采集面真采一次（运行模式），返回有界的当前读数三段（objects / relations / observations）与公共信封"
+    neutral_tool_ref: "live-facts-tools.yaml#read_facts"
+    why_ref: >
+      ★ 单一定义源（队长裁定 D47）：本工具的 params/returns **正文不在本文件复制**；
+      权威形状声明 = shared/model/live-facts-tools.yaml#read_facts，
+      字节级形状 = shared/collect/live_facts_service.py --emit-schema（字节数/sha256 登记在该 yaml）。
+      本条目只登记「它是 KG-T 面的第 5 个工具」这一事实（E12 按 tool_name 判等）。
+    carrier: "api-provider（cc-live-facts-tools，端口 :8304；注册面落 S2c）"
+    request_shape_authority: "shared/collect/live_facts_service.py::tool_schema()（params = layers / sections / scope / max_records / max_bytes）"
+    discipline:
+      - "★ 模型面**零用例参数**：本次运行消费哪个用例由**进程级** --case / env M5_CASE_ID 固定（裁定 D48），工具入参里不得出现任何 case 参数 ⇒ 生产同形"
+      - "只读：写意图入参在黑名单上；请求体不接受的参数一律以 UNKNOWN_PARAM 拒绝（400）"
+      - "返回有界（row_cap / byte_cap），截断量经信封回传；hint 说明空结果的两种含义"
+
+  - tool_name: neo4j_query
+    only_for_arms: [KG-T-free]
+    source: dify-plugin                        # ★ 第三方插件的本地 fork（不是本项目自建工具）
+    provider_id: cc-ops/neo4j_cypher_query/neo4j_query  # ★ R-50 fork 身份（官方 = nikola_milosevic/neo4j_query）
+    provider_type: plugin
+    plugin_version: 0.1.0
+    param_form:                                 # ★ R-50 的实质改动面（其余三参数保持 form）
+      database: form
+      query: llm
+      parameters: llm
+      max_records: form
+      allow_write_queries: form
+    summary: "执行任意 Cypher 查询（本地 fork v0.1.0：上游 0.2.0 逐字节复制 + query/parameters 改为 form: llm）"
+    request:
+      type: object
+      properties:
+        database: { type: string, required: false, description: "可选目标库；缺省用账号默认库" }
+        query: { type: string, required: true, description: "Cypher 查询" }
+        parameters: { type: string, required: false, description: "★ 是 JSON **字符串**，不是 object；键名不带 $ 前缀" }
+        max_records: { type: number, required: false, default: 1000, description: "返回记录上限" }
+        allow_write_queries: { type: boolean, required: false, default: false, description: "★ 必须保持 false" }
+      required: [query]
+    provenance: >-
+      官方 tools/neo4j_query.yaml（v0.2.0，author: nikola_milosevic）逐字节复制后**只改** query/parameters 的 form
+      （form → llm）；身份面（provider_id / plugin_version）显式偏离官方并登记于
+      arms.KG-T-free.dify_plugin.fork_provenance.deviations_from_official（无声漂移由 E13-i 拦截）。
+    builtin_guards:                            # ★ 插件自带（不是本项目加的）
+      - "参数化查询（防 Cypher 注入）"
+      - "预检 EXPLAIN 校验（语法 + 查询类型识别）"
+      - "写查询保护：allow_write_queries 默认 false ⇒ 只允许 MATCH/RETURN 与 schema 查询"
+      - "单条查询 ≤ 2000 字符"
+      - "记录上限 max_records 默认 1000"
+      - "user agent 标记 ⇒ Neo4j 侧 query log 可识别插件流量"
+    missing_guards:                            # ★ 插件**不提供**、必须靠别处兜住的
+      - "查询超时：插件不设 timeout；既有实测无标签/无方向遍历会撞满 Neo4j 侧 timeout=8（absorb-wt/dify/README.md:14）"
+      - "沿 CAUSES 的深度上限 4：执行期护栏消失 ⇒ 降级为审计期检查（R17）"
+      - "逐调用审计字段 queryText/elapsedMs/rowCount：插件不回传 ⇒ 审计链弱于 KG-T（R18）"
+
+  - tool_name: collect_now
+    method: post
+    path: /collect
+    summary: "★ 仅 KG-T-dyn：让采集层重采指定对象并写回同一张图"
+    only_for_arms: [KG-T-dyn]
+    request:
+      type: object
+      properties:
+        objects: { type: array }
+      required: [objects]
+    response:
+      type: object
+      properties:
+        collected: { type: array }
+        snapshotIdAfter: { type: string }
+    why_single_column: >
+      它使该组不再消费同一份 CCF，违反硬约束 C1（单一输入），
+      故 KG-T-dyn 不进主判据、不进表 1（docs/06 §2.5.4 第 2 条）。
+
+# -----------------------------------------------------------------------------
+# 三、禁令（F5 的机械断言对象）
+# -----------------------------------------------------------------------------
+forbidden_tools_main_arm: [cc_query, run_rules, validate, cc_propose, collect_now]
+forbidden_tools_all_arms: [cc_query, run_rules, validate, cc_propose]
+forbidden_reason:
+  - "cc_query  ⇒ 一旦暴露就退化为 KG-Q（写查询），N3 失效"
+  - "run_rules ⇒ ★ R-53 更正（2026-10-07）：该工具**在任何臂都不存在** —— Set B 的 8 个工具没有它、info-products.yaml#access 的 R 臂 via 路径也没有它，且 scheme1-kg/service/cc_tools.py 与 scheme2-onto/service/cc_tools_onto.py **两侧均未实现**（它只作为 KG-T 门面 cc_tools_kgt.py 的**被拒绝路由名**存在）⇒ 原句『一旦暴露就退化为 KG-R（规则推理）』**已不成立，不得再作为 R 臂的定义依据**。R 臂的**权威定义特征** = **工具面无 cc_query（不写查询）**，其确定性归因经 cc_cause（见本文件 comparison_axes.attribution 把 KG-R 与 KG-Q 同列为 deterministic-component）。★ 随之登记：docs/03 §6 的 04-rules.cypher 与 docs/04 §6 的 r01..r07.rq **当前不被任何臂执行**；『让 R 臂真执行 7 个规则文件』= **未兑现的可选设计增量（OPEN）**，判据/工作量/风险见 tmp/_m4_r52_report.md §6.4，**默认不建、不阻塞 M5**"
+  - "validate  ⇒ 引入确定性校验，LLM 角色不再是'全部推理'"
+  - "cc_propose ⇒ 属执行侧能力，本次一律 dry_run（docs/00 裁决 5），且 info-products.yaml §三已排除对齐"
+
+# ★ v1.2：KG-T-free 是**纯插件组 + 中性取数别名**：它的禁令集合与其他组不同：
+#   （i）仍不得拿到任何 Set B 工具与 :8303 端点；（ii）中性取数只能经**别名** read_live_facts
+#   取得（禁止出现 read_facts 这个名字，由 F5 的 D8-c 机检）。
+forbidden_tools_kgt_free: [cc_query, cc_trace, cc_cause, cc_guide, cc_schema, cc_facts, cc_propose,
+                           get_object_topology, get_fault_topology, get_metrics, get_facts,
+                           run_rules, validate, collect_now, read_facts]
+allowed_tools_kgt_free: [neo4j_query, read_live_facts]
+attribution_axis_forbidden:                    # ★★ 线 2「归因主体」轴的定义性禁令
+  tool: cc_cause
+  applies_to_arms: [KG-T, KG-T-dyn, KG-T-free]
+  reason: >
+    ★ 这是本实验最关键的一条断言。方案1（KG-Q/KG-R）的根因**由确定性组件 cc_cause 收敛**；
+    方案3 的所有组**必须没有这个组件**，归因全由 LLM 完成——这正是用户 m01643 指出的本质区别。
+    若方案3 的任何一组混入 cc_cause，它就不再是方案3，线 2 立即失效。
+
+expected_tool_counts:
+  KG-T: 5
+  KG-T-dyn: 6
+  KG-T-free: 2
+
+# -----------------------------------------------------------------------------
+# 四、载荷与截断纪律
+# -----------------------------------------------------------------------------
+payload_policy:
+  frozen_params_ref: "docs/06 §4 CAP_VALUES / CAP_OBJS / MAX_STR"
+  truncation:
+    must_report: true          # ★ 必须显式返回 truncated
+    rationale: >
+      静默截断会让模型把"没返回"读成"不存在"，直接污染 false_claim_rate；
+      与门禁 G5（防空图通过）同源——"0 行"必须与"图空"可分。
+  format:
+    kind: structured-json       # ★ 不是自然语言总结
+    rationale: "KG-Q/ONTO-Q 拿到的是原始结果集；KG-T 若拿到已总结的自然语言，信息形态不对等（docs/09 §10 对称性 A2）"
+  plugin_owned_limits:                         # ★ v1.1：KG-T-free 的载荷上限由插件自带，不是本项目设定
+    query_max_chars: 2000
+    max_records_default: 1000
+    not_aligned_with_project_caps: >
+      ★ 本项目的 CAP_VALUES/CAP_OBJS/MAX_STR/G5-G6（200 行 / 20000 B）**在插件路径上不适用**。
+      这是「访问方式」这一自变量的组成部分，不是缺陷；但必须在报告里披露：KG-T-free 的
+      单次返回上限（1000 行）**比 KG-Q/KG-T 宽**，其效率读数与载荷读数**不可与之直接相减**。
+
+# -----------------------------------------------------------------------------
+# 五、实验组结构（线 2）（★ v1.1：线 2 由一个三选一拆成**两个单变量对照**）
+# -----------------------------------------------------------------------------
+comparison_axes:
+  attribution:                                  # 归因主体（谁做根因收敛）
+    values:
+      deterministic-component: [KG-Q, ONTO-Q, KG-R, ONTO-R]      # 经 cc_cause
+      llm-only:                [KG-T, KG-T-dyn, KG-T-free]        # 无 cc_cause
+  access_mode:                                  # 访问图的方式
+    values:
+      query-language:   [KG-Q, ONTO-Q]            # LLM 写查询语言
+      preset-interface: [KG-T, KG-T-dyn]          # 5/6 个预置接口
+      plugin-direct:    [KG-T-free]               # 单插件工具，自由 Cypher
+  lines:
+    线 2a:
+      pair: [KG-T-free, KG-Q]
+      isolated_variable: 归因主体
+      held_constant: [载体(同一张 Neo4j 图), 查询语言(Cypher), 模型, 温度, CCF, 用例集]
+      why_clean: "★ 两者共用图与语言 ⇒ 唯一差别 = 有没有确定性 cc_cause 组件"
+    线 2b:
+      pair: [KG-T-free, KG-T]
+      isolated_variable: 访问方式
+      held_constant: [载体, 归因主体(均为 LLM), 模型, 温度, CCF, 用例集]
+    线 2c:
+      pair: [KG-T, KG-Q]
+      isolated_variable: 访问方式 + 归因主体（★ 两变量同时变 ⇒ 只作描述，不作归因）
+  missing_cell:
+    combination: preset-interface + deterministic-component
+    status: 不设（用户裁定不加 ONTO-T 的同类判断）
+    report_requirement: "报告必须声明该格缺失，2×2 不完整 ⇒ 不得对交互效应下结论"

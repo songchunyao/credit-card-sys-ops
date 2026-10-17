@@ -1,0 +1,440 @@
+# GaussDB 运维 Agent · Runbook 模板
+# 用于知识回流沉淀和 Agent 自主检索
+
+templates:
+  - id: RB_TEMPLATE_SLOW_SQL_PLAN_DOWNGRADE
+    name: "慢SQL-执行计划劣化"
+    description: "DDL变更后统计信息过期 → 执行计划劣化 → 全表扫描 → 响应慢"
+    root_cause_pattern:
+      - "DDL变更"
+      - "统计信息过期"
+      - "seq_scan"
+      - "执行计划劣化"
+    recommended_actions:
+      - action_id: a_analyze
+        priority: 1
+        risk: L2
+        description: "ANALYZE 受影响表重建统计信息"
+      - action_id: a_sql_rewrite
+        priority: 2
+        risk: L2
+        description: "应用侧改写 SQL，规避计划劣化"
+      - action_id: a_create_index
+        priority: 3
+        risk: L3
+        description: "为变更后的表新增必要索引"
+    evidence_patterns:
+      - "table.stat_stale_days > 7"
+      - "sql.plan_type = seq_scan"
+      - "table.rows > 1000000"
+      - "change.type = DDL before sql.slow_start_time"
+    resolution_steps:
+      - "1. 执行 ANALYZE <table> 重建统计信息"
+      - "2. EXPLAIN ANALYZE 验证计划是否恢复正常"
+      - "3. 如仍需创建索引，执行 DDL 并评估锁影响"
+      - "4. 监控 P99 响应时间是否回落"
+    mttr_estimate_min: 5
+    severity: warning
+
+  - id: RB_TEMPLATE_LOCK_WAIT_BLOCKING
+    name: "慢SQL-锁等待阻塞"
+    description: "长事务持锁 → 其他会话锁等待 → 响应慢"
+    root_cause_pattern:
+      - "锁等待"
+      - "长事务"
+      - "阻塞链"
+    recommended_actions:
+      - action_id: a_kill_session
+        priority: 1
+        risk: L3
+        description: "终止阻塞会话（需双重审核）"
+      - action_id: a_sql_throttle
+        priority: 2
+        risk: L2
+        description: "对被阻塞的 SQL 限流"
+    evidence_patterns:
+      - "session.wait_event in [LockMgrLock, transactionid]"
+      - "transaction.duration_ms > 600000"
+      - "session.blocked_by exists"
+    resolution_steps:
+      - "1. 定位阻塞链：被阻塞会话 → BLOCKED_BY → 阻塞会话"
+      - "2. 评估阻塞会话是否为关键后台进程"
+      - "3. 非关键进程执行 KILL_SESSION"
+      - "4. 对被阻塞 SQL 临时限流"
+      - "5. 监控锁等待是否消除"
+    mttr_estimate_min: 3
+    severity: critical
+
+  - id: RB_TEMPLATE_CPU_BOTTLENECK
+    name: "性能-资源瓶颈"
+    description: "CPU/IO 达到阈值 → 大量 SQL 执行变慢"
+    root_cause_pattern:
+      - "CPU瓶颈"
+      - "IO瓶颈"
+      - "资源耗尽"
+    recommended_actions:
+      - action_id: a_sql_throttle
+        priority: 1
+        risk: L2
+        description: "对高消耗 SQL 限流"
+      - action_id: a_sql_rewrite
+        priority: 2
+        risk: L2
+        description: "优化高消耗 SQL"
+    evidence_patterns:
+      - "node.cpu_usage > 90"
+      - "node.io_await_ms > 30"
+      - "session.state = active"
+    resolution_steps:
+      - "1. 定位 Top CPU SQL（dbe_perf.statement）"
+      - "2. 对这些 SQL 执行限流"
+      - "3. 分析计划劣化原因（统计信息/索引）"
+      - "4. 持续监控资源使用"
+    mttr_estimate_min: 10
+    severity: critical
+
+  # ═══════════════════════════════════════════
+  # 存算分离: Runbook 模板
+  # ═══════════════════════════════════════════
+
+  - id: RB_TEMPLATE_NVME_CTRL_DEAD
+    name: "NVMe控制器离线恢复"
+    description: "NVMe over RDMA控制器离线 → 多路径链路减少 → 存储路径降级 → 可能中断"
+    root_cause_pattern:
+      - "NVMe控制器离线"
+      - "RoCE链路中断"
+      - "物理链路"
+    recommended_actions:
+      - action_id: a_switch_path
+        priority: 1
+        risk: L1
+        description: "自动切换到存活路径，无需人工干预"
+      - action_id: a_check_roce
+        priority: 2
+        risk: L1
+        description: "检查 RoCE 设备状态（ibstatus/rdma link show）"
+      - action_id: a_check_fiber
+        priority: 3
+        risk: L2
+        description: "确认光纤/光模块无异常（DOM/DDM信息）"
+    evidence_patterns:
+      - "nvme_ctrl_state != live"
+      - "roce_link_state = DOWN"
+      - "active_ultrapath_link_count < total_ultrapath_link_count"
+    resolution_steps:
+      - "1. 确认 NVMe 控制器自动切换（默认已启用多路径）"
+      - "2. 检查 RoCE 设备状态：rdma link show 确认 LINK=ACTIVE"
+      - "3. 检查交换机端口状态和光模块光功率"
+      - "4. 如持续故障，联系 Dorado 运维确认控制器状态"
+      - "5. 监控剩余路径是否稳定"
+    mttr_estimate_min: 30
+    severity: critical
+
+  - id: RB_TEMPLATE_ROCE_LINK_DOWN
+    name: "RoCE链路故障恢复"
+    description: "RoCE链路断 → NVMe over RDMA路径全断 → 存储不可用"
+    root_cause_pattern:
+      - "RoCE链路"
+      - "Mellanox网卡"
+      - "25G端口"
+    recommended_actions:
+      - action_id: a_toggle_roce_port
+        priority: 1
+        risk: L2
+        description: "重试 RoCE 端口（ibportstate enable/disable）"
+      - action_id: a_replace_optical
+        priority: 2
+        risk: L2
+        description: "更换光模块或重插光纤"
+    evidence_patterns:
+      - "roce_link_state = DOWN"
+      - "roce_speed_mbps = 0"
+      - "all_ultrapath_links_dead"
+    resolution_steps:
+      - "1. mlxreg -d 0000:XX:00.0 --reg_name PTYS 读取端口状态"
+      - "2. 如端口 DOWN：重插光纤、换光模块"
+      - "3. 确认后 ibportstate 重置端口"
+      - "4. nvme list-subsys 确认控制器重新连接"
+      - "5. 监控路径恢复情况"
+    mttr_estimate_min: 15
+    severity: critical
+
+  - id: RB_TEMPLATE_ULTRAPATH_ALL_LINKS_DEAD
+    name: "UltraPath多路径全部失效恢复"
+    description: "所有NVMe路径失效 → UltraPath无可用路径 → 存储完全不可达"
+    root_cause_pattern:
+      - "所有路径失效"
+      - "存储不可达"
+      - "Dorado故障"
+    recommended_actions:
+      - action_id: a_check_dorado_alive
+        priority: 1
+        risk: L1
+        description: "确认 Dorado 设备存活（DeviceManager ping/SSH）"
+      - action_id: a_check_roce_network
+        priority: 2
+        risk: L1
+        description: "确认 RoCE 网络和交换机状态"
+      - action_id: a_escalate
+        priority: 3
+        risk: L3
+        description: "升级至存储和网络团队联合排障"
+    evidence_patterns:
+      - "active_ultrapath_link_count = 0"
+      - "total_ultrapath_link_count > 0"
+    resolution_steps:
+      - "1. 紧急检查 Dorado 设备在线状态（DeviceManager REST或管理入口）"
+      - "2. 检查 RoCE 网络：所有 Mellanox 网卡和 NoF 交换机"
+      - "3. 确认无大面积断网或断电事件"
+      - "4. 排查内核日志：dmesg | grep -i ultrapath/nvme/roce"
+      - "5. 如果单节点故障，考虑重启节点"
+      - "6. 升级存储和网络团队"
+    mttr_estimate_min: 60
+    severity: critical
+
+  - id: RB_TEMPLATE_NVME_SUBSYS_OFFLINE
+    name: "NVMe子系统断开恢复"
+    description: "NVMe子系统全部控制器断开 → 整台Dorado设备不可达 → 对应LUN不可用"
+    root_cause_pattern:
+      - "NVMe子系统"
+      - "Dorado设备"
+      - "NoF网络"
+    recommended_actions:
+      - action_id: a_requery_nvme_subsys
+        priority: 1
+        risk: L2
+        description: "重新扫描 NVMe 子系统（nvme disconnect-all + connect-all）"
+      - action_id: a_check_dorado_port
+        priority: 2
+        risk: L1
+        description: "检查 Dorado 对应端口状态"
+    evidence_patterns:
+      - "nvme_subsys_ctrl_count = 0"
+      - "nss_nqn = 已知子系统"
+    resolution_steps:
+      - "1. nvme list-subsys 确认子系统是否消失"
+      - "2. 如果只是控制器断开但子系统存在，检查 RoCE 路径"
+      - "3. 如果子系统完全消失：nvme disconnect-all && nvme connect-all"
+      - "4. 检查 Dorado 设备是否下线或重启"
+      - "5. 监控是否需要重建 multipath 拓扑"
+    mttr_estimate_min: 20
+    severity: critical
+
+  - id: RB_TEMPLATE_KERNEL_MODULE_MISSING
+    name: "存储内核模块缺失恢复"
+    description: "内核模块未加载 → 存储驱动不可用 → 存储设备不可见"
+    root_cause_pattern:
+      - "内核模块"
+      - "驱动未加载"
+      - "ultrapath"
+      - "mlx5_core"
+    recommended_actions:
+      - action_id: a_modprobe
+        priority: 1
+        risk: L1
+        description: "modprobe 加载缺失模块"
+      - action_id: a_rebuild_initramfs
+        priority: 2
+        risk: L2
+        description: "重建 initramfs 确保重启后自动加载"
+    evidence_patterns:
+      - "kernel_module_state != Live"
+      - "lsmod | grep ultrapath 为空"
+    resolution_steps:
+      - "1. modprobe ultrapath 加载模块"
+      - "2. modprobe mlx5_core/mlx5_ib 加载RoCE驱动"
+      - "3. dmesg 确认模块加载成功"
+      - "4. vim /etc/modules-load.d/ 添加持久化配置"
+      - "5. dracut -f 重建 initramfs（可选）"
+    mttr_estimate_min: 5
+    severity: critical
+
+  - id: RB_TEMPLATE_LVM_SPACE_LOW
+    name: "LVM空间不足扩容"
+    description: "UltraPath LUN上的LVM卷使用率过高 → 空间不足"
+    root_cause_pattern:
+      - "LVM空间满"
+      - "扩容"
+      - "UltraPath LUN"
+    recommended_actions:
+      - action_id: a_extend_lv
+        priority: 1
+        risk: L2
+        description: "从Dorado分配新容量，扩容UltraPath LUN后扩展LVM"
+      - action_id: a_clean_data
+        priority: 2
+        risk: L2
+        description: "清理过期日志和临时文件"
+    evidence_patterns:
+      - "lv_usage_pct > 85"
+      - "fs_usage_pct > 95"
+    resolution_steps:
+      - "1. 确认 Dorado 端是否有可分配空间"
+      - "2. 在 Dorado 上扩展对应 LUN 容量"
+      - "3. 节点端：echo 1 > /sys/class/scsi_device/.../device/rescan"
+      - "4. pvresize 扩展PV"
+      - "5. lvextend 扩展LV"
+      - "6. resize2fs/xfs_growfs 扩展文件系统"
+    mttr_estimate_min: 15
+    severity: warning
+
+  # ── Dorado控制器/链路故障 ──
+  - id: rb_dorado_ctrl_fault
+    name: "Dorado控制器故障恢复"
+    category: dorado_device
+    severity: critical
+    prerequisites:
+      - "已确认Dorado设备管理IP可达（DeviceManager RESTful）"
+      - "已获取登录凭证"
+    steps:
+      - step: 1
+        action: "登录DeviceManager确认控制器健康状态"
+        detail: "POST /sessions认证，GET /controller查看0A/0B健康状态，确认异常控制器ID"
+        expected: "能在返回JSON的data数组中看到两个控制器的HEALTHSTATUS字段"
+      - step: 2
+        action: "查看告警信息"
+        detail: "GET /alarm/current或查看DeviceManager Web界面告警面板"
+        expected: "获取故障控制器的详细告警描述（硬件/电源/链路类）"
+      - step: 3
+        action: "检查控制器硬件状态"
+        detail: "查看异常控制器的前置面板指示灯、电源单元(PSU)状态、风扇单元(FAN)状态"
+        expected: "确认是控制器模块故障还是附属组件（电源/风扇）故障"
+      - step: 4
+        action: "检查OS层NVMe多路径连接"
+        detail: "在GaussDB节点上执行 nvme list-subsys /dev/nvme* 查看连接状态，确认是否仍有连到正常控制器"
+        expected: "至少确保所有NVMe子系统已连接到正常控制器"
+      - step: 5
+        action: "执行控制器切换/故障隔离"
+        detail: "如在维护窗口，可通过DeviceManager Web执行控制器切换（控制器的'切换'操作）或联系华为技术支持"
+        expected: "故障控制器隔离后，存储业务仍可通过正常控制器提供服务"
+    verification:
+      - "重新GET /controller，确认0A/0B之一HEALTHSTATUS恢复正常(1)"
+      - "在OS节点上 dd if=/dev/ultrapatha of=/dev/null bs=4M count=100 验证IO正常"
+      - "确认容灾复制对无影响（GET /replicationpair）"
+
+  # ── Dorado容灾复制对修复 ──
+  - id: rb_dorado_replication_repair
+    name: "Dorado容灾复制对修复"
+    category: dorado_disaster_recovery
+    severity: critical
+    prerequisites:
+      - "已确认本端和远端Dorado设备均可达"
+      - "已获取两端DeviceManager登录凭证"
+    steps:
+      - step: 1
+        action: "检查容灾复制对当前状态"
+        detail: "GET /replicationpair 检查ISDATASYNC/ISINCG/RUNNINGSTATUS/HEALTHSTATUS"
+        expected: "确认复制对ID、本地卷和远端卷名称，获取当前同步进度(REPLICATIONPROGRESS)"
+      - step: 2
+        action: "检查复制链路状态"
+        detail: "检查Dorado间的NoF/FC复制链路，确认远端设备可达（GET /system/ 远端设备）"
+        expected: "远端设备HEALTHSTATUS=1正常，互联网关运行正常"
+      - step: 3
+        action: "检查远程复制策略"
+        detail: "GET /replicationpair 查看RECOVERYPOLICY(1=自动恢复)、REPLICATIONMODEL、SPEED(2=中速)等参数"
+        expected: "恢复策略为自动恢复时，网络恢复后会自动同步"
+      - step: 4
+        action: "手动触发重新同步"
+        detail: "通过POST /replicationpair/synchronize 触发复制对重新同步，或synchronize操作"
+        expected: "同步进度逐步从0%推进到100%"
+      - step: 5
+        action: "确认同步完成"
+        detail: "再次GET /replicationpair 确认ISDATASYNC=true、RUNNINGSTATUS=1(正常)、REPLICATIONPROGRESS=100"
+        expected: "数据同步完成，复制对健康状态恢复为Normal(1)"
+    verification:
+      - "GET /replicationpair 确认HEALTHSTATUS=1, RUNNINGSTATUS=1"
+      - "确认OS层无LUN IO错误日志"
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # step3 补缺（2026-09-11）：新增 4 个存储症状中此前无预案的两类
+  #   原 11 个 runbook 覆盖了「链路全断/控制器离线/子系统断开/RoCE断开」，
+  #   但**冗余度不足**与**xlog 卷映射异常**两个症状无任何预案 ⇒ 检索为空。
+  # ══════════════════════════════════════════════════════════════════════════
+  - id: RB_TEMPLATE_ULTRAPATH_REDUNDANCY_DEGRADED
+    name: "多路径冗余度不足（路径不均衡/单控连接）"
+    description: "单控制器活跃路径数<2 或子系统仅连单控 → 冗余降级，单点故障风险上升"
+    root_cause_pattern:
+      - "路径不均衡"
+      - "冗余度不足"
+      - "单控"
+      - "失去冗余"
+      - "路径数不足"
+      - "NVMe子系统单控制器"
+    recommended_actions:
+      - action_id: check_ctrl_conn
+        priority: 1
+        risk: L1
+        description: "列出各控制器活跃路径数，定位偏少/缺失的控制器"
+      - action_id: check_roce_path
+        priority: 2
+        risk: L1
+        description: "检查偏少控制器对应的 RoCE 端口与链路状态"
+      - action_id: check_dorado_ctrl_failover
+        priority: 3
+        risk: L1
+        description: "确认 Dorado 侧是否发生过控制器切换导致路径未回切"
+      - action_id: rebalance_nvme_path
+        priority: 4
+        risk: L2
+        description: "物理链路正常后重扫多路径，拉回失效路径恢复全冗余"
+      - action_id: check_dorado_ctrl_failover
+        priority: 5
+        risk: L3
+        description: "如为 LUN→Host 映射缺失，需在 DeviceManager 补齐双控两侧映射后重扫"
+    evidence_patterns:
+      - "storage.nvme_path_per_ctrl < 2（存在控制器）"
+      - "storage.connected_ctrl_count < storage.expected_ctrl_count"
+      - "storage.ultrapath_path_normal_count < storage.ultrapath_path_total_count"
+    resolution_steps:
+      - "1. upadmin_plus 'show path' 列出每条路径状态，确认是哪些控制器/端口缺失"
+      - "2. upadmin_plus 'show vlun' 核对各卷的 Available/Total 路径数"
+      - "3. 对缺失路径对应的 RoCE 端口做 ethtool/光模块检查（光纤/光模块/交换机）"
+      - "4. DeviceManager GET /controller 确认双控健康与主控归属"
+      - "5. 物理链路恢复后 upRescan_plus 重扫，或 nvme connect-all 重建连接"
+      - "6. 若为映射缺失：DeviceManager 为 LUN 补齐双控两侧 Host 映射后重扫"
+    mttr_estimate_min: 30
+    severity: warning
+
+  - id: RB_TEMPLATE_XLOG_VOL_MAPPING_ISSUE
+    name: "xlog共享日志卷映射异常"
+    description: "xlog 共享日志卷未映射到全部 GaussDB 节点 → 双写路径不完整，写入可能失败"
+    root_cause_pattern:
+      - "xlog"
+      - "共享日志卷"
+      - "日志卷映射"
+      - "双写"
+      - "卷映射不完整"
+      - "共享卷"
+    recommended_actions:
+      - action_id: verify_xlog_mount
+        priority: 1
+        risk: L1
+        description: "核对 xlog 卷在各节点的挂载与设备映射是否一致"
+      - action_id: correlate_vol_to_ultrapath
+        priority: 2
+        risk: L1
+        description: "把 Dorado 卷（LUN WWN）与 OS 侧 UltraPath 设备/挂载点对应起来"
+      - action_id: check_xlog_write_latency
+        priority: 3
+        risk: L1
+        description: "检查 xlog 所在设备的写延迟，确认写入是否已受影响"
+      - action_id: check_dorado_alarm
+        priority: 4
+        risk: L1
+        description: "查 Dorado 侧该 LUN 的告警与映射关系"
+      - action_id: check_dorado_vol_mapping
+        priority: 5
+        risk: L3
+        description: "如映射缺失：在 DeviceManager 为 xlog 卷补齐 Host 映射（需业务确认）"
+    evidence_patterns:
+      - "dorado.dorado_vol_type = xlog"
+      - "dorado.dorado_vol_mapped_hosts 未同时包含 Host_11/Host_12/Host_13"
+    resolution_steps:
+      - "1. upadmin_plus 'show vlun' 取 xlog 卷的 LUN WWN 与 availability 路径数"
+      - "2. 逐节点核对 /dev/mapper 与 mount 输出，确认 xlog 挂载点一致"
+      - "3. 20 分钟粒度无新增事件后对比三节点：路径数是否齐平、是否 4/4 Normal"
+      - "4. DeviceManager GET /host_lun_map 核对 xlog 卷的 Host 映射是否含全部 3 个节点"
+      - "5. 映射缺失时在双控两侧补齐映射并重扫，随后验证写入正常"
+      - "6. 复核 GaussDB 侧复制作业与 xlog 写入无报错"
+    mttr_estimate_min: 45
+    severity: critical

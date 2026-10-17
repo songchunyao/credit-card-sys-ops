@@ -1,0 +1,43 @@
+# Dependabot configuration.
+#
+# Two ecosystems matter here:
+#   * pip             — the dependency groups declared in pyproject.toml
+#                       (`core`, `test`, and the extra that has no public
+#                       distribution). Note that the `gaussdb` extra cannot be
+#                       resolved from PyPI at all, so an update attempt on it
+#                       would always fail; Dependabot only proposes versions it
+#                       can resolve, so leave that extra to the user.
+#   * github-actions  — the workflows under .github/workflows/
+#
+# Weekly cadence with a bounded number of open pull requests keeps the review
+# queue readable. Patch and minor updates are grouped so that a quiet week
+# produces one pull request per ecosystem instead of a dozen.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      pip-minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+    labels:
+      - dependencies
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      github-actions-minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+    labels:
+      - dependencies

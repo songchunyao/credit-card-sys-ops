@@ -1,0 +1,103 @@
+name: Bug report
+description: Report something that does not behave as documented
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a problem.
+
+        Before you continue:
+
+        - **A security vulnerability does not belong here.** Follow `SECURITY.md`
+          and report it privately instead of opening a public issue.
+        - **Redact before you paste.** Never include credentials, tokens,
+          passwords, private keys, real hostnames or node names, internal IP
+          addresses, or absolute paths from your machine. Use documentation-safe
+          placeholders such as `192.0.2.1` and `https://example.org/`.
+        - **`BLOCKED` is not a bug.** The tooling uses the exit codes
+          `0` = `PASS`, `1` = `FAIL`, `2` = `BLOCKED`, and a missing asset or
+          credential is reported as `BLOCKED` on purpose. A bare checkout is
+          *expected* to report `BLOCKED` for everything that needs a live system.
+        - **Check the documented exclusions first.** Some components are not part
+          of this repository by design; see `NOTICE`.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the project does this affect?
+      options:
+        - Offline gates / gate runner
+        - Gate registry or a machine-readable contract
+        - Scheme 1 — knowledge graph / Neo4j
+        - Scheme 2 — ontology / SHACL / GraphDB
+        - Knowledge services and tool faces
+        - Deployment, compose files or images
+        - Data collection layer
+        - Offline checks, self-test or test suite
+        - Documentation
+        - Other / not sure
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: The version, tag, or commit you tested.
+      placeholder: "0.1.0, or the short commit SHA"
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you observed, and what you expected to happen instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: The smallest sequence of commands that shows the problem. Replace any real endpoint, credential, or path.
+      placeholder: |
+        1. python deploy/selfcheck.py
+        2. python shared/verify/gate_runner.py --offline --allow-partial
+        3. ...
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: output
+    attributes:
+      label: Relevant output
+      description: Paste the exact error text, gate result, or self-test output. Include the exit code where applicable, and redact secrets and internal coordinates.
+      render: shell
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Python version and operating system. Do not paste real hostnames, cluster names, or internal addresses.
+      placeholder: "Python 3.12.4 on Ubuntu 24.04"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched the existing issues and did not find the same problem
+          required: true
+        - label: I removed credentials, internal hostnames or addresses, and machine-specific paths from this report
+          required: true
+        - label: This is not a security vulnerability (those go through SECURITY.md, privately)
+          required: true

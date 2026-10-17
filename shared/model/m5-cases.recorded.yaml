@@ -1,0 +1,3940 @@
+cases:
+- chain: F1
+  cls: A
+  detectors:
+  - FM\-APP\-ENDPOINT\-SLOW
+  - app\.endpoint\.p99_ms
+  - ep-cc-pay-pay
+  difficulty: easy
+  discriminator: null
+  evidence_facts:
+  - obs-000023
+  expect_layer: App
+  expect_objects:
+  - endpoint:ep-cc-pay-pay
+  expect_path:
+  - FM-APP-ENDPOINT-SLOW
+  expect_root_cause: FM-APP-ENDPOINT-SLOW
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-APP-ENDPOINT-SLOW
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-APP-ENDPOINT-SLOW
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-APP-ENDPOINT-SLOW
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-APP-ENDPOINT-SLOW
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: FM-APP-ENDPOINT-SLOW
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: A-01
+  injected:
+  - FM-APP-ENDPOINT-SLOW
+  neg:
+  - 慢查询|慢\s*SQL
+  - 宿主.*内存(不足|紧张|耗尽)
+  - 数据库实例.*(不可用|下线)
+  - 连接池.*(耗尽|打满)
+  - 容器.*OOM
+  nor: []
+  pos:
+  - FM\-APP\-ENDPOINT\-SLOW
+  - p99
+  - SLO
+  - 200\s*ms
+  - 应用层|应用服务|App
+  query: 支付网关 14:20 起 /pay 的 P99 从个位数毫秒抬到 4000ms 以上，同期 QPS 与错误率没有明显变化。请判断根因在哪一层、落在哪个对象上，并给出你据以判断的指标依据。
+  scope:
+  - App
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-001
+  synthetic: false
+  type: 单层定位
+- chain: F1
+  cls: A
+  detectors:
+  - FM\-APP\-ENDPOINT\-SLOW
+  - app\.endpoint\.p99_ms
+  - ep-cc-pay-slow
+  difficulty: easy
+  discriminator: null
+  evidence_facts:
+  - obs-000026
+  expect_layer: App
+  expect_objects:
+  - endpoint:ep-cc-pay-slow
+  expect_path:
+  - FM-APP-ENDPOINT-SLOW
+  expect_root_cause: FM-APP-ENDPOINT-SLOW
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-APP-ENDPOINT-SLOW
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-APP-ENDPOINT-SLOW
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-APP-ENDPOINT-SLOW
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-APP-ENDPOINT-SLOW
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: FM-APP-ENDPOINT-SLOW
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: A-02
+  injected:
+  - FM-APP-ENDPOINT-SLOW
+  neg:
+  - 慢查询|慢\s*SQL
+  - 宿主.*内存(不足|紧张|耗尽)
+  - 数据库实例.*(不可用|下线)
+  - 连接池.*(耗尽|打满)
+  - 容器.*OOM
+  nor: []
+  pos:
+  - FM\-APP\-ENDPOINT\-SLOW
+  - p99
+  - SLO
+  - 200\s*ms
+  - 应用层|应用服务|App
+  query: 对账接口 /slow 的 P99 长时间徘徊在 1200ms 上下，吞吐量维持平稳。请给出根因所在层与对象，并说明为什么可以排除其他两层。
+  scope:
+  - App
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-002
+  synthetic: false
+  type: 单层定位
+- chain: F2
+  cls: A
+  detectors:
+  - FM\-APP\-ENDPOINT\-SLOW
+  - app\.endpoint\.p99_ms
+  - ep-cc-pay-pay
+  difficulty: easy
+  discriminator: null
+  evidence_facts:
+  - obs-000023
+  expect_layer: App
+  expect_objects:
+  - endpoint:ep-cc-pay-pay
+  expect_path:
+  - FM-APP-ENDPOINT-SLOW
+  expect_root_cause: FM-APP-ENDPOINT-SLOW
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-APP-ENDPOINT-SLOW
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-APP-ENDPOINT-SLOW
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-APP-ENDPOINT-SLOW
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-APP-ENDPOINT-SLOW
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: FM-APP-ENDPOINT-SLOW
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: A-03
+  injected:
+  - FM-APP-ENDPOINT-SLOW
+  neg:
+  - 慢查询|慢\s*SQL
+  - 宿主.*内存(不足|紧张|耗尽)
+  - 数据库实例.*(不可用|下线)
+  - 连接池.*(耗尽|打满)
+  - 容器.*OOM
+  nor: []
+  pos:
+  - FM\-APP\-ENDPOINT\-SLOW
+  - p99
+  - SLO
+  - 200\s*ms
+  - 应用层|应用服务|App
+  query: 风控调用 /pay 的尾部延迟连续三个采集窗口超过 2 秒，数据库与会话池读数没有异常波动。请定位根因，并给出你的分层判断。
+  scope:
+  - App
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-003
+  synthetic: false
+  type: 单层定位
+- chain: F3
+  cls: A
+  detectors:
+  - FM\-APP\-ENDPOINT\-SLOW
+  - app\.endpoint\.p99_ms
+  - ep-cc-pay-slow
+  difficulty: easy
+  discriminator: null
+  evidence_facts:
+  - obs-000026
+  expect_layer: App
+  expect_objects:
+  - endpoint:ep-cc-pay-slow
+  expect_path:
+  - FM-APP-ENDPOINT-SLOW
+  expect_root_cause: FM-APP-ENDPOINT-SLOW
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-APP-ENDPOINT-SLOW
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-APP-ENDPOINT-SLOW
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-APP-ENDPOINT-SLOW
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-APP-ENDPOINT-SLOW
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: FM-APP-ENDPOINT-SLOW
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: A-04
+  injected:
+  - FM-APP-ENDPOINT-SLOW
+  neg:
+  - 慢查询|慢\s*SQL
+  - 宿主.*内存(不足|紧张|耗尽)
+  - 数据库实例.*(不可用|下线)
+  - 连接池.*(耗尽|打满)
+  - 容器.*OOM
+  nor: []
+  pos:
+  - FM\-APP\-ENDPOINT\-SLOW
+  - p99
+  - SLO
+  - 200\s*ms
+  - 应用层|应用服务|App
+  query: 批量代扣走的 /slow 接口 P99 升到 880ms，宿主与容器的 CPU、内存读数都在常规区间。请定位根因层与对象。
+  scope:
+  - App
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-004
+  synthetic: false
+  type: 单层定位
+- chain: F4
+  cls: A
+  detectors:
+  - FM\-APP\-HEAP\-PRESSURE
+  - app\.heap_used_ratio
+  - app\.gc_pause_ms
+  - appinst-cc-pay-1
+  difficulty: easy
+  discriminator: null
+  evidence_facts:
+  - obs-000002
+  - obs-000001
+  expect_layer: App
+  expect_objects:
+  - appinst:appinst-cc-pay-1
+  expect_path:
+  - FM-APP-HEAP-PRESSURE
+  expect_root_cause: FM-APP-HEAP-PRESSURE
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-APP-HEAP-PRESSURE
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-APP-HEAP-PRESSURE
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-APP-HEAP-PRESSURE
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-APP-HEAP-PRESSURE
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: FM-APP-HEAP-PRESSURE
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: A-05
+  injected:
+  - FM-APP-HEAP-PRESSURE
+  neg:
+  - 慢查询|慢\s*SQL
+  - 宿主.*内存(不足|紧张|耗尽)
+  - 数据库实例.*(不可用|下线)
+  - 连接池.*(耗尽|打满)
+  nor:
+  - 宿主.*(内存|资源).*正常
+  - 数据库.*正常|实例.*在位|会话池.*正常
+  - 容器.*(无|未).*OOM
+  pos:
+  - FM\-APP\-HEAP\-PRESSURE
+  - 堆内存|堆占用|heap_used_ratio
+  - gc_pause_ms|GC\s*停顿
+  - 应用层|应用实例|App
+  query: 支付应用实例的老年代占用率持续走高，伴随单次 GC 停顿明显拉长，但容器与宿主机读数正常。请判断根因所在层与对象。
+  scope:
+  - App
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-005
+  synthetic: false
+  type: 单层定位
+- chain: F4
+  cls: A
+  detectors:
+  - FM\-APP\-HEAP\-PRESSURE
+  - app\.heap_used_ratio
+  - app\.gc_pause_ms
+  - appinst-cc-pay-1
+  difficulty: easy
+  discriminator: null
+  evidence_facts:
+  - obs-000002
+  - obs-000001
+  expect_layer: App
+  expect_objects:
+  - appinst:appinst-cc-pay-1
+  expect_path:
+  - FM-APP-HEAP-PRESSURE
+  expect_root_cause: FM-APP-HEAP-PRESSURE
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-APP-HEAP-PRESSURE
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-APP-HEAP-PRESSURE
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-APP-HEAP-PRESSURE
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-APP-HEAP-PRESSURE
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: FM-APP-HEAP-PRESSURE
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: A-06
+  injected:
+  - FM-APP-HEAP-PRESSURE
+  neg:
+  - 慢查询|慢\s*SQL
+  - 宿主.*内存(不足|紧张|耗尽)
+  - 数据库实例.*(不可用|下线)
+  - 连接池.*(耗尽|打满)
+  nor:
+  - 宿主.*(内存|资源).*正常
+  - 数据库.*正常|实例.*在位|会话池.*正常
+  - 容器.*(无|未).*OOM
+  pos:
+  - FM\-APP\-HEAP\-PRESSURE
+  - 堆内存|堆占用|heap_used_ratio
+  - gc_pause_ms|GC\s*停顿
+  - 应用层|应用实例|App
+  query: 应用实例出现频繁 Full GC，堆占用率一路逼近上限，容器没有被重启过。请定位根因层与对象，并给出依据指标。
+  scope:
+  - App
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-006
+  synthetic: false
+  type: 单层定位
+- chain: F4
+  cls: A
+  detectors:
+  - FM\-APP\-HEAP\-PRESSURE
+  - app\.heap_used_ratio
+  - app\.gc_pause_ms
+  - appinst-cc-pay-1
+  difficulty: easy
+  discriminator: null
+  evidence_facts:
+  - obs-000002
+  - obs-000001
+  expect_layer: App
+  expect_objects:
+  - appinst:appinst-cc-pay-1
+  expect_path:
+  - FM-APP-HEAP-PRESSURE
+  expect_root_cause: FM-APP-HEAP-PRESSURE
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-APP-HEAP-PRESSURE
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-APP-HEAP-PRESSURE
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-APP-HEAP-PRESSURE
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-APP-HEAP-PRESSURE
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: FM-APP-HEAP-PRESSURE
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: A-07
+  injected:
+  - FM-APP-HEAP-PRESSURE
+  neg:
+  - 慢查询|慢\s*SQL
+  - 宿主.*内存(不足|紧张|耗尽)
+  - 数据库实例.*(不可用|下线)
+  - 连接池.*(耗尽|打满)
+  nor:
+  - 宿主.*(内存|资源).*正常
+  - 数据库.*正常|实例.*在位|会话池.*正常
+  - 容器.*(无|未).*OOM
+  pos:
+  - FM\-APP\-HEAP\-PRESSURE
+  - 堆内存|堆占用|heap_used_ratio
+  - gc_pause_ms|GC\s*停顿
+  - 应用层|应用实例|App
+  query: 线上一台应用实例的堆占用率越过警戒线并持续不退，GC 停顿同步变长。请指出根因层、对象与判据。
+  scope:
+  - App
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-007
+  synthetic: false
+  type: 单层定位
+- chain: F4
+  cls: A
+  detectors:
+  - FM\-HOST\-MEM\-PRESSURE
+  - host\.mem_available_ratio
+  - host-dn_6001
+  difficulty: easy
+  discriminator: null
+  evidence_facts:
+  - obs-000033
+  expect_layer: Runtime
+  expect_objects:
+  - host:host-dn_6001
+  expect_path:
+  - FM-HOST-MEM-PRESSURE
+  expect_root_cause: FM-HOST-MEM-PRESSURE
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-HOST-MEM-PRESSURE
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-HOST-MEM-PRESSURE
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-HOST-MEM-PRESSURE
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-HOST-MEM-PRESSURE
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: FM-HOST-MEM-PRESSURE
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: A-08
+  injected:
+  - FM-HOST-MEM-PRESSURE
+  neg:
+  - 应用.*(内存泄漏|堆内存)|堆占用
+  - 慢查询|慢\s*SQL
+  - 连接池.*(耗尽|打满)
+  - 数据库实例.*(不可用|下线)
+  nor:
+  - 应用.*(堆|内存).*正常
+  - 数据库.*正常|实例.*在位
+  - 连接池.*正常
+  pos:
+  - FM\-HOST\-MEM\-PRESSURE
+  - mem_available_ratio|可用内存比例
+  - 宿主机|运行时|Runtime
+  query: 承载主库的宿主可用内存比例掉到 2% 出头，应用侧响应时间开始抖动。请定位根因所在层与对象，并说明证据。
+  scope:
+  - Runtime
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-008
+  synthetic: false
+  type: 单层定位
+- chain: F4
+  cls: A
+  detectors:
+  - FM\-HOST\-MEM\-PRESSURE
+  - host\.mem_available_ratio
+  - host-dn_6002
+  difficulty: easy
+  discriminator: null
+  evidence_facts:
+  - obs-000039
+  expect_layer: Runtime
+  expect_objects:
+  - host:host-dn_6002
+  expect_path:
+  - FM-HOST-MEM-PRESSURE
+  expect_root_cause: FM-HOST-MEM-PRESSURE
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-HOST-MEM-PRESSURE
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-HOST-MEM-PRESSURE
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-HOST-MEM-PRESSURE
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-HOST-MEM-PRESSURE
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: FM-HOST-MEM-PRESSURE
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: A-09
+  injected:
+  - FM-HOST-MEM-PRESSURE
+  neg:
+  - 应用.*(内存泄漏|堆内存)|堆占用
+  - 慢查询|慢\s*SQL
+  - 连接池.*(耗尽|打满)
+  - 数据库实例.*(不可用|下线)
+  nor:
+  - 应用.*(堆|内存).*正常
+  - 数据库.*正常|实例.*在位
+  - 连接池.*正常
+  pos:
+  - FM\-HOST\-MEM\-PRESSURE
+  - mem_available_ratio|可用内存比例
+  - 宿主机|运行时|Runtime
+  query: 备库所在宿主的可用内存比例跌破 3%，但数据库实例本身仍在正常提供读写。请判断这属于哪一层的故障，根因对象是谁。
+  scope:
+  - Runtime
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-009
+  synthetic: false
+  type: 单层定位
+- chain: F4
+  cls: A
+  detectors:
+  - FM\-HOST\-MEM\-PRESSURE
+  - host\.mem_available_ratio
+  - host-dn_6001
+  difficulty: easy
+  discriminator: null
+  evidence_facts:
+  - obs-000033
+  expect_layer: Runtime
+  expect_objects:
+  - host:host-dn_6001
+  expect_path:
+  - FM-HOST-MEM-PRESSURE
+  expect_root_cause: FM-HOST-MEM-PRESSURE
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-HOST-MEM-PRESSURE
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-HOST-MEM-PRESSURE
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-HOST-MEM-PRESSURE
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-HOST-MEM-PRESSURE
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: FM-HOST-MEM-PRESSURE
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: A-10
+  injected:
+  - FM-HOST-MEM-PRESSURE
+  neg:
+  - 应用.*(内存泄漏|堆内存)|堆占用
+  - 慢查询|慢\s*SQL
+  - 连接池.*(耗尽|打满)
+  - 数据库实例.*(不可用|下线)
+  nor:
+  - 应用.*(堆|内存).*正常
+  - 数据库.*正常|实例.*在位
+  - 连接池.*正常
+  pos:
+  - FM\-HOST\-MEM\-PRESSURE
+  - mem_available_ratio|可用内存比例
+  - 宿主机|运行时|Runtime
+  query: 运维巡检发现一台宿主机的可用内存比例长期低于 5% 且无回收迹象，同一宿主上的容器尚未被驱逐。请定位根因层与对象。
+  scope:
+  - Runtime
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-010
+  synthetic: false
+  type: 单层定位
+- chain: F4
+  cls: A
+  detectors:
+  - FM\-HOST\-MEM\-PRESSURE
+  - host\.mem_available_ratio
+  - host-dn_6002
+  difficulty: easy
+  discriminator: null
+  evidence_facts:
+  - obs-000039
+  expect_layer: Runtime
+  expect_objects:
+  - host:host-dn_6002
+  expect_path:
+  - FM-HOST-MEM-PRESSURE
+  expect_root_cause: FM-HOST-MEM-PRESSURE
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-HOST-MEM-PRESSURE
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-HOST-MEM-PRESSURE
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-HOST-MEM-PRESSURE
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-HOST-MEM-PRESSURE
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: FM-HOST-MEM-PRESSURE
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: A-11
+  injected:
+  - FM-HOST-MEM-PRESSURE
+  neg:
+  - 应用.*(内存泄漏|堆内存)|堆占用
+  - 慢查询|慢\s*SQL
+  - 连接池.*(耗尽|打满)
+  - 数据库实例.*(不可用|下线)
+  nor:
+  - 应用.*(堆|内存).*正常
+  - 数据库.*正常|实例.*在位
+  - 连接池.*正常
+  pos:
+  - FM\-HOST\-MEM\-PRESSURE
+  - mem_available_ratio|可用内存比例
+  - 宿主机|运行时|Runtime
+  query: 备库宿主的内存水位已进入严重区间，页面缓存回收频繁，数据库与应用的日志均无异常条目。请给出根因层与对象。
+  scope:
+  - Runtime
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-011
+  synthetic: false
+  type: 单层定位
+- chain: F7
+  cls: A
+  detectors:
+  - FM\-DB\-INSTANCE\-DOWN
+  - db\.instance\.up
+  - dn_6001
+  difficulty: easy
+  discriminator: null
+  evidence_facts:
+  - obs-000017
+  expect_layer: Data
+  expect_objects:
+  - dbinst:dn_6001
+  expect_path:
+  - FM-DB-INSTANCE-DOWN
+  expect_root_cause: FM-DB-INSTANCE-DOWN
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-DB-INSTANCE-DOWN
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-DB-INSTANCE-DOWN
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-DB-INSTANCE-DOWN
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-DB-INSTANCE-DOWN
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: FM-DB-INSTANCE-DOWN
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: A-12
+  injected:
+  - FM-DB-INSTANCE-DOWN
+  neg:
+  - 应用.*(内存泄漏|堆内存)|堆占用
+  - 宿主.*内存(不足|紧张|耗尽)
+  - 慢查询|慢\s*SQL
+  - 容器.*OOM
+  nor:
+  - 应用.*(堆|内存).*正常
+  - 宿主.*(内存|资源).*正常
+  - 连接池.*正常
+  pos:
+  - FM\-DB\-INSTANCE\-DOWN
+  - db\.instance\.up|实例.*(不可用|下线|停止)
+  - 数据层|数据库层|Data|GaussDB
+  query: 主库实例的存活标记翻转为不可用，应用侧开始出现取连接等待；集群统计尚未更新。请定位根因层与对象。
+  scope:
+  - Data
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-012
+  synthetic: false
+  type: 单层定位
+- chain: F7
+  cls: A
+  detectors:
+  - FM\-DB\-INSTANCE\-DOWN
+  - db\.instance\.up
+  - dn_6002
+  difficulty: easy
+  discriminator: null
+  evidence_facts:
+  - obs-000019
+  expect_layer: Data
+  expect_objects:
+  - dbinst:dn_6002
+  expect_path:
+  - FM-DB-INSTANCE-DOWN
+  expect_root_cause: FM-DB-INSTANCE-DOWN
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-DB-INSTANCE-DOWN
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-DB-INSTANCE-DOWN
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-DB-INSTANCE-DOWN
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-DB-INSTANCE-DOWN
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: FM-DB-INSTANCE-DOWN
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: A-13
+  injected:
+  - FM-DB-INSTANCE-DOWN
+  neg:
+  - 应用.*(内存泄漏|堆内存)|堆占用
+  - 宿主.*内存(不足|紧张|耗尽)
+  - 慢查询|慢\s*SQL
+  - 容器.*OOM
+  nor:
+  - 应用.*(堆|内存).*正常
+  - 宿主.*(内存|资源).*正常
+  - 连接池.*正常
+  pos:
+  - FM\-DB\-INSTANCE\-DOWN
+  - db\.instance\.up|实例.*(不可用|下线|停止)
+  - 数据层|数据库层|Data|GaussDB
+  query: 备库实例的存活标记翻转为不可用，同时发现一条对外暴露关系从拓扑里消失。请判断根因在哪一层、对象是谁，并说明你的证据。
+  scope:
+  - Data
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-013
+  synthetic: false
+  type: 单层定位
+- chain: F7
+  cls: A
+  detectors:
+  - FM\-DB\-INSTANCE\-DOWN
+  - db\.instance\.up
+  - dn_6001
+  difficulty: easy
+  discriminator: null
+  evidence_facts:
+  - obs-000017
+  expect_layer: Data
+  expect_objects:
+  - dbinst:dn_6001
+  expect_path:
+  - FM-DB-INSTANCE-DOWN
+  expect_root_cause: FM-DB-INSTANCE-DOWN
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-DB-INSTANCE-DOWN
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-DB-INSTANCE-DOWN
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-DB-INSTANCE-DOWN
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-DB-INSTANCE-DOWN
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: FM-DB-INSTANCE-DOWN
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: A-14
+  injected:
+  - FM-DB-INSTANCE-DOWN
+  neg:
+  - 应用.*(内存泄漏|堆内存)|堆占用
+  - 宿主.*内存(不足|紧张|耗尽)
+  - 慢查询|慢\s*SQL
+  - 容器.*OOM
+  nor:
+  - 应用.*(堆|内存).*正常
+  - 宿主.*(内存|资源).*正常
+  - 连接池.*正常
+  pos:
+  - FM\-DB\-INSTANCE\-DOWN
+  - db\.instance\.up|实例.*(不可用|下线|停止)
+  - 数据层|数据库层|Data|GaussDB
+  query: 集群侧看到可写节点数从 2 掉到 1、宕机节点数升到 1，应用侧连接成功率同步下滑。请定位根因层与对象。
+  scope:
+  - Data
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-014
+  synthetic: false
+  type: 单层定位
+- chain: F4
+  cls: B
+  detectors:
+  - FM\-APP\-HEAP\-PRESSURE
+  - app\.heap_used_ratio
+  - app\.gc_pause_ms
+  - host\.mem_available_ratio
+  difficulty: medium
+  discriminator: null
+  evidence_facts:
+  - obs-000002
+  - obs-000001
+  - obs-000033
+  expect_layer: App
+  expect_objects:
+  - appinst:appinst-cc-pay-1
+  - host:host-dn_6001
+  expect_path:
+  - FM-APP-HEAP-PRESSURE
+  - FM-HOST-MEM-PRESSURE
+  expect_root_cause: FM-APP-HEAP-PRESSURE
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-APP-HEAP-PRESSURE
+      - FM-HOST-MEM-PRESSURE
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-APP-HEAP-PRESSURE
+      - FM-HOST-MEM-PRESSURE
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-APP-HEAP-PRESSURE
+        - FM-HOST-MEM-PRESSURE
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-APP-HEAP-PRESSURE
+        - FM-HOST-MEM-PRESSURE
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: null
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: B-01
+  injected:
+  - FM-APP-HEAP-PRESSURE
+  - FM-HOST-MEM-PRESSURE
+  neg:
+  - 慢查询|慢\s*SQL
+  - 宿主.*内存(不足|紧张|耗尽)
+  - 数据库实例.*(不可用|下线)
+  - 连接池.*(耗尽|打满)
+  nor:
+  - 宿主.*(内存|资源).*正常
+  - 数据库.*正常|实例.*在位|会话池.*正常
+  - 容器.*(无|未).*OOM
+  pos:
+  - FM\-APP\-HEAP\-PRESSURE
+  - 堆内存|堆占用|heap_used_ratio
+  - gc_pause_ms|GC\s*停顿
+  - 应用层|应用实例|App
+  query: 应用实例堆占用率超过 90%，同一台宿主机的可用内存比例同时掉破 5%。请给出从首发根因到下游现象的传播路径，并指出首发根因所在层。
+  scope:
+  - App
+  - Runtime
+  - Data
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-015
+  synthetic: false
+  type: 跨层定界
+- chain: F4
+  cls: B
+  detectors:
+  - FM\-APP\-HEAP\-PRESSURE
+  - app\.heap_used_ratio
+  - app\.gc_pause_ms
+  - host\.mem_available_ratio
+  difficulty: medium
+  discriminator: null
+  evidence_facts:
+  - obs-000002
+  - obs-000001
+  - obs-000039
+  expect_layer: App
+  expect_objects:
+  - appinst:appinst-cc-pay-1
+  - host:host-dn_6002
+  expect_path:
+  - FM-APP-HEAP-PRESSURE
+  - FM-HOST-MEM-PRESSURE
+  expect_root_cause: FM-APP-HEAP-PRESSURE
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-APP-HEAP-PRESSURE
+      - FM-HOST-MEM-PRESSURE
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-APP-HEAP-PRESSURE
+      - FM-HOST-MEM-PRESSURE
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-APP-HEAP-PRESSURE
+        - FM-HOST-MEM-PRESSURE
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-APP-HEAP-PRESSURE
+        - FM-HOST-MEM-PRESSURE
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: null
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: B-02
+  injected:
+  - FM-APP-HEAP-PRESSURE
+  - FM-HOST-MEM-PRESSURE
+  neg:
+  - 慢查询|慢\s*SQL
+  - 宿主.*内存(不足|紧张|耗尽)
+  - 数据库实例.*(不可用|下线)
+  - 连接池.*(耗尽|打满)
+  nor:
+  - 宿主.*(内存|资源).*正常
+  - 数据库.*正常|实例.*在位|会话池.*正常
+  - 容器.*(无|未).*OOM
+  pos:
+  - FM\-APP\-HEAP\-PRESSURE
+  - 堆内存|堆占用|heap_used_ratio
+  - gc_pause_ms|GC\s*停顿
+  - 应用层|应用实例|App
+  query: 一次发布后应用堆占用率稳步抬到 85% 以上，随后备库宿主的内存可用比例跌破 4%。请判断首发根因是哪一层，并给出跨层传播链路。
+  scope:
+  - App
+  - Runtime
+  - Data
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-016
+  synthetic: false
+  type: 跨层定界
+- chain: F2
+  cls: B
+  detectors:
+  - FM\-APP\-ENDPOINT\-SLOW
+  - app\.endpoint\.p99_ms
+  - ep-cc-pay-pay
+  difficulty: medium
+  discriminator: null
+  evidence_facts:
+  - obs-000023
+  expect_layer: App
+  expect_objects:
+  - endpoint:ep-cc-pay-pay
+  expect_path:
+  - FM-APP-ENDPOINT-SLOW
+  expect_root_cause: FM-APP-ENDPOINT-SLOW
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-APP-ENDPOINT-SLOW
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-APP-ENDPOINT-SLOW
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-APP-ENDPOINT-SLOW
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-APP-ENDPOINT-SLOW
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: FM-APP-ENDPOINT-SLOW
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: B-03
+  injected:
+  - FM-APP-ENDPOINT-SLOW
+  neg:
+  - 慢查询|慢\s*SQL
+  - 宿主.*内存(不足|紧张|耗尽)
+  - 数据库实例.*(不可用|下线)
+  - 连接池.*(耗尽|打满)
+  - 容器.*OOM
+  nor: []
+  pos:
+  - FM\-APP\-ENDPOINT\-SLOW
+  - p99
+  - SLO
+  - 200\s*ms
+  - 应用层|应用服务|App
+  query: 支付接口 P99 抬到 3 秒量级，业务方怀疑是数据库慢查询，但数据库实例与连接池读数均无异常。请定界根因所在层并给出依据。
+  scope:
+  - App
+  - Runtime
+  - Data
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-017
+  synthetic: false
+  type: 跨层定界
+- chain: F3
+  cls: B
+  detectors:
+  - FM\-APP\-ENDPOINT\-SLOW
+  - app\.endpoint\.p99_ms
+  - ep-cc-pay-slow
+  difficulty: medium
+  discriminator: null
+  evidence_facts:
+  - obs-000026
+  expect_layer: App
+  expect_objects:
+  - endpoint:ep-cc-pay-slow
+  expect_path:
+  - FM-APP-ENDPOINT-SLOW
+  expect_root_cause: FM-APP-ENDPOINT-SLOW
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-APP-ENDPOINT-SLOW
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-APP-ENDPOINT-SLOW
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-APP-ENDPOINT-SLOW
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-APP-ENDPOINT-SLOW
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: FM-APP-ENDPOINT-SLOW
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: B-04
+  injected:
+  - FM-APP-ENDPOINT-SLOW
+  neg:
+  - 慢查询|慢\s*SQL
+  - 宿主.*内存(不足|紧张|耗尽)
+  - 数据库实例.*(不可用|下线)
+  - 连接池.*(耗尽|打满)
+  - 容器.*OOM
+  nor: []
+  pos:
+  - FM\-APP\-ENDPOINT\-SLOW
+  - p99
+  - SLO
+  - 200\s*ms
+  - 应用层|应用服务|App
+  query: 对账接口 P99 达到 4.4 秒，值班同学第一反应是宿主 CPU 争抢，但宿主与容器的 CPU 读数都在低位。请定界根因层并说明排除依据。
+  scope:
+  - App
+  - Runtime
+  - Data
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-018
+  synthetic: false
+  type: 跨层定界
+- chain: F4
+  cls: B
+  detectors:
+  - FM\-APP\-HEAP\-PRESSURE
+  - app\.heap_used_ratio
+  - app\.gc_pause_ms
+  - appinst-cc-pay-1
+  difficulty: medium
+  discriminator: null
+  evidence_facts:
+  - obs-000002
+  - obs-000001
+  expect_layer: App
+  expect_objects:
+  - appinst:appinst-cc-pay-1
+  expect_path:
+  - FM-APP-HEAP-PRESSURE
+  expect_root_cause: FM-APP-HEAP-PRESSURE
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-APP-HEAP-PRESSURE
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-APP-HEAP-PRESSURE
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-APP-HEAP-PRESSURE
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-APP-HEAP-PRESSURE
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: FM-APP-HEAP-PRESSURE
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: B-05
+  injected:
+  - FM-APP-HEAP-PRESSURE
+  neg:
+  - 慢查询|慢\s*SQL
+  - 宿主.*内存(不足|紧张|耗尽)
+  - 数据库实例.*(不可用|下线)
+  - 连接池.*(耗尽|打满)
+  nor:
+  - 宿主.*(内存|资源).*正常
+  - 数据库.*正常|实例.*在位|会话池.*正常
+  - 容器.*(无|未).*OOM
+  pos:
+  - FM\-APP\-HEAP\-PRESSURE
+  - 堆内存|堆占用|heap_used_ratio
+  - gc_pause_ms|GC\s*停顿
+  - 应用层|应用实例|App
+  query: 应用堆占用率持续高于 87%，GC 停顿同步拉长；宿主内存与数据库实例都没有异常。请给出根因层与传播影响范围。
+  scope:
+  - App
+  - Runtime
+  - Data
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-019
+  synthetic: false
+  type: 跨层定界
+- chain: F5
+  cls: B
+  detectors:
+  - FM\-HOST\-MEM\-PRESSURE
+  - host\.mem_available_ratio
+  - host-dn_6001
+  difficulty: medium
+  discriminator: null
+  evidence_facts:
+  - obs-000033
+  expect_layer: Runtime
+  expect_objects:
+  - host:host-dn_6001
+  expect_path:
+  - FM-HOST-MEM-PRESSURE
+  expect_root_cause: FM-HOST-MEM-PRESSURE
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-HOST-MEM-PRESSURE
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-HOST-MEM-PRESSURE
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-HOST-MEM-PRESSURE
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-HOST-MEM-PRESSURE
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: FM-HOST-MEM-PRESSURE
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: B-06
+  injected:
+  - FM-HOST-MEM-PRESSURE
+  neg:
+  - 应用.*(内存泄漏|堆内存)|堆占用
+  - 慢查询|慢\s*SQL
+  - 连接池.*(耗尽|打满)
+  - 数据库实例.*(不可用|下线)
+  nor:
+  - 应用.*(堆|内存).*正常
+  - 数据库.*正常|实例.*在位
+  - 连接池.*正常
+  pos:
+  - FM\-HOST\-MEM\-PRESSURE
+  - mem_available_ratio|可用内存比例
+  - 宿主机|运行时|Runtime
+  query: 主库宿主可用内存比例跌破 3%，应用侧偶发超时；应用堆内存、数据库实例读数均正常。请定界根因层，并说明你是如何排除应用层的。
+  scope:
+  - App
+  - Runtime
+  - Data
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-020
+  synthetic: false
+  type: 跨层定界
+- chain: F6
+  cls: B
+  detectors:
+  - FM\-DB\-INSTANCE\-DOWN
+  - db\.instance\.up
+  - dn_6001
+  difficulty: medium
+  discriminator: null
+  evidence_facts:
+  - obs-000017
+  expect_layer: Data
+  expect_objects:
+  - dbinst:dn_6001
+  expect_path:
+  - FM-DB-INSTANCE-DOWN
+  expect_root_cause: FM-DB-INSTANCE-DOWN
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-DB-INSTANCE-DOWN
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-DB-INSTANCE-DOWN
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-DB-INSTANCE-DOWN
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-DB-INSTANCE-DOWN
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: FM-DB-INSTANCE-DOWN
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: B-07
+  injected:
+  - FM-DB-INSTANCE-DOWN
+  neg:
+  - 应用.*(内存泄漏|堆内存)|堆占用
+  - 宿主.*内存(不足|紧张|耗尽)
+  - 慢查询|慢\s*SQL
+  - 容器.*OOM
+  nor:
+  - 应用.*(堆|内存).*正常
+  - 宿主.*(内存|资源).*正常
+  - 连接池.*正常
+  pos:
+  - FM\-DB\-INSTANCE\-DOWN
+  - db\.instance\.up|实例.*(不可用|下线|停止)
+  - 数据层|数据库层|Data|GaussDB
+  query: 主库实例存活标记翻转为不可用，应用出现取连接失败；宿主与应用内存读数正常。请定界根因层与对象。
+  scope:
+  - App
+  - Runtime
+  - Data
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-021
+  synthetic: false
+  type: 跨层定界
+- chain: F7
+  cls: B
+  detectors:
+  - FM\-DB\-INSTANCE\-DOWN
+  - db\.instance\.up
+  - dn_6002
+  difficulty: medium
+  discriminator: null
+  evidence_facts:
+  - obs-000019
+  expect_layer: Data
+  expect_objects:
+  - dbinst:dn_6002
+  expect_path:
+  - FM-DB-INSTANCE-DOWN
+  expect_root_cause: FM-DB-INSTANCE-DOWN
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-DB-INSTANCE-DOWN
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-DB-INSTANCE-DOWN
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-DB-INSTANCE-DOWN
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-DB-INSTANCE-DOWN
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: FM-DB-INSTANCE-DOWN
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: B-08
+  injected:
+  - FM-DB-INSTANCE-DOWN
+  neg:
+  - 应用.*(内存泄漏|堆内存)|堆占用
+  - 宿主.*内存(不足|紧张|耗尽)
+  - 慢查询|慢\s*SQL
+  - 容器.*OOM
+  nor:
+  - 应用.*(堆|内存).*正常
+  - 宿主.*(内存|资源).*正常
+  - 连接池.*正常
+  pos:
+  - FM\-DB\-INSTANCE\-DOWN
+  - db\.instance\.up|实例.*(不可用|下线|停止)
+  - 数据层|数据库层|Data|GaussDB
+  query: 备库实例判定为不可用，集群节点计数同步变化；应用侧尚未出现大面积报错。请定界根因层，并说明影响面为什么暂时有限。
+  scope:
+  - App
+  - Runtime
+  - Data
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-022
+  synthetic: false
+  type: 跨层定界
+- chain: F1
+  cls: B
+  detectors:
+  - FM\-APP\-ENDPOINT\-SLOW
+  - app\.endpoint\.p99_ms
+  - ep-cc-pay-pay
+  difficulty: medium
+  discriminator: null
+  evidence_facts:
+  - obs-000023
+  expect_layer: App
+  expect_objects:
+  - endpoint:ep-cc-pay-pay
+  expect_path:
+  - FM-APP-ENDPOINT-SLOW
+  expect_root_cause: FM-APP-ENDPOINT-SLOW
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-APP-ENDPOINT-SLOW
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-APP-ENDPOINT-SLOW
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-APP-ENDPOINT-SLOW
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-APP-ENDPOINT-SLOW
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: FM-APP-ENDPOINT-SLOW
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: B-09
+  injected:
+  - FM-APP-ENDPOINT-SLOW
+  neg:
+  - 慢查询|慢\s*SQL
+  - 宿主.*内存(不足|紧张|耗尽)
+  - 数据库实例.*(不可用|下线)
+  - 连接池.*(耗尽|打满)
+  - 容器.*OOM
+  nor: []
+  pos:
+  - FM\-APP\-ENDPOINT\-SLOW
+  - p99
+  - SLO
+  - 200\s*ms
+  - 应用层|应用服务|App
+  query: 支付接口 P99 从 180ms 抬到 2900ms，连接池并发与数据库会话计数都没有明显抬升。请定界根因层并给出证据链。
+  scope:
+  - App
+  - Runtime
+  - Data
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-023
+  synthetic: false
+  type: 跨层定界
+- chain: F2
+  cls: B
+  detectors:
+  - FM\-APP\-HEAP\-PRESSURE
+  - app\.heap_used_ratio
+  - app\.gc_pause_ms
+  - appinst-cc-pay-1
+  difficulty: medium
+  discriminator: null
+  evidence_facts:
+  - obs-000002
+  - obs-000001
+  expect_layer: App
+  expect_objects:
+  - appinst:appinst-cc-pay-1
+  expect_path:
+  - FM-APP-HEAP-PRESSURE
+  expect_root_cause: FM-APP-HEAP-PRESSURE
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-APP-HEAP-PRESSURE
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-APP-HEAP-PRESSURE
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-APP-HEAP-PRESSURE
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-APP-HEAP-PRESSURE
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: FM-APP-HEAP-PRESSURE
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: B-10
+  injected:
+  - FM-APP-HEAP-PRESSURE
+  neg:
+  - 慢查询|慢\s*SQL
+  - 宿主.*内存(不足|紧张|耗尽)
+  - 数据库实例.*(不可用|下线)
+  - 连接池.*(耗尽|打满)
+  nor:
+  - 宿主.*(内存|资源).*正常
+  - 数据库.*正常|实例.*在位|会话池.*正常
+  - 容器.*(无|未).*OOM
+  pos:
+  - FM\-APP\-HEAP\-PRESSURE
+  - 堆内存|堆占用|heap_used_ratio
+  - gc_pause_ms|GC\s*停顿
+  - 应用层|应用实例|App
+  query: 应用堆占用率冲到 95%，伴有长 GC；有人提出是数据库慢查询，但数据层读数无异常。请定界根因层与对象，并说明排除数据层的依据。
+  scope:
+  - App
+  - Runtime
+  - Data
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-024
+  synthetic: false
+  type: 跨层定界
+- chain: F3
+  cls: B
+  detectors:
+  - FM\-HOST\-MEM\-PRESSURE
+  - host\.mem_available_ratio
+  - host-dn_6002
+  difficulty: hard
+  discriminator: null
+  evidence_facts:
+  - obs-000039
+  expect_layer: Runtime
+  expect_objects:
+  - host:host-dn_6002
+  expect_path:
+  - FM-HOST-MEM-PRESSURE
+  expect_root_cause: FM-HOST-MEM-PRESSURE
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-HOST-MEM-PRESSURE
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-HOST-MEM-PRESSURE
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-HOST-MEM-PRESSURE
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-HOST-MEM-PRESSURE
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: FM-HOST-MEM-PRESSURE
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: B-11
+  injected:
+  - FM-HOST-MEM-PRESSURE
+  neg:
+  - 应用.*(内存泄漏|堆内存)|堆占用
+  - 慢查询|慢\s*SQL
+  - 连接池.*(耗尽|打满)
+  - 数据库实例.*(不可用|下线)
+  nor:
+  - 应用.*(堆|内存).*正常
+  - 数据库.*正常|实例.*在位
+  - 连接池.*正常
+  pos:
+  - FM\-HOST\-MEM\-PRESSURE
+  - mem_available_ratio|可用内存比例
+  - 宿主机|运行时|Runtime
+  query: 备库宿主可用内存比例跌到 2% 以下，同时巡检发现一张快照表对象从事实集里消失。请定界根因层与对象，并说明对象缺失是否改变了根因判定。
+  scope:
+  - App
+  - Runtime
+  - Data
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-025
+  synthetic: false
+  type: 跨层定界
+- chain: F4
+  cls: B
+  detectors:
+  - FM\-APP\-ENDPOINT\-SLOW
+  - app\.endpoint\.p99_ms
+  - ep-cc-pay-slow
+  difficulty: hard
+  discriminator: null
+  evidence_facts:
+  - obs-000026
+  expect_layer: App
+  expect_objects:
+  - endpoint:ep-cc-pay-slow
+  expect_path:
+  - FM-APP-ENDPOINT-SLOW
+  expect_root_cause: FM-APP-ENDPOINT-SLOW
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-APP-ENDPOINT-SLOW
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-APP-ENDPOINT-SLOW
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-APP-ENDPOINT-SLOW
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-APP-ENDPOINT-SLOW
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: FM-APP-ENDPOINT-SLOW
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: B-12
+  injected:
+  - FM-APP-ENDPOINT-SLOW
+  neg:
+  - 慢查询|慢\s*SQL
+  - 宿主.*内存(不足|紧张|耗尽)
+  - 数据库实例.*(不可用|下线)
+  - 连接池.*(耗尽|打满)
+  - 容器.*OOM
+  nor: []
+  pos:
+  - FM\-APP\-ENDPOINT\-SLOW
+  - p99
+  - SLO
+  - 200\s*ms
+  - 应用层|应用服务|App
+  query: 对账接口 P99 抬到 1.7 秒，同时拓扑里容器到宿主的部署关系整体消失。请定界根因层，并说明缺失关系对你的判断有无影响。
+  scope:
+  - App
+  - Runtime
+  - Data
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-026
+  synthetic: false
+  type: 跨层定界
+- chain: F5
+  cls: B
+  detectors:
+  - FM\-HOST\-MEM\-PRESSURE
+  - host\.mem_available_ratio
+  - host-dn_6001
+  difficulty: hard
+  discriminator: null
+  evidence_facts:
+  - obs-000033
+  expect_layer: Runtime
+  expect_objects:
+  - host:host-dn_6001
+  expect_path:
+  - FM-HOST-MEM-PRESSURE
+  expect_root_cause: FM-HOST-MEM-PRESSURE
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-HOST-MEM-PRESSURE
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-HOST-MEM-PRESSURE
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-HOST-MEM-PRESSURE
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-HOST-MEM-PRESSURE
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: FM-HOST-MEM-PRESSURE
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: B-13
+  injected:
+  - FM-HOST-MEM-PRESSURE
+  neg:
+  - 应用.*(内存泄漏|堆内存)|堆占用
+  - 慢查询|慢\s*SQL
+  - 连接池.*(耗尽|打满)
+  - 数据库实例.*(不可用|下线)
+  nor:
+  - 应用.*(堆|内存).*正常
+  - 数据库.*正常|实例.*在位
+  - 连接池.*正常
+  pos:
+  - FM\-HOST\-MEM\-PRESSURE
+  - mem_available_ratio|可用内存比例
+  - 宿主机|运行时|Runtime
+  query: 主库宿主可用内存比例降到 4.5% 附近，巡检同时登记了一台新上线的宿主对象（无读数）。请定界根因层与对象，并说明新宿主对象是否可信为根因。
+  scope:
+  - App
+  - Runtime
+  - Data
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-027
+  synthetic: false
+  type: 跨层定界
+- chain: F6
+  cls: B
+  detectors:
+  - FM\-DB\-INSTANCE\-DOWN
+  - db\.instance\.up
+  - dn_6001
+  difficulty: hard
+  discriminator: null
+  evidence_facts:
+  - obs-000017
+  expect_layer: Data
+  expect_objects:
+  - dbinst:dn_6001
+  expect_path:
+  - FM-DB-INSTANCE-DOWN
+  expect_root_cause: FM-DB-INSTANCE-DOWN
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-DB-INSTANCE-DOWN
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-DB-INSTANCE-DOWN
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-DB-INSTANCE-DOWN
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-DB-INSTANCE-DOWN
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: FM-DB-INSTANCE-DOWN
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: B-14
+  injected:
+  - FM-DB-INSTANCE-DOWN
+  neg:
+  - 应用.*(内存泄漏|堆内存)|堆占用
+  - 宿主.*内存(不足|紧张|耗尽)
+  - 慢查询|慢\s*SQL
+  - 容器.*OOM
+  nor:
+  - 应用.*(堆|内存).*正常
+  - 宿主.*(内存|资源).*正常
+  - 连接池.*正常
+  pos:
+  - FM\-DB\-INSTANCE\-DOWN
+  - db\.instance\.up|实例.*(不可用|下线|停止)
+  - 数据层|数据库层|Data|GaussDB
+  query: 主库实例变为不可用、集群计数同步下调，应用侧报取连接失败。请定界根因层并给出跨层影响范围。
+  scope:
+  - App
+  - Runtime
+  - Data
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-028
+  synthetic: false
+  type: 跨层定界
+- chain: F4
+  cls: D
+  detectors:
+  - FM\-APP\-HEAP\-PRESSURE
+  - app\.endpoint\.p99_ms
+  - app\.heap_used_ratio
+  - app\.gc_pause_ms
+  difficulty: medium
+  discriminator: 'P1-内存路径: app.heap_used_ratio vs host.mem_available_ratio'
+  evidence_facts:
+  - obs-000023
+  - obs-000002
+  - obs-000001
+  expect_layer: App
+  expect_objects:
+  - endpoint:ep-cc-pay-pay
+  - appinst:appinst-cc-pay-1
+  expect_path:
+  - FM-APP-HEAP-PRESSURE
+  expect_root_cause: FM-APP-HEAP-PRESSURE
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-APP-ENDPOINT-SLOW
+      - FM-APP-HEAP-PRESSURE
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-APP-ENDPOINT-SLOW
+      - FM-APP-HEAP-PRESSURE
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-APP-ENDPOINT-SLOW
+        - FM-APP-HEAP-PRESSURE
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-APP-ENDPOINT-SLOW
+        - FM-APP-HEAP-PRESSURE
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: null
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: D-01
+  injected:
+  - FM-APP-HEAP-PRESSURE
+  - FM-APP-ENDPOINT-SLOW
+  neg:
+  - 慢查询|慢\s*SQL
+  - 宿主.*内存(不足|紧张|耗尽)
+  - 数据库实例.*(不可用|下线)
+  - 连接池.*(耗尽|打满)
+  nor:
+  - 宿主.*(内存|资源).*正常
+  - 数据库.*正常|实例.*在位|会话池.*正常
+  - 容器.*(无|未).*OOM
+  pos:
+  - FM\-APP\-HEAP\-PRESSURE
+  - 堆内存|堆占用|heap_used_ratio
+  - gc_pause_ms|GC\s*停顿
+  - 应用层|应用实例|App
+  query: 支付接口 P99 涨到 3.6 秒。候选解释有两个：应用自身内存压力、宿主内存压力。请给出你的定论并说明区分依据。
+  scope:
+  - App
+  - Runtime
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-029
+  synthetic: false
+  type: 同症状区分
+- chain: F4
+  cls: D
+  detectors:
+  - FM\-HOST\-MEM\-PRESSURE
+  - app\.endpoint\.p99_ms
+  - host\.mem_available_ratio
+  - ep-cc-pay-pay
+  difficulty: medium
+  discriminator: 'P1-内存路径: app.heap_used_ratio vs host.mem_available_ratio'
+  evidence_facts:
+  - obs-000023
+  - obs-000033
+  expect_layer: Runtime
+  expect_objects:
+  - endpoint:ep-cc-pay-pay
+  - host:host-dn_6001
+  expect_path:
+  - FM-HOST-MEM-PRESSURE
+  expect_root_cause: FM-HOST-MEM-PRESSURE
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-APP-ENDPOINT-SLOW
+      - FM-HOST-MEM-PRESSURE
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-APP-ENDPOINT-SLOW
+      - FM-HOST-MEM-PRESSURE
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-APP-ENDPOINT-SLOW
+        - FM-HOST-MEM-PRESSURE
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-APP-ENDPOINT-SLOW
+        - FM-HOST-MEM-PRESSURE
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: null
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: D-02
+  injected:
+  - FM-HOST-MEM-PRESSURE
+  - FM-APP-ENDPOINT-SLOW
+  neg:
+  - 应用.*(内存泄漏|堆内存)|堆占用
+  - 慢查询|慢\s*SQL
+  - 连接池.*(耗尽|打满)
+  - 数据库实例.*(不可用|下线)
+  nor:
+  - 应用.*(堆|内存).*正常
+  - 数据库.*正常|实例.*在位
+  - 连接池.*正常
+  pos:
+  - FM\-HOST\-MEM\-PRESSURE
+  - mem_available_ratio|可用内存比例
+  - 宿主机|运行时|Runtime
+  query: 支付接口 P99 涨到 3.6 秒。候选解释有两个：应用自身内存压力、宿主内存压力。请给出你的定论并说明区分依据。
+  scope:
+  - App
+  - Runtime
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-030
+  synthetic: false
+  type: 同症状区分
+- chain: F4
+  cls: D
+  detectors:
+  - FM\-HOST\-MEM\-PRESSURE
+  - app\.endpoint\.p99_ms
+  - host\.mem_available_ratio
+  - ep-cc-pay-pay
+  difficulty: medium
+  discriminator: 'P2-资源vs可用性: host.mem_available_ratio vs db.instance.up'
+  evidence_facts:
+  - obs-000023
+  - obs-000039
+  expect_layer: Runtime
+  expect_objects:
+  - endpoint:ep-cc-pay-pay
+  - host:host-dn_6002
+  expect_path:
+  - FM-HOST-MEM-PRESSURE
+  expect_root_cause: FM-HOST-MEM-PRESSURE
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-APP-ENDPOINT-SLOW
+      - FM-HOST-MEM-PRESSURE
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-APP-ENDPOINT-SLOW
+      - FM-HOST-MEM-PRESSURE
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-APP-ENDPOINT-SLOW
+        - FM-HOST-MEM-PRESSURE
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-APP-ENDPOINT-SLOW
+        - FM-HOST-MEM-PRESSURE
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: null
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: D-03
+  injected:
+  - FM-HOST-MEM-PRESSURE
+  - FM-APP-ENDPOINT-SLOW
+  neg:
+  - 应用.*(内存泄漏|堆内存)|堆占用
+  - 慢查询|慢\s*SQL
+  - 连接池.*(耗尽|打满)
+  - 数据库实例.*(不可用|下线)
+  nor:
+  - 应用.*(堆|内存).*正常
+  - 数据库.*正常|实例.*在位
+  - 连接池.*正常
+  pos:
+  - FM\-HOST\-MEM\-PRESSURE
+  - mem_available_ratio|可用内存比例
+  - 宿主机|运行时|Runtime
+  query: 对账接口 P99 升到 2.75 秒。候选解释有两个：宿主资源不足、数据库实例不可用。请给出定论与区分依据。
+  scope:
+  - Runtime
+  - Data
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-031
+  synthetic: false
+  type: 同症状区分
+- chain: F7
+  cls: D
+  detectors:
+  - FM\-DB\-INSTANCE\-DOWN
+  - app\.endpoint\.p99_ms
+  - db\.instance\.up
+  - ep-cc-pay-pay
+  difficulty: medium
+  discriminator: 'P2-资源vs可用性: host.mem_available_ratio vs db.instance.up'
+  evidence_facts:
+  - obs-000023
+  - obs-000017
+  expect_layer: Data
+  expect_objects:
+  - endpoint:ep-cc-pay-pay
+  - dbinst:dn_6001
+  expect_path:
+  - FM-DB-INSTANCE-DOWN
+  expect_root_cause: FM-DB-INSTANCE-DOWN
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-APP-ENDPOINT-SLOW
+      - FM-DB-INSTANCE-DOWN
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-APP-ENDPOINT-SLOW
+      - FM-DB-INSTANCE-DOWN
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-APP-ENDPOINT-SLOW
+        - FM-DB-INSTANCE-DOWN
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-APP-ENDPOINT-SLOW
+        - FM-DB-INSTANCE-DOWN
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: null
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: D-04
+  injected:
+  - FM-DB-INSTANCE-DOWN
+  - FM-APP-ENDPOINT-SLOW
+  neg:
+  - 应用.*(内存泄漏|堆内存)|堆占用
+  - 宿主.*内存(不足|紧张|耗尽)
+  - 慢查询|慢\s*SQL
+  - 容器.*OOM
+  nor:
+  - 应用.*(堆|内存).*正常
+  - 宿主.*(内存|资源).*正常
+  - 连接池.*正常
+  pos:
+  - FM\-DB\-INSTANCE\-DOWN
+  - db\.instance\.up|实例.*(不可用|下线|停止)
+  - 数据层|数据库层|Data|GaussDB
+  query: 对账接口 P99 升到 2.75 秒。候选解释有两个：宿主资源不足、数据库实例不可用。请给出定论与区分依据。
+  scope:
+  - Runtime
+  - Data
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-032
+  synthetic: false
+  type: 同症状区分
+- chain: F4
+  cls: D
+  detectors:
+  - FM\-APP\-HEAP\-PRESSURE
+  - app\.endpoint\.p99_ms
+  - app\.heap_used_ratio
+  - app\.gc_pause_ms
+  difficulty: medium
+  discriminator: 'P3-应用内存vs数据库可用性: app.heap_used_ratio vs db.instance.up'
+  evidence_facts:
+  - obs-000026
+  - obs-000002
+  - obs-000001
+  expect_layer: App
+  expect_objects:
+  - endpoint:ep-cc-pay-slow
+  - appinst:appinst-cc-pay-1
+  expect_path:
+  - FM-APP-HEAP-PRESSURE
+  expect_root_cause: FM-APP-HEAP-PRESSURE
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-APP-ENDPOINT-SLOW
+      - FM-APP-HEAP-PRESSURE
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-APP-ENDPOINT-SLOW
+      - FM-APP-HEAP-PRESSURE
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-APP-ENDPOINT-SLOW
+        - FM-APP-HEAP-PRESSURE
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-APP-ENDPOINT-SLOW
+        - FM-APP-HEAP-PRESSURE
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: null
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: D-05
+  injected:
+  - FM-APP-HEAP-PRESSURE
+  - FM-APP-ENDPOINT-SLOW
+  neg:
+  - 慢查询|慢\s*SQL
+  - 宿主.*内存(不足|紧张|耗尽)
+  - 数据库实例.*(不可用|下线)
+  - 连接池.*(耗尽|打满)
+  nor:
+  - 宿主.*(内存|资源).*正常
+  - 数据库.*正常|实例.*在位|会话池.*正常
+  - 容器.*(无|未).*OOM
+  pos:
+  - FM\-APP\-HEAP\-PRESSURE
+  - 堆内存|堆占用|heap_used_ratio
+  - gc_pause_ms|GC\s*停顿
+  - 应用层|应用实例|App
+  query: 批扣接口 P99 抬到 3.3 秒。候选解释有两个：应用内存压力、数据库实例不可用。请给出定论与区分依据。
+  scope:
+  - App
+  - Data
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-033
+  synthetic: false
+  type: 同症状区分
+- chain: F7
+  cls: D
+  detectors:
+  - FM\-DB\-INSTANCE\-DOWN
+  - app\.endpoint\.p99_ms
+  - db\.instance\.up
+  - ep-cc-pay-slow
+  difficulty: medium
+  discriminator: 'P3-应用内存vs数据库可用性: app.heap_used_ratio vs db.instance.up'
+  evidence_facts:
+  - obs-000026
+  - obs-000019
+  expect_layer: Data
+  expect_objects:
+  - endpoint:ep-cc-pay-slow
+  - dbinst:dn_6002
+  expect_path:
+  - FM-DB-INSTANCE-DOWN
+  expect_root_cause: FM-DB-INSTANCE-DOWN
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-APP-ENDPOINT-SLOW
+      - FM-DB-INSTANCE-DOWN
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-APP-ENDPOINT-SLOW
+      - FM-DB-INSTANCE-DOWN
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-APP-ENDPOINT-SLOW
+        - FM-DB-INSTANCE-DOWN
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-APP-ENDPOINT-SLOW
+        - FM-DB-INSTANCE-DOWN
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: null
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: D-06
+  injected:
+  - FM-DB-INSTANCE-DOWN
+  - FM-APP-ENDPOINT-SLOW
+  neg:
+  - 应用.*(内存泄漏|堆内存)|堆占用
+  - 宿主.*内存(不足|紧张|耗尽)
+  - 慢查询|慢\s*SQL
+  - 容器.*OOM
+  nor:
+  - 应用.*(堆|内存).*正常
+  - 宿主.*(内存|资源).*正常
+  - 连接池.*正常
+  pos:
+  - FM\-DB\-INSTANCE\-DOWN
+  - db\.instance\.up|实例.*(不可用|下线|停止)
+  - 数据层|数据库层|Data|GaussDB
+  query: 批扣接口 P99 抬到 3.3 秒。候选解释有两个：应用内存压力、数据库实例不可用。请给出定论与区分依据。
+  scope:
+  - App
+  - Data
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-034
+  synthetic: false
+  type: 同症状区分
+- chain: F4
+  cls: N
+  detectors:
+  - FM\-APP\-HEAP\-PRESSURE
+  - app\.heap_used_ratio
+  - app\.gc_pause_ms
+  - appinst-cc-pay-1
+  difficulty: hard
+  discriminator: null
+  evidence_facts:
+  - obs-000002
+  - obs-000001
+  expect_layer: App
+  expect_objects:
+  - appinst:appinst-cc-pay-1
+  expect_path:
+  - FM-APP-HEAP-PRESSURE
+  expect_root_cause: FM-APP-HEAP-PRESSURE
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-APP-HEAP-PRESSURE
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-APP-HEAP-PRESSURE
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-APP-HEAP-PRESSURE
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-APP-HEAP-PRESSURE
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: FM-APP-HEAP-PRESSURE
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: N-01
+  injected:
+  - FM-APP-HEAP-PRESSURE
+  neg:
+  - 慢查询|慢\s*SQL
+  - 宿主.*内存(不足|紧张|耗尽)
+  - 数据库实例.*(不可用|下线)
+  - 连接池.*(耗尽|打满)
+  nor:
+  - 宿主.*(内存|资源).*正常
+  - 数据库.*正常|实例.*在位|会话池.*正常
+  - 容器.*(无|未).*OOM
+  pos:
+  - FM\-APP\-HEAP\-PRESSURE
+  - 堆内存|堆占用|heap_used_ratio
+  - gc_pause_ms|GC\s*停顿
+  - 应用层|应用实例|App
+  query: 应用堆占用率越过 90%。要下结论，你必须先证明另外两条路径不成立。请给出根因、你据以排除其他路径的**正常读数**，以及分层判断。
+  scope:
+  - App
+  - Runtime
+  - Data
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-035
+  synthetic: false
+  type: 否定性证据
+- chain: F4
+  cls: N
+  detectors:
+  - FM\-APP\-HEAP\-PRESSURE
+  - app\.heap_used_ratio
+  - app\.gc_pause_ms
+  - appinst-cc-pay-1
+  difficulty: hard
+  discriminator: null
+  evidence_facts:
+  - obs-000002
+  - obs-000001
+  expect_layer: App
+  expect_objects:
+  - appinst:appinst-cc-pay-1
+  expect_path:
+  - FM-APP-HEAP-PRESSURE
+  expect_root_cause: FM-APP-HEAP-PRESSURE
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-APP-HEAP-PRESSURE
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-APP-HEAP-PRESSURE
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-APP-HEAP-PRESSURE
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-APP-HEAP-PRESSURE
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: FM-APP-HEAP-PRESSURE
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: N-02
+  injected:
+  - FM-APP-HEAP-PRESSURE
+  neg:
+  - 慢查询|慢\s*SQL
+  - 宿主.*内存(不足|紧张|耗尽)
+  - 数据库实例.*(不可用|下线)
+  - 连接池.*(耗尽|打满)
+  nor:
+  - 宿主.*(内存|资源).*正常
+  - 数据库.*正常|实例.*在位|会话池.*正常
+  - 容器.*(无|未).*OOM
+  pos:
+  - FM\-APP\-HEAP\-PRESSURE
+  - 堆内存|堆占用|heap_used_ratio
+  - gc_pause_ms|GC\s*停顿
+  - 应用层|应用实例|App
+  query: 应用堆占用率长期高于 86%，GC 停顿同步拉长。请用排除法收敛到唯一根因，并明确指出哪些指标处于正常区间。
+  scope:
+  - App
+  - Runtime
+  - Data
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-036
+  synthetic: false
+  type: 否定性证据
+- chain: F4
+  cls: N
+  detectors:
+  - FM\-HOST\-MEM\-PRESSURE
+  - host\.mem_available_ratio
+  - host-dn_6001
+  difficulty: hard
+  discriminator: null
+  evidence_facts:
+  - obs-000033
+  expect_layer: Runtime
+  expect_objects:
+  - host:host-dn_6001
+  expect_path:
+  - FM-HOST-MEM-PRESSURE
+  expect_root_cause: FM-HOST-MEM-PRESSURE
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-HOST-MEM-PRESSURE
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-HOST-MEM-PRESSURE
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-HOST-MEM-PRESSURE
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-HOST-MEM-PRESSURE
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: FM-HOST-MEM-PRESSURE
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: N-03
+  injected:
+  - FM-HOST-MEM-PRESSURE
+  neg:
+  - 应用.*(内存泄漏|堆内存)|堆占用
+  - 慢查询|慢\s*SQL
+  - 连接池.*(耗尽|打满)
+  - 数据库实例.*(不可用|下线)
+  nor:
+  - 应用.*(堆|内存).*正常
+  - 数据库.*正常|实例.*在位
+  - 连接池.*正常
+  pos:
+  - FM\-HOST\-MEM\-PRESSURE
+  - mem_available_ratio|可用内存比例
+  - 宿主机|运行时|Runtime
+  query: 主库宿主可用内存比例跌破 3%。请用正常读数排除应用侧与数据侧，给出唯一根因、所在层与判据。
+  scope:
+  - App
+  - Runtime
+  - Data
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-037
+  synthetic: false
+  type: 否定性证据
+- chain: F4
+  cls: N
+  detectors:
+  - FM\-HOST\-MEM\-PRESSURE
+  - host\.mem_available_ratio
+  - host-dn_6002
+  difficulty: hard
+  discriminator: null
+  evidence_facts:
+  - obs-000039
+  expect_layer: Runtime
+  expect_objects:
+  - host:host-dn_6002
+  expect_path:
+  - FM-HOST-MEM-PRESSURE
+  expect_root_cause: FM-HOST-MEM-PRESSURE
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-HOST-MEM-PRESSURE
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-HOST-MEM-PRESSURE
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-HOST-MEM-PRESSURE
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-HOST-MEM-PRESSURE
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: FM-HOST-MEM-PRESSURE
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: N-04
+  injected:
+  - FM-HOST-MEM-PRESSURE
+  neg:
+  - 应用.*(内存泄漏|堆内存)|堆占用
+  - 慢查询|慢\s*SQL
+  - 连接池.*(耗尽|打满)
+  - 数据库实例.*(不可用|下线)
+  nor:
+  - 应用.*(堆|内存).*正常
+  - 数据库.*正常|实例.*在位
+  - 连接池.*正常
+  pos:
+  - FM\-HOST\-MEM\-PRESSURE
+  - mem_available_ratio|可用内存比例
+  - 宿主机|运行时|Runtime
+  query: 备库宿主可用内存比例掉到 2% 以下。请说明你如何用**某指标正常**来定罪，并给出根因层与对象。
+  scope:
+  - App
+  - Runtime
+  - Data
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-038
+  synthetic: false
+  type: 否定性证据
+- chain: F7
+  cls: N
+  detectors:
+  - FM\-DB\-INSTANCE\-DOWN
+  - db\.instance\.up
+  - dn_6001
+  difficulty: hard
+  discriminator: null
+  evidence_facts:
+  - obs-000017
+  expect_layer: Data
+  expect_objects:
+  - dbinst:dn_6001
+  expect_path:
+  - FM-DB-INSTANCE-DOWN
+  expect_root_cause: FM-DB-INSTANCE-DOWN
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-DB-INSTANCE-DOWN
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-DB-INSTANCE-DOWN
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-DB-INSTANCE-DOWN
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-DB-INSTANCE-DOWN
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: FM-DB-INSTANCE-DOWN
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: N-05
+  injected:
+  - FM-DB-INSTANCE-DOWN
+  neg:
+  - 应用.*(内存泄漏|堆内存)|堆占用
+  - 宿主.*内存(不足|紧张|耗尽)
+  - 慢查询|慢\s*SQL
+  - 容器.*OOM
+  nor:
+  - 应用.*(堆|内存).*正常
+  - 宿主.*(内存|资源).*正常
+  - 连接池.*正常
+  pos:
+  - FM\-DB\-INSTANCE\-DOWN
+  - db\.instance\.up|实例.*(不可用|下线|停止)
+  - 数据层|数据库层|Data|GaussDB
+  query: 主库实例不可用、集群计数下调，同时一条宿主托管关系从拓扑中消失。请用排除法给出根因与分层判断，并说明缺失关系是否改变结论。
+  scope:
+  - App
+  - Runtime
+  - Data
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-039
+  synthetic: false
+  type: 否定性证据
+- chain: F1
+  cls: N
+  detectors:
+  - FM\-APP\-ENDPOINT\-SLOW
+  - app\.endpoint\.p99_ms
+  - ep-cc-pay-pay
+  difficulty: hard
+  discriminator: null
+  evidence_facts:
+  - obs-000023
+  expect_layer: App
+  expect_objects:
+  - endpoint:ep-cc-pay-pay
+  expect_path:
+  - FM-APP-ENDPOINT-SLOW
+  expect_root_cause: FM-APP-ENDPOINT-SLOW
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-APP-ENDPOINT-SLOW
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-APP-ENDPOINT-SLOW
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-APP-ENDPOINT-SLOW
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-APP-ENDPOINT-SLOW
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: FM-APP-ENDPOINT-SLOW
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: N-06
+  injected:
+  - FM-APP-ENDPOINT-SLOW
+  neg:
+  - 慢查询|慢\s*SQL
+  - 宿主.*内存(不足|紧张|耗尽)
+  - 数据库实例.*(不可用|下线)
+  - 连接池.*(耗尽|打满)
+  - 容器.*OOM
+  nor: []
+  pos:
+  - FM\-APP\-ENDPOINT\-SLOW
+  - p99
+  - SLO
+  - 200\s*ms
+  - 应用层|应用服务|App
+  query: 支付接口 P99 飙到 5.2 秒。请用正常读数逐一排除应用内存、宿主资源与数据库三条路径，给出唯一根因与依据。
+  scope:
+  - App
+  - Runtime
+  - Data
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-040
+  synthetic: false
+  type: 否定性证据
+- chain: F4
+  cls: Z
+  detectors:
+  - (正常|健康|无异常|未发现故障|不构成故障)
+  difficulty: easy
+  discriminator: null
+  evidence_facts: []
+  expect_layer: NONE
+  expect_objects: []
+  expect_path: []
+  expect_root_cause: NONE
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision: []
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision: []
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict: []
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict: []
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: null
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: Z-01
+  injected: []
+  neg:
+  - FM-APP-ENDPOINT-SLOW
+  - FM-APP-HEAP-PRESSURE
+  - FM-HOST-MEM-PRESSURE
+  - FM-DB-INSTANCE-DOWN
+  - FM-DB-SLOW-QUERY
+  - FM-CTR-OOM-KILLED
+  - 确认为故障|存在故障|定位到根因
+  nor:
+  - 无\s*(可确认的)?故障
+  - 未发现\s*(可确认的)?(故障|异常)
+  - 各项?指标(均)?正常
+  - 处于?正常(区间|范围)
+  - 不构成.*(故障模式|故障)
+  - 无可确认
+  - 均在(阈值|警戒线)?以内
+  pos:
+  - 正常|健康|无异常|未发现(可确认的)?故障|不构成.*故障
+  query: 上线前巡检：请判断应用层当前是否存在**可据本项目判据确认**的故障，并说明你的依据。注意不要因为单个指标接近警戒线就下结论。
+  scope:
+  - App
+  - Runtime
+  - Data
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-041
+  synthetic: false
+  type: 正常态
+- chain: F4
+  cls: Z
+  detectors:
+  - (正常|健康|无异常|未发现故障|不构成故障)
+  difficulty: easy
+  discriminator: null
+  evidence_facts: []
+  expect_layer: NONE
+  expect_objects: []
+  expect_path: []
+  expect_root_cause: NONE
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision: []
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision: []
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict: []
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict: []
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: null
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: Z-02
+  injected: []
+  neg:
+  - FM-APP-ENDPOINT-SLOW
+  - FM-APP-HEAP-PRESSURE
+  - FM-HOST-MEM-PRESSURE
+  - FM-DB-INSTANCE-DOWN
+  - FM-DB-SLOW-QUERY
+  - FM-CTR-OOM-KILLED
+  - 确认为故障|存在故障|定位到根因
+  nor:
+  - 无\s*(可确认的)?故障
+  - 未发现\s*(可确认的)?(故障|异常)
+  - 各项?指标(均)?正常
+  - 处于?正常(区间|范围)
+  - 不构成.*(故障模式|故障)
+  - 无可确认
+  - 均在(阈值|警戒线)?以内
+  pos:
+  - 正常|健康|无异常|未发现(可确认的)?故障|不构成.*故障
+  query: 上线前巡检：请判断运行时（容器与宿主）当前是否存在可确认的故障，并给出证据与分层判断。
+  scope:
+  - App
+  - Runtime
+  - Data
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-042
+  synthetic: false
+  type: 正常态
+- chain: F4
+  cls: Z
+  detectors:
+  - (正常|健康|无异常|未发现故障|不构成故障)
+  difficulty: medium
+  discriminator: null
+  evidence_facts: []
+  expect_layer: NONE
+  expect_objects: []
+  expect_path: []
+  expect_root_cause: NONE
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision: []
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision: []
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict: []
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict: []
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: null
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: Z-03
+  injected: []
+  neg:
+  - FM-APP-ENDPOINT-SLOW
+  - FM-APP-HEAP-PRESSURE
+  - FM-HOST-MEM-PRESSURE
+  - FM-DB-INSTANCE-DOWN
+  - FM-DB-SLOW-QUERY
+  - FM-CTR-OOM-KILLED
+  - 确认为故障|存在故障|定位到根因
+  nor:
+  - 无\s*(可确认的)?故障
+  - 未发现\s*(可确认的)?(故障|异常)
+  - 各项?指标(均)?正常
+  - 处于?正常(区间|范围)
+  - 不构成.*(故障模式|故障)
+  - 无可确认
+  - 均在(阈值|警戒线)?以内
+  pos:
+  - 正常|健康|无异常|未发现(可确认的)?故障|不构成.*故障
+  query: 上线前巡检：请判断数据层当前是否存在可确认的故障，并说明你如何看待会话侧的长时间事务读数。
+  scope:
+  - App
+  - Runtime
+  - Data
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-043
+  synthetic: false
+  type: 正常态
+- chain: F4
+  cls: Z
+  detectors:
+  - (正常|健康|无异常|未发现故障|不构成故障)
+  difficulty: medium
+  discriminator: null
+  evidence_facts: []
+  expect_layer: NONE
+  expect_objects: []
+  expect_path: []
+  expect_root_cause: NONE
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision: []
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision: []
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict: []
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict: []
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: null
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: Z-04
+  injected: []
+  neg:
+  - FM-APP-ENDPOINT-SLOW
+  - FM-APP-HEAP-PRESSURE
+  - FM-HOST-MEM-PRESSURE
+  - FM-DB-INSTANCE-DOWN
+  - FM-DB-SLOW-QUERY
+  - FM-CTR-OOM-KILLED
+  - 确认为故障|存在故障|定位到根因
+  nor:
+  - 无\s*(可确认的)?故障
+  - 未发现\s*(可确认的)?(故障|异常)
+  - 各项?指标(均)?正常
+  - 处于?正常(区间|范围)
+  - 不构成.*(故障模式|故障)
+  - 无可确认
+  - 均在(阈值|警戒线)?以内
+  pos:
+  - 正常|健康|无异常|未发现(可确认的)?故障|不构成.*故障
+  query: 巡检发现两个读数偏高：应用 GC 停顿与会话事务时长。请判断它们是否构成可确认的故障，并给出你的理由与分层结论。
+  scope:
+  - App
+  - Runtime
+  - Data
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-044
+  synthetic: false
+  type: 正常态
+- chain: F4
+  cls: Z
+  detectors:
+  - (正常|健康|无异常|未发现故障|不构成故障)
+  difficulty: medium
+  discriminator: null
+  evidence_facts: []
+  expect_layer: NONE
+  expect_objects: []
+  expect_path: []
+  expect_root_cause: NONE
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision: []
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision: []
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict: []
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict: []
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: null
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: Z-05
+  injected: []
+  neg:
+  - FM-APP-ENDPOINT-SLOW
+  - FM-APP-HEAP-PRESSURE
+  - FM-HOST-MEM-PRESSURE
+  - FM-DB-INSTANCE-DOWN
+  - FM-DB-SLOW-QUERY
+  - FM-CTR-OOM-KILLED
+  - 确认为故障|存在故障|定位到根因
+  nor:
+  - 无\s*(可确认的)?故障
+  - 未发现\s*(可确认的)?(故障|异常)
+  - 各项?指标(均)?正常
+  - 处于?正常(区间|范围)
+  - 不构成.*(故障模式|故障)
+  - 无可确认
+  - 均在(阈值|警戒线)?以内
+  pos:
+  - 正常|健康|无异常|未发现(可确认的)?故障|不构成.*故障
+  query: 请检查事实集的拓扑完整性（对象与关系是否齐备），并判断是否存在可确认的故障；如认为无不一致请明确说明。
+  scope:
+  - App
+  - Runtime
+  - Data
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-045
+  synthetic: false
+  type: 正常态
+- chain: F4
+  cls: Z
+  detectors:
+  - (正常|健康|无异常|未发现故障|不构成故障)
+  difficulty: medium
+  discriminator: null
+  evidence_facts: []
+  expect_layer: NONE
+  expect_objects: []
+  expect_path: []
+  expect_root_cause: NONE
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision: []
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision: []
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict: []
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict: []
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: null
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: Z-06
+  injected: []
+  neg:
+  - FM-APP-ENDPOINT-SLOW
+  - FM-APP-HEAP-PRESSURE
+  - FM-HOST-MEM-PRESSURE
+  - FM-DB-INSTANCE-DOWN
+  - FM-DB-SLOW-QUERY
+  - FM-CTR-OOM-KILLED
+  - 确认为故障|存在故障|定位到根因
+  nor:
+  - 无\s*(可确认的)?故障
+  - 未发现\s*(可确认的)?(故障|异常)
+  - 各项?指标(均)?正常
+  - 处于?正常(区间|范围)
+  - 不构成.*(故障模式|故障)
+  - 无可确认
+  - 均在(阈值|警戒线)?以内
+  pos:
+  - 正常|健康|无异常|未发现(可确认的)?故障|不构成.*故障
+  query: 请给出该时间点上系统整体健康的结论：是否存在可确认的故障、涉及哪些层、你需要哪些额外证据才能改变结论。
+  scope:
+  - App
+  - Runtime
+  - Data
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-046
+  synthetic: false
+  type: 正常态
+- chain: F7
+  cls: T
+  detectors:
+  - FM\-DB\-INSTANCE\-DOWN
+  - db\.instance\.up
+  - dn_6001
+  difficulty: hard
+  discriminator: null
+  evidence_facts:
+  - obs-000017
+  expect_layer: Data
+  expect_objects:
+  - dbinst:dn_6001
+  expect_path:
+  - FM-DB-INSTANCE-DOWN
+  expect_root_cause: FM-DB-INSTANCE-DOWN
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-DB-INSTANCE-DOWN
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-DB-INSTANCE-DOWN
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-DB-INSTANCE-DOWN
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-DB-INSTANCE-DOWN
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: FM-DB-INSTANCE-DOWN
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: T-01
+  injected:
+  - FM-DB-INSTANCE-DOWN
+  neg:
+  - 应用.*(内存泄漏|堆内存)|堆占用
+  - 宿主.*内存(不足|紧张|耗尽)
+  - 慢查询|慢\s*SQL
+  - 容器.*OOM
+  nor:
+  - 应用.*(堆|内存).*正常
+  - 宿主.*(内存|资源).*正常
+  - 连接池.*正常
+  pos:
+  - FM\-DB\-INSTANCE\-DOWN
+  - db\.instance\.up|实例.*(不可用|下线|停止)
+  - 数据层|数据库层|Data|GaussDB
+  query: 14:20 起主库实例存活标记翻转为不可用，但集群侧的可写节点数仍显示 2。请判断根因，并说明这个时间窗内两组读数为何不一致、以哪一组为准。
+  scope:
+  - App
+  - Runtime
+  - Data
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-047
+  synthetic: false
+  type: 时间对齐
+- chain: F7
+  cls: T
+  detectors:
+  - FM\-DB\-INSTANCE\-DOWN
+  - db\.instance\.up
+  - dn_6001
+  difficulty: hard
+  discriminator: null
+  evidence_facts:
+  - obs-000017
+  expect_layer: Data
+  expect_objects:
+  - dbinst:dn_6001
+  expect_path:
+  - FM-DB-INSTANCE-DOWN
+  expect_root_cause: FM-DB-INSTANCE-DOWN
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-DB-INSTANCE-DOWN
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-DB-INSTANCE-DOWN
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-DB-INSTANCE-DOWN
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-DB-INSTANCE-DOWN
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: FM-DB-INSTANCE-DOWN
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: T-02
+  injected:
+  - FM-DB-INSTANCE-DOWN
+  neg:
+  - 应用.*(内存泄漏|堆内存)|堆占用
+  - 宿主.*内存(不足|紧张|耗尽)
+  - 慢查询|慢\s*SQL
+  - 容器.*OOM
+  nor:
+  - 应用.*(堆|内存).*正常
+  - 宿主.*(内存|资源).*正常
+  - 连接池.*正常
+  pos:
+  - FM\-DB\-INSTANCE\-DOWN
+  - db\.instance\.up|实例.*(不可用|下线|停止)
+  - 数据层|数据库层|Data|GaussDB
+  query: 14:20 起主库实例不可用，集群侧可写节点数与宕机节点数在同一窗口内同步变化。请判断根因，并说明两组读数是否已对齐。
+  scope:
+  - App
+  - Runtime
+  - Data
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-048
+  synthetic: false
+  type: 时间对齐
+- chain: F7
+  cls: T
+  detectors:
+  - FM\-DB\-INSTANCE\-DOWN
+  - db\.instance\.up
+  - dn_6001
+  difficulty: hard
+  discriminator: null
+  evidence_facts:
+  - obs-000017
+  expect_layer: Data
+  expect_objects:
+  - dbinst:dn_6001
+  expect_path:
+  - FM-DB-INSTANCE-DOWN
+  expect_root_cause: FM-DB-INSTANCE-DOWN
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-DB-INSTANCE-DOWN
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-DB-INSTANCE-DOWN
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-DB-INSTANCE-DOWN
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-DB-INSTANCE-DOWN
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: FM-DB-INSTANCE-DOWN
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: T-03
+  injected:
+  - FM-DB-INSTANCE-DOWN
+  neg:
+  - 应用.*(内存泄漏|堆内存)|堆占用
+  - 宿主.*内存(不足|紧张|耗尽)
+  - 慢查询|慢\s*SQL
+  - 容器.*OOM
+  nor:
+  - 应用.*(堆|内存).*正常
+  - 宿主.*(内存|资源).*正常
+  - 连接池.*正常
+  pos:
+  - FM\-DB\-INSTANCE\-DOWN
+  - db\.instance\.up|实例.*(不可用|下线|停止)
+  - 数据层|数据库层|Data|GaussDB
+  query: 14:20 起主库实例不可用、集群计数下调；同时备库实例对象整体从事实集里消失。请判断根因，并说明对象消失对时间窗对齐判断的影响。
+  scope:
+  - App
+  - Runtime
+  - Data
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-049
+  synthetic: false
+  type: 时间对齐
+- chain: F7
+  cls: T
+  detectors:
+  - FM\-DB\-INSTANCE\-DOWN
+  - db\.instance\.up
+  - dn_6002
+  difficulty: hard
+  discriminator: null
+  evidence_facts:
+  - obs-000019
+  expect_layer: Data
+  expect_objects:
+  - dbinst:dn_6002
+  expect_path:
+  - FM-DB-INSTANCE-DOWN
+  expect_root_cause: FM-DB-INSTANCE-DOWN
+  gold_audit:
+    agreed: true
+    annotator_a:
+      decision:
+      - FM-DB-INSTANCE-DOWN
+      id: role:A@injection-ledger
+      impl: shared/collect/m5_inject_build.py
+      kind: machine_role
+      method: 注入算子集合（canonical_injection 的 op/target）
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: 注入清单（cases[].injections）
+    annotator_b:
+      decision:
+      - FM-DB-INSTANCE-DOWN
+      id: role:B@independent-review
+      impl: shared/verify/m5/review_b.py
+      impl_sha256: 6f0d51d38b6ab2f5d952b7df841fd14a8b2ecb13759999f93173c1c9f3d9484c
+      kind: machine_role
+      method: review_b.mode_verdict()：独立实现对 fault-modes.detect 求值
+      reviewed_at: '2026-10-08T00:00:00Z'
+      sees: query + CCF（由基底 + 注入差分重建的工作集，**不看注入算子声明**）
+    machine_check:
+      a:
+        method: 注入算子集合（canonical_injection 的 op/target）
+        sees: 注入清单
+        verdict:
+        - FM-DB-INSTANCE-DOWN
+      b:
+        method: confirmable()：对工作集逐条求值 fault-modes.detect
+        sees: query + CCF（重建工作集）
+        verdict:
+        - FM-DB-INSTANCE-DOWN
+      independent: true
+      note: 机器侧不能替代人工 B：其判据与 A 同源，只能证明注入产生了预期可观测。
+    resolution: null
+    root_cause_b: FM-DB-INSTANCE-DOWN
+    ts_utc: '2026-10-08T00:00:00Z'
+  id: T-04
+  injected:
+  - FM-DB-INSTANCE-DOWN
+  neg:
+  - 应用.*(内存泄漏|堆内存)|堆占用
+  - 宿主.*内存(不足|紧张|耗尽)
+  - 慢查询|慢\s*SQL
+  - 容器.*OOM
+  nor:
+  - 应用.*(堆|内存).*正常
+  - 宿主.*(内存|资源).*正常
+  - 连接池.*正常
+  pos:
+  - FM\-DB\-INSTANCE\-DOWN
+  - db\.instance\.up|实例.*(不可用|下线|停止)
+  - 数据层|数据库层|Data|GaussDB
+  query: 14:55 起备库实例不可用，集群宕机节点数升到 1；约 45 秒后拓扑里多出一个实例对象。请判断根因，并按时间窗说明新出现的对象应如何解读。
+  scope:
+  - App
+  - Runtime
+  - Data
+  snapshot_id: ccf-20260928T155516Z-937b79
+  source_injection_id: INJ-20261008-050
+  synthetic: false
+  type: 时间对齐
+meta:
+  fault_injection_ledger: shared/model/m5-input-facts.yaml
+  gold_audit: shared/model/m5-gold-audit.yaml
+  schema: m5.cases/1
+  snapshot_binding: case_field
+  snapshot_ids:
+  - ccf-20260928T155516Z-937b79
+  synthetic: false

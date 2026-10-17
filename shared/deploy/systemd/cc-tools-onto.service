@@ -1,0 +1,19 @@
+[Unit]
+Description=cc-tools ONTO 只读知识服务 (:8302)
+After=network-online.target docker.service
+Wants=network-online.target
+StartLimitIntervalSec=600
+StartLimitBurst=30
+
+[Service]
+Type=forking
+PIDFile=/opt/cc-tools-onto/cc_tools_onto.pid
+WorkingDirectory=/opt/cc-tools-onto
+ExecStartPre=/bin/bash -c 'for i in $(seq 1 60); do curl -sf -o /dev/null http://127.0.0.1:7200/rest/repositories && exit 0; sleep 5; done; echo "GraphDB :7200 未在 300s 内就绪" >&2; exit 1'
+ExecStart=/bin/bash -c 'cd /opt/cc-tools-onto && exec bash start_cc_tools_onto.sh'
+Restart=on-failure
+RestartSec=15
+TimeoutStartSec=360
+
+[Install]
+WantedBy=multi-user.target

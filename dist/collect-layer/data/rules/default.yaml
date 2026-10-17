@@ -1,0 +1,580 @@
+# GaussDB 运维 Agent · 诊断规则集
+# 支持热加载：新增 rules/custom/*.yaml 即可扩展规则引擎
+# 规范：id / name / when / then / priority / category / severity
+
+rules:
+  # ── 核心诊断规则（与 config/rules.yaml 一致） ──
+  
+  - id: r_slow_sql_detected
+    name: "慢SQL检测"
+    category: slow_sql
+    severity: warning
+    priority: 10
+    description: "检测到慢SQL，平均耗时超过1秒"
+    when:
+      all:
+        - { fact: cluster.slow_sql_count, op: gt, value: 0 }
+        - { fact: cluster.slow_sql_avg_ms, op: gt, value: 1000 , threshold: mean_exec_time_ms_light }
+    then:
+      conclusion: "检测到慢SQL，平均耗时超过1秒，需进一步定位根因"
+      severity_override: warning
+      anchors: [SQL, Session, Table]
+      serves: [slow_sql]
+      next_actions: [collect_slow_sql_topn, collect_session_wait, collect_plan]
+
+  - id: r_lock_wait
+    name: "锁等待检测"
+    category: lock
+    severity: critical
+    priority: 20
+    description: "存在会话处于锁等待"
+    when:
+      all:
+        - fact: session.state
+          op: eq
+          value: active
+        - fact: session.wait_event
+          op: in
+          value: [LockMgrLock, transactionid, relation, tuple]
+    then:
+      conclusion: "存在会话处于锁等待，需定位阻塞源头并分析阻塞链"
+      severity_override: critical
+      anchors: [Session, Lock, Transaction]
+      serves: [lock_contention]
+      next_actions: [collect_blocking_chain, collect_long_transaction]
+
+  - id: r_long_transaction
+    name: "长事务检测"
+    category: lock
+    severity: warning
+    priority: 15
+    description: "存在长事务（>10分钟），可能持有锁导致阻塞"
+    when:
+      all:
+        - { fact: transaction.duration_ms, op: gt, value: 600000 , threshold: max_transaction_age_minutes_light }
+    then:
+      conclusion: "存在长事务（>10分钟），可能持有锁导致阻塞"
+      severity_override: warning
+      anchors: [Transaction, Session]
+      serves: [long_transaction]
+      next_actions: [collect_transaction_detail]
+
+  - id: r_cpu_bottleneck
+    name: "CPU瓶颈检测"
+    category: resource
+    severity: critical
+    priority: 30
+    description: "CPU 使用率超过90%"
+    when:
+      any:
+        - { fact: node.cpu_usage, op: gt, value: 90 }
+        - { fact: host.cpu_usage, op: gt, value: 90 }
+    then:
+      conclusion: "CPU 使用率超过90%，可能存在计算资源瓶颈"
+      severity_override: critical
+      anchors: [Node, Host, SQL]
+      serves: [resource_bottleneck,general_performance]
+      next_actions: [collect_top_cpu_sql]
+
+  - id: r_io_bottleneck
+    name: "IO瓶颈检测"
+    category: resource
+    severity: critical
+    priority: 30
+    description: "IO 延迟或吞吐异常"
+    when:
+      any:
+        - { fact: node.io_await_ms, op: gt, value: 30 }
+        - { fact: host.disk_util, op: gt, value: 95 }
+        - { fact: node.io_read_throughput_mb, op: gt, value: 500 }
+    then:
+      conclusion: "IO 延迟或吞吐异常，疑似磁盘瓶颈或大表全表扫描"
+      severity_override: critical
+      anchors: [Host, Node, Table, SQL]
+      serves: [resource_bottleneck]
+      next_actions: [collect_table_scan, collect_disk_health]
+
+  - id: r_session_pileup
+    name: "会话堆积检测"
+    category: resource
+    severity: warning
+    priority: 25
+    description: "活跃会话堆积或连接数接近上限"
+    when:
+      any:
+        - { fact: node.active_session_count, op: gt, value: 300 }
+        - { fact: node.connection_usage_ratio, op: gt, value: 90 , threshold: connection_pct_severe }
+    then:
+      conclusion: "活跃会话堆积或连接数接近上限，可能因慢SQL阻塞导致"
+      severity_override: warning
+      anchors: [Session, Node]
+      serves: [connection_exhaustion]
+      next_actions: [collect_session_distribution]
+
+  - id: r_replication_lag
+    name: "复制延迟检测"
+    category: replication
+    severity: warning
+    priority: 35
+    # ★ FIX(2026-09-12)：判据原是 `replay_lag_ms > 5000`，但该事实的**值实际是字节**
+    #   （探针把 lag_bytes 填进了 _ms 字段），导致任意 >4.88KB 的延迟被误报成
+    #   "延迟 N 秒"且秒数完全错误。
+    #   GaussDB 507 在主机侧**拿不到可用的延迟毫秒**（实测：gs_standby_read_delay()
+    #   只能在备机执行；gs_hadr_local_replay_delay_stat() 在本环境全为 0 占位；
+    #   pg_stat_replication 只有 LSN 位置，无 lag 时间列）。
+    #   故改为**字节判据** —— 字节是真实可测的，不做时间换算（不猜）。
+    #   阈值 10 MiB 的由来：实测健康态字节延迟为 0；早期记录的典型健康值约
+    #   150KB ≈ 75ms（≈2KB/ms），按该比值 10MiB 约对应 5 秒，与规则原意一致。
+    description: "主备回放延迟超过 10 MiB（按实测 2KB/ms 折算约 5 秒）"
+    when:
+      all:
+        - fact: replication.replay_lag_bytes
+          op: gt
+          value: 10485760
+          threshold: lsn_diff_mb_light
+    then:
+      conclusion: "主备回放延迟超过 10 MiB（约 5 秒量级），写入型SQL可能因同步复制变慢；请核对备机回放进度与网络"
+      severity_override: warning
+      anchors: [Replication, Node]
+      serves: [replication_lag]
+      next_actions: [collect_replication_detail]
+
+  - id: r_stale_statistics
+    name: "统计信息过期检测"
+    category: slow_sql
+    severity: info
+    priority: 40
+    description: "大表统计信息过期，可能导致执行计划劣化"
+    when:
+      all:
+        - fact: table.last_analyze
+          op: exists
+          value: true
+        - fact: table.rows
+          op: gt
+          value: 1000000
+        - fact: table.stat_stale_days
+          op: gt
+          value: 7
+          threshold: stats_age_hours_severe
+    then:
+      conclusion: "大表统计信息过期，可能导致执行计划劣化"
+      severity_override: warning
+      anchors: [Table, SQL]
+      serves: [slow_sql]
+      next_actions: [collect_plan_compare]
+
+  - id: r_full_table_scan
+    name: "全表扫描检测"
+    category: slow_sql
+    severity: warning
+    priority: 22
+    description: "慢SQL对大表执行全表扫描"
+    when:
+      all:
+        - { fact: sql.plan_type, op: eq, value: "seq_scan" }
+        - { fact: table.rows, op: gt, value: 1000000 }
+    then:
+      conclusion: "慢SQL对大表执行全表扫描，疑似缺少索引或统计信息失真"
+      severity_override: warning
+      anchors: [SQL, Table, Index]
+      serves: [slow_sql]
+      next_actions: [collect_index_info, collect_plan_detail]
+
+  - id: r_change_correlation
+    name: "变更关联检测"
+    category: change
+    severity: warning
+    priority: 12
+    description: "存在与慢SQL时间相关的变更（DDL/参数/发布）"
+    when:
+      all:
+        - { fact: change.type, op: in, value: [DDL, PARAM, RELEASE] }
+        - { fact: change.time, op: before, value: sql.slow_start_time }
+    then:
+      conclusion: "存在与慢SQL时间相关的变更，需重点排查变更导致的执行计划/数据分布变化"
+      severity_override: warning
+      anchors: [Change, SQL, Table]
+      serves: [change_impact]
+      next_actions: [collect_change_detail]
+
+  # ═══════════════════════════════════════════
+  # 存算分离: 驱动层/内核层/存储层诊断规则
+  # ═══════════════════════════════════════════
+
+  # ── NVMe控制器离线/断开（存储路径级故障） ──
+  - id: r_st_nvme_ctrl_dead
+    name: "NVMe控制器离线检测"
+    category: storage
+    severity: critical
+    priority: 5
+    description: "NVMe over RDMA控制器状态异常或离线，数据路径中断"
+    when:
+      any:
+        - { fact: storage.nvme_ctrl_state, op: ne, value: "live" }
+        - { fact: storage.nvme_ctrl_dead_count, op: gt, value: 0 }
+    then:
+      conclusion: "NVMe over RDMA控制器离线，存储数据路径可能中断，需立即切换路径"
+      severity_override: critical
+      anchors: [NvmeController, Host, Node]
+      serves: [storage_link_failure]
+      next_actions: [collect_nvme_ctrl_detail, check_roce_link]
+
+  # ── RoCE链路故障 ──
+  - id: r_st_roce_link_down
+    name: "RoCE链路故障检测"
+    category: storage
+    severity: critical
+    priority: 6
+    description: "RoCE RDMA设备链路状态 DOWN，所有NVMe over RDMA路径无法通信"
+    when:
+      all:
+        - { fact: storage.roce_link_state, op: eq, value: "DOWN" }
+    then:
+      conclusion: "RoCE链路故障，NVMe over RDMA通信中断，需立即排查Mellanox网卡与光纤"
+      severity_override: critical
+      anchors: [RoceDevice, Host]
+      serves: [storage_link_failure]
+      next_actions: [check_roce_cable, check_nic_health]
+
+  # ── 多路径链路全部失效 ──
+  - id: r_st_all_ultrapath_links_dead
+    name: "UltraPath多路径全部失效检测"
+    category: storage
+    severity: critical
+    priority: 4
+    description: "NVMe到Dorado的所有路径均失效，存储完全不可达"
+    when:
+      all:
+        - { fact: storage.active_ultrapath_link_count, op: eq, value: 0 }
+        - { fact: storage.total_ultrapath_link_count, op: gt, value: 0 }
+    then:
+      conclusion: "所有NVMe多路径链路失效，存储完全不可达，需立即排查Dorado状态和RoCE网络"
+      severity_override: critical
+      anchors: [UltraPathLink, Dorado]
+      serves: [ultrapath_redundancy_degraded]
+      next_actions: [check_dorado_status, check_roce_network]
+
+  # ── 多路径链路部分失效（冗余降级） ──
+  - id: r_st_ultrapath_links_partial
+    name: "UltraPath多路径部分失效检测"
+    category: storage
+    severity: warning
+    priority: 15
+    description: "NVMe到Dorado的部分路径失效，冗余度降低但业务仍可用"
+    when:
+      all:
+        # ⚠ 引擎只支持字面量比较，不支持 "$其他fact" 的交叉引用
+        #   （原写法 `value: "$storage.total_ultrapath_link_count"` 无法求值 → 规则永不命中）。
+        #   改判「存在降级卷」这一等价语义：探针在 available < total 时产出
+        #   storage.ultrapath_degraded_vols（明细），并与 r_st_all_ultrapath_links_dead
+        #   （active == 0）互斥 —— 该规则只在「部分失效」即 active > 0 时命中。
+        - { fact: storage.active_ultrapath_link_count, op: gt, value: 0 }
+        - { fact: storage.ultrapath_degraded_vols, op: exists, value: true }
+    then:
+      conclusion: "部分NVMe多路径链路失效，冗余度降低，需排查失效路径原因"
+      severity_override: warning
+      anchors: [UltraPathLink]
+      serves: [ultrapath_redundancy_degraded]
+      next_actions: [collect_failed_link_detail, check_roce_link]
+
+# ── 多路径链路全部失效：**只有一条规则**（2026-09-23 去重）──
+#   ★ 原有一条 `r_st_all_ultrapath_links_effective`（prio 14）与
+#     `r_st_all_ultrapath_links_dead`（prio 4）**判据/结论/严重级别逐字相同**
+#     （仅 priority 与 next_actions 的一项不同：dead 用 check_roce_network、
+#      effective 用 check_roce_link），两条会同时命中 ⇒ 同一现象重复告警，
+#     且无因果边者按平局裁决抢走 primary。
+#   ⇒ 按用户裁定**删除 effective**（它无独立判据、不提供新信息；「复核」的语义意图
+#     由 dead 的结论与动作覆盖）。
+#   ★ 删除是**规则集变更**（49→48），已做影响对照：删除前后生产命中集与主因完全一致
+#     （该规则在生产事实下从不命中：active_ultrapath_link_count > 0）；
+#     此变更同时**登记在台账 §3.33 六**（另一条 `Host.ioWaitPercent` 挂载问题经实测
+#     判定为「事实正确」，未改）。
+#   ★ 上游 v2 仓的 data/rules/default.yaml 仍有该重复条目 —— 本仓的规则集自此
+#     **不再逐字镜像 v2**（本仓为 v3 权威源），v2 侧清理由其自身负责。
+
+  # ── 内核模块未加载 ──
+  - id: r_st_kernel_module_missing
+    name: "存储内核模块未加载检测"
+    category: storage
+    severity: critical
+    priority: 10
+    description: "存储关键内核模块未加载（ultrapath/mlx5_core/nvme_rdma），存储不可用"
+    when:
+      all:
+        - { fact: storage.kernel_module_state, op: ne, value: "Live" }
+    then:
+      conclusion: "存储关键内核模块未加载，存储不可用，需立即加载或重启主机"
+      severity_override: critical
+      anchors: [KernelModule, Host]
+      serves: [storage_link_failure]
+      next_actions: [load_kernel_module, check_module_dependency]
+
+  # ── NVMe子系统断开 ──
+  - id: r_st_nvme_subsys_offline
+    name: "NVMe子系统断开检测"
+    category: storage
+    severity: critical
+    priority: 5
+    description: "NVMe子系统全部控制器断开，对应Dorado设备完全不可达"
+    when:
+      all:
+        - { fact: storage.nvme_subsys_ctrl_count, op: eq, value: 0 }
+    then:
+      conclusion: "NVMe子系统断开，对应Dorado设备完全不可达，需排查Dorado状态和NoF网络"
+      severity_override: critical
+      anchors: [NvmeSubsystem, Dorado]
+      serves: [storage_link_failure]
+      next_actions: [check_dorado_device, check_nof_network]
+
+  # ── UltraPath版本不兼容 ──
+  - id: r_st_ultrapath_version_mismatch
+    name: "UltraPath版本不兼容检测"
+    category: storage
+    severity: warning
+    priority: 20
+    description: "UltraPath版本与Dorado固件不匹配，可能存在兼容性问题"
+    when:
+      all:
+        - { fact: storage.ultrapath_version, op: exists, value: true }
+        - { fact: storage.dorado_fw_version, op: exists, value: true }
+        # ⚠ 原写法用 storage.version_compatibility eq false，但该 fact 从未被产出
+        #   → 规则永不命中。兼容性无法靠「版本号比对」直接算（需厂商兼容矩阵），
+        #   改为读取探针产出的**显式兼容标识**：
+        #     storage.ultrapath_array_in_support_list = false 表示阵列未收录于
+        #     UltraPath 的 supportarraylist（仅为线索，不代表已确认不兼容）。
+        #   注意：实测 Dorado5500(XSG1) 在役且 4/4 路径 Normal，却不在该列表中，
+        #   因此本规则设计为 warning 级、结论措辞为"需核对兼容矩阵"，避免误报为故障。
+        - { fact: storage.ultrapath_array_in_support_list, op: eq, value: false }
+    then:
+      conclusion: "UltraPath版本与Dorado阵列可能不兼容（阵列未收录于 supportarraylist），需核对厂商兼容矩阵"
+      severity_override: warning
+      anchors: [UltraPath, Dorado]
+      serves: [ultrapath_redundancy_degraded]
+      next_actions: [upgrade_ultrapath, check_compat_matrix]
+
+  # ── IO调度器配置不当 ──
+  - id: r_st_io_scheduler_misconfig
+    name: "IO调度器配置不当检测"
+    category: storage
+    severity: info
+    priority: 25
+    description: "NVMe设备使用非推荐IO调度器（none），影响最高性能"
+    when:
+      any:
+        - fact: storage.io_scheduler
+          op: ne
+          value: "none"
+        - { fact: storage.io_scheduler, op: eq, value: "cfq" }
+    then:
+      conclusion: "NVMe设备IO调度器非none模式，建议改为none以获得最佳性能"
+      severity_override: info
+      anchors: [IoKernelParam, BlockDevice]
+      serves: [resource_bottleneck,general_performance]
+      next_actions: [set_nvme_io_scheduler]
+
+  # ── NVMe驱动/固件版本对比 ──
+  - id: r_st_nvme_driver_version_check
+    name: "NVMe驱动版本检测"
+    category: storage
+    severity: info
+    priority: 28
+    description: "nvme-rdma驱动版本低于推荐基线，可能存在已知Bug"
+    when:
+      all:
+        - fact: storage.nvme_driver_version
+          op: exists
+          value: true
+        - fact: storage.nvme_driver_version
+          op: lt
+          value: "1.5.0"
+    then:
+      conclusion: "nvme-rdma驱动版本较低，可能存在已知Bug影响稳定性"
+      severity_override: info
+      anchors: [KernelModule, Host]
+      serves: [storage_link_failure]
+      next_actions: [upgrade_kernel_module]
+
+  # ── RoCE设备速率异常 ──
+  - id: r_st_roce_speed_anomaly
+    name: "RoCE设备速率异常检测"
+    category: storage
+    severity: warning
+    priority: 22
+    description: "RoCE设备协商速率低于预期（非25Gbps），带宽受限"
+    when:
+      any:
+        - { fact: storage.roce_speed_mbps, op: lt, value: 25000 }
+        - { fact: storage.roce_speed_mbps, op: eq, value: 0 }
+    then:
+      conclusion: "RoCE设备链路未处于全速状态（非25Gbps），存储带宽受限"
+      severity_override: warning
+      anchors: [RoceDevice]
+      serves: [storage_link_failure]
+      next_actions: [check_roce_negotiation, check_fiber_quality]
+
+  # ── LVM空间不足 ──
+  - id: r_st_lvm_space_low
+    name: "LVM逻辑卷空间不足检测"
+    category: storage
+    severity: warning
+    priority: 20
+    description: "挂载于UltraPath LUN上的LVM逻辑卷使用率过高"
+    when:
+      all:
+        - { fact: storage.lv_usage_pct, op: gt, value: 85 }
+    then:
+      conclusion: "LVM逻辑卷使用率超过85%，需扩容或清理"
+      severity_override: warning
+      anchors: [LvmLv, FileSystem]
+      serves: [resource_bottleneck]
+      next_actions: [extend_lv, clean_old_data]
+
+  # ── 文件系统空间不足 ──
+  - id: r_st_fs_space_critical
+    name: "文件系统空间临界检测"
+    category: storage
+    severity: critical
+    priority: 8
+    description: "存储相关文件系统使用率超过95%"
+    when:
+      all:
+        - { fact: storage.fs_usage_pct, op: gt, value: 95 }
+    then:
+      conclusion: "文件系统使用率超过95%，业务可能因空间不足写入失败"
+      severity_override: critical
+      anchors: [FileSystem, LvmLv]
+      serves: [resource_bottleneck]
+      next_actions: [emergency_cleanup, extend_fs]
+
+  # ── 块设备IO错误（硬件链路） ──
+  - id: r_st_block_device_io_error
+    name: "块设备IO错误检测"
+    category: storage
+    severity: critical
+    priority: 7
+    description: "UltraPath管理的块设备出现IO错误，可能为硬件链路问题"
+    when:
+      all:
+        - { fact: storage.bd_io_errors, op: gt, value: 0 }
+    then:
+      conclusion: "块设备出现IO错误，可能为硬件链路问题，需排查Dorado和RoCE"
+      severity_override: critical
+      anchors: [BlockDevice, Dorado]
+      serves: [storage_link_failure]
+      next_actions: [check_bad_sector, check_dorado_alarm]
+
+  # ── 存储块设备故障（备盘/换盘） ──
+  - id: r_st_local_disk_fault
+    name: "本地SAS SSD故障检测"
+    category: storage
+    severity: warning
+    priority: 18
+    description: "本地操作系统盘（SAS SSD）出现故障或预测故障"
+    when:
+      any:
+        - { fact: storage.smart_health, op: eq, value: "FAIL" }
+        - { fact: storage.smart_predicted_fail, op: eq, value: true }
+    then:
+      conclusion: "本地SAS SSD盘出现故障或预测故障信号，需安排换盘"
+      severity_override: warning
+      anchors: [BlockDevice, Host]
+      serves: [storage_link_failure]
+      next_actions: [replace_disk, backup_system_data]
+
+# ════ Dorado存储设备侧 ════
+
+  # ── Dorado控制器健康异常 ──
+  - id: r_st_dorado_ctrl_health
+    name: "Dorado控制器健康检测"
+    category: dorado_device
+    severity: critical
+    priority: 3
+    description: "OceanStor Dorado控制器健康状态异常，需要立即排查"
+    when:
+      all:
+        - fact: dorado.dorado_ctrl_health_status
+          op: eq
+          value: "2"
+    then:
+      conclusion: "Dorado控制器健康状态异常（HEALTH=2），实测双控中B控制器为异常状态，需检查硬件故障、电源或链路"
+      severity_override: critical
+      anchors: [DoradoController, DoradoStorage]
+      serves: [dorado_device_fault]
+      next_actions: [check_dorado_ctrl_fault_led, check_dorado_ctrl_log, check_dorado_ctrl_power]
+
+  # ── Dorado存储池容量告警 ──
+  - id: r_st_dorado_pool_capacity
+    name: "Dorado存储池容量检测"
+    category: dorado_device
+    severity: warning
+    priority: 12
+    description: "OceanStor Dorado存储池使用率超过阈值"
+    when:
+      all:
+        - fact: dorado.dorado_pool_usage_pct
+          op: gt
+          value: 85
+    then:
+      conclusion: "Dorado存储池使用率超过85%（当前约{value}%），需扩容存储池或清理旧快照/克隆"
+      severity_override: warning
+      anchors: [DoradoStoragePool, DoradoStorage]
+      serves: [dorado_device_fault]
+      next_actions: [extend_dorado_pool, clean_old_snapshot]
+
+  # ── Dorado控制器CPU过载 ──
+  - id: r_st_dorado_ctrl_cpu_overload
+    name: "Dorado控制器CPU过载检测"
+    category: dorado_device
+    severity: warning
+    priority: 14
+    description: "OceanStor Dorado控制器CPU使用率超过80%"
+    when:
+      all:
+        - fact: dorado.dorado_ctrl_cpu_usage
+          op: gt
+          value: 80
+    then:
+      conclusion: "Dorado控制器CPU使用率超过80%，可能因大量IO请求导致处理能力瓶颈"
+      severity_override: warning
+      anchors: [DoradoController]
+      serves: [dorado_device_fault]
+      next_actions: [check_dorado_io_load, check_dorado_ctrl_mem_usage]
+
+  # ── Dorado卷健康异常 ──
+  - id: r_st_dorado_vol_health
+    name: "Dorado数据卷健康检测"
+    category: dorado_device
+    severity: critical
+    priority: 5
+    description: "OceanStor Dorado映射给GaussDB节点的LUN健康状态异常"
+    when:
+      all:
+        - fact: dorado.dorado_vol_health_status
+          op: ne
+          value: "1"
+    then:
+      conclusion: "Dorado卷健康状态异常（HEALTH≠1），映射给节点的卷出现故障，可能影响数据库IO"
+      severity_override: critical
+      anchors: [DoradoVolume, Host]
+      serves: [dorado_device_fault]
+      next_actions: [check_dorado_vol_mapping, check_ultrapath_link, check_roce_connectivity]
+
+  # ── Dorado容灾复制异常 ──
+  - id: r_st_dorado_replication_health
+    name: "Dorado容灾复制状态检测"
+    category: dorado_disaster_recovery
+    severity: critical
+    priority: 4
+    description: "OceanStor Dorado容灾复制对状态异常"
+    when:
+      all:
+        - fact: dorado.dorado_rep_running_status
+          op: ne
+          value: "1"
+    then:
+      conclusion: "Dorado容灾复制对运行状态异常（非Normal），远端LUN02_d（81.23-Storage）数据同步中断"
+      severity_override: critical
+      anchors: [DoradoReplicationPair, DoradoStorage]
+      serves: [dorado_device_fault]
+      next_actions: [check_dorado_remote_connectivity, check_rep_link_status, trigger_rep_resync]

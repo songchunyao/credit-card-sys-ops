@@ -1,0 +1,110 @@
+# ═══════════════════════════════════════════════════════════════════════════
+#  Dockerfile.live-facts —— 中性取数服务（read_facts）:8304
+# ═══════════════════════════════════════════════════════════════════════════
+#  内容：shared/collect/live_facts_service.py（标准库 http.server + PyYAML，
+#        **不依赖 fastapi/uvicorn**）+ 它 fail-closed 要求的全部闭包：
+#          shared/collect/live_facts.py
+#          shared/collect/freeze.py
+#          shared/verify/equivalence.py            ← freeze.py:69 用 sys.path 插入后导入
+#          shared/model/m5-input-facts.yaml        ← 用例「基底引用 + 注入差分」
+#          shared/model/ccf.schema.json
+#          shared/model/v3-ccf-map.yaml
+#          shared/model/topology.yaml
+#          tmp/ccf_live5.json                      ← 基底快照（base_ref），缺则启动即 409
+#
+#  构建（构建上下文 = 仓库根）：
+#      docker build -f Dockerfile.live-facts -t cc-ops/live-facts:<tag> .
+#
+#  ★★ 为什么整棵 shared/ 进镜像、而不是"按 import 闭包挑选"：
+#    `shared/deploy/port/collect-layer.manifest.yaml` 的 why_not_closure 用三个实测反例证明
+#    **import 闭包不可作为打包依据**，本项目这层更严重 —— 这里的依赖全是
+#    「运行期 sys.path.insert + 函数体内延迟 import」：
+#      live_facts_service.py:47-50  sys.path.insert(_HERE) → import live_facts
+#      live_facts.py:207-216        sys.path.insert(_HERE) → import freeze / equivalence
+#      freeze.py:69-70              sys.path.insert(ROOT/shared/verify) → import equivalence
+#    静态闭包扫描对它们**全部不可见**（实测：只扫出 1 个文件）。
+#    ⇒ 这里选择「整棵 shared/ 进镜像」，并与 live_facts_service.py 的
+#      _UPSTREAM_BASELINE 指纹绑定共同保证完整性（见下）。
+#
+#  ★ 指纹一致性：live_facts_service.py 的 c26 自检按 _ROOT 相对路径校验
+#    shared/collect/live_facts.py 与 freeze.py 的 sha256 基线。本镜像按仓库相对
+#    布局复制 ⇒ 指纹自然一致；**若有人就地改动这两文件，c26 会报 BLOCKED 而不是静默通过**。
+# ═══════════════════════════════════════════════════════════════════════════
+
+FROM python:3.12-slim AS builder
+
+ARG PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
+ARG PIP_TRUSTED_HOST=mirrors.aliyun.com
+ENV PIP_INDEX_URL=${PIP_INDEX_URL} \
+    PIP_TRUSTED_HOST=${PIP_TRUSTED_HOST} \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1
+
+# 本服务的第三方依赖**只有 PyYAML**（其余全是标准库）
+WORKDIR /build
+RUN pip install --no-cache-dir --prefix=/install "PyYAML==6.0.3"
+
+
+FROM python:3.12-slim
+
+ARG APT_MIRROR=mirrors.ustc.edu.cn
+
+LABEL org.opencontainers.image.title="CC-Ops Neutral Facts Service" \
+      org.opencontainers.image.description="信用卡跨层运维 · 中性取数服务（read_facts :8304）" \
+      org.opencontainers.image.source="https://github.com/songchunyao/credit-card-sys-ops"
+
+# curl：HEALTHCHECK；tini：PID 1 信号转发（http.server 需收到 SIGTERM 才能优雅退出）
+RUN sed -i "s|deb.debian.org|${APT_MIRROR}|g" /etc/apt/sources.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true \
+    && if grep -rqs "deb.debian.org" /etc/apt/sources.list /etc/apt/sources.list.d/ ; then \
+         echo "错误：apt 换源未生效（APT_MIRROR='${APT_MIRROR}'），拒绝继续构建"; exit 1; \
+       fi \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends curl tini ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /install /usr/local
+
+# ── 应用树：整棵 shared/ + 基底快照（保持仓库相对布局；_ROOT 由文件位置上溯得出）──
+WORKDIR /app
+COPY shared/              /app/shared/
+COPY tmp/ccf_live5.json   /app/tmp/ccf_live5.json
+
+# ★ 部署闭包断言：缺任一件，服务启动即 fail-closed（409 BLOCKED_BASE / 500 INTERNAL）。
+#   放在构建期断言 ⇒ 把"运行期才 409"提前成"构建期就失败"，不放过残缺镜像。
+RUN set -e; \
+    for f in \
+      shared/collect/live_facts_service.py \
+      shared/collect/live_facts.py \
+      shared/collect/freeze.py \
+      shared/verify/equivalence.py \
+      shared/model/m5-input-facts.yaml \
+      shared/model/ccf.schema.json \
+      shared/model/v3-ccf-map.yaml \
+      shared/model/topology.yaml \
+      tmp/ccf_live5.json ; do \
+      if [ ! -f "/app/$f" ]; then echo "错误：部署闭包缺件 /app/$f"; exit 1; fi; \
+    done; \
+    echo "部署闭包 9 件齐备"
+
+RUN find /app -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true \
+    && groupadd -g 10001 cco && useradd -u 10001 -g cco -m -s /bin/bash cco \
+    && chown -R cco:cco /app
+USER cco
+
+# 必须绑 0.0.0.0：Dify 容器从宿主外访问本端口（start_cc_live_facts.sh 已明确此约定）
+ENV CC_LIVE_FACTS_HOST=0.0.0.0 \
+    CC_LIVE_FACTS_PORT=8304 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app
+
+EXPOSE 8304
+
+HEALTHCHECK --interval=30s --timeout=8s --start-period=20s --retries=3 \
+    CMD curl -fsS "http://127.0.0.1:8304/health" >/dev/null || exit 1
+
+ENTRYPOINT ["/usr/bin/tini", "--"]
+# ★ 用例选择是**进程级信道**（D48）：CLI --case 优先，其次 env M5_CASE_ID；
+#   进程生命周期内不可变，请求体里不接受用例参数 ⇒ 切例 = 重建容器（见 compose 注释）。
+#   故这里**不**把 --case 写死，改由 compose 的 M5_CASE_ID 注入；未设即 live 模式。
+CMD ["python", "shared/collect/live_facts_service.py", "--serve", "--host", "0.0.0.0", "--port", "8304"]

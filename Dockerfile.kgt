@@ -1,0 +1,109 @@
+# ═══════════════════════════════════════════════════════════════════════════
+#  Dockerfile.kgt —— 方案3 门面（KG-T，LLM 直引知识图谱）:8303
+# ═══════════════════════════════════════════════════════════════════════════
+#  内容：scheme1-kg/service/cc_tools_kgt.py（主臂 5 工具）+ 其权威实现
+#        scheme1-kg/service/topology_reader.py + 契约层 shared/
+#
+#  构建（构建上下文 = 仓库根）：
+#      docker build -f Dockerfile.kgt -t cc-ops/kgt:<tag> .
+#
+#  ★ 与 :8301（Set B 八工具）是**两个独立进程**，进程隔离本身就是 KG-T 的纪律护栏
+#    （docs/09:72）：共进程会让 cc_query 出现在同一个 OpenAPI 文档里，KG-T 立刻退化成 KG-Q。
+#    ⇒ 本镜像**不得**被合并进 Dockerfile.kg。
+#
+#  ★ 与其它三个应用镜像的**唯一依赖差异**：需要 `neo4j` Bolt 驱动。
+#    topology_reader.py:400 是**延迟导入** `from neo4j import GraphDatabase`：
+#      · 契约 fixture 路径（离线）不需要驱动；
+#      · 真机路径（走 Bolt）需要。
+#    真机上原先是 `pip install --target $RUN_DIR/pylib` 旁挂（为了不污染共享 venv）；
+#    容器内是私有环境，直接装进镜像即可，无需旁挂。
+#  ★ 镜像内零密钥：Bolt 口令由运行时 CC_NEO4J_PASSWORD 注入。
+# ═══════════════════════════════════════════════════════════════════════════
+
+FROM python:3.12-slim AS builder
+
+ARG PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
+ARG PIP_TRUSTED_HOST=mirrors.aliyun.com
+ENV PIP_INDEX_URL=${PIP_INDEX_URL} \
+    PIP_TRUSTED_HOST=${PIP_TRUSTED_HOST} \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1
+
+# ★ 前三项与 Dockerfile.kg 同组（同一组实测可用版本）；neo4j 与本项目 ci/Dockerfile 一致
+WORKDIR /build
+RUN pip install --no-cache-dir --prefix=/install \
+        "fastapi==0.136.3" \
+        "pydantic==2.13.4" \
+        "uvicorn==0.49.0" \
+        "starlette==1.2.1" \
+        "requests==2.34.2" \
+        "PyYAML==6.0.3" \
+        "neo4j==6.2.0"
+
+
+FROM python:3.12-slim
+
+ARG APT_MIRROR=mirrors.ustc.edu.cn
+
+LABEL org.opencontainers.image.title="CC-Ops KG-T Facade" \
+      org.opencontainers.image.description="信用卡跨层运维 · 方案3 门面（KG-T :8303）" \
+      org.opencontainers.image.source="https://github.com/songchunyao/credit-card-sys-ops"
+
+RUN sed -i "s|deb.debian.org|${APT_MIRROR}|g" /etc/apt/sources.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true \
+    && if grep -rqs "deb.debian.org" /etc/apt/sources.list /etc/apt/sources.list.d/ ; then \
+         echo "错误：apt 换源未生效（APT_MIRROR='${APT_MIRROR}'），拒绝继续构建"; exit 1; \
+       fi \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends curl tini ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /install /usr/local
+
+WORKDIR /app
+COPY shared/      /app/shared/
+COPY scheme1-kg/  /app/scheme1-kg/
+
+# ── 构建期闭包断言 ──────────────────────────────────────────────────────────
+# 「布局即契约」不能只写在注释里：缺件时应当**构建就失败**，
+# 而不是把残缺镜像推到运行期、在第一个请求上才炸（那时排查成本高一个数量级）。
+# 下面 9 件是 topology_reader.Contract.reload() 逐行加载的**全部**文件
+# （topology_reader.py:152-163 实测），少任何一件都会在启动期抛 FileNotFoundError。
+RUN set -e; \
+    for f in \
+      scheme1-kg/service/cc_tools_kgt.py \
+      scheme1-kg/service/topology_reader.py \
+      shared/model/kgt-tools.yaml \
+      shared/model/topology.yaml \
+      shared/model/metrics.yaml \
+      shared/model/fault-modes.yaml \
+      shared/model/causal-edges.yaml \
+      shared/model/ccf.schema.json \
+      shared/mapping/type-map.yaml \
+      shared/mapping/rel-map.yaml \
+      shared/deploy/targets.yaml ; do \
+      if [ ! -f "/app/$f" ]; then echo "错误：布局契约缺件 /app/$f"; exit 1; fi; \
+    done; \
+    echo "布局契约齐备（11 件）"
+
+RUN find /app -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true \
+    && mkdir -p /var/lib/cc-ops/audit \
+    && groupadd -g 10001 cco && useradd -u 10001 -g cco -m -s /bin/bash cco \
+    && chown -R cco:cco /app /var/lib/cc-ops
+USER cco
+
+ENV CC_KGT_HOST=0.0.0.0 \
+    CC_KGT_PORT=8303 \
+    CC_KGT_ARM=KG-T \
+    CC_AUDIT_LOG=/var/lib/cc-ops/audit/cc_tools_kgt_audit.jsonl \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app
+
+EXPOSE 8303
+
+# start-period 放宽到 45s：首个 /health 请求要解析快照图 + 建类型索引
+HEALTHCHECK --interval=30s --timeout=6s --start-period=45s --retries=3 \
+    CMD curl -fsS "http://127.0.0.1:8303/health" >/dev/null || exit 1
+
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["python", "scheme1-kg/service/cc_tools_kgt.py", "--serve", "--arm", "KG-T", "--host", "0.0.0.0", "--port", "8303"]

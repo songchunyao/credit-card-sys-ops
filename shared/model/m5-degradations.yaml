@@ -1,0 +1,73 @@
+schema: m5-degradations/1
+meta:
+  role: 报告**必写**的降级声明登记：每条 = claim + 可复算证据 + 复算方式 + 必须出现在哪份文档（漏写 ⇒ 门禁 FAIL）
+  why: 降级声明若靠人记就必然漏；把『漏写』变成机检，且当现实变化（如真的做出跨层路径）时**强制更新声明**（陈旧 ⇒ ERROR）
+  source: 本会话真机实测（2026-10-09）
+  gate: shared/verify/contract_gates.py（X20）
+  self_sha_policy: 本文件不列自身滚动 sha256：标记用、不得 pin。
+entries:
+- id: D-C2-NO-CROSS-LAYER
+  claim: C2（跨层定界）这批**没有真的考跨层**：14 条里只有 2 条 expect_path 走因果边（B-01/B-02），其余 12 条退化为单节点。
+  evidence:
+    path_basis.single-node: 42
+    path_basis.causal-edge: 2
+    path_basis.none: 6
+    family_C2_causal_edge: 2
+    family_C2_single_node: 12
+  check: recompute_path_basis_tally
+  must_appear_in: docs/08-报告模板与结论骨架.md
+  must_contain: C2（跨层定界）：本批
+- id: D-C6-NO-TIME-SERIES
+  claim: C6（时间对齐）这批**没有时序信号**：191 条观测的 observedAt 逐字相同（仅 1 个取值），带 delta 的只有 3 条且全为 0。
+  evidence:
+    observations: 191
+    distinct_observed_at: 1
+    with_delta: 3
+    with_nonzero_delta: 0
+  check: recompute_time_series_evidence
+  must_appear_in: docs/08-报告模板与结论骨架.md
+  must_contain: C6（时间对齐）：本批
+- id: D-DELTA-UNJUDGEABLE
+  claim: 契约里 11 个模式的 detect 依赖 increased/decreased，而基底没有任何非零 delta ⇒ 这些模式在本基底上**不可机判**（判据必须报 unjudgeable，不得当 false）。
+  evidence:
+    delta_dependent_modes: 11
+    modes:
+    - FM-APP-DS-CONNECT-FAIL
+    - FM-APP-INSTANCE-RESTART
+    - FM-CTR-OOM-KILLED
+    - FM-CTR-CPU-THROTTLED
+    - FM-CTR-NET-UNREACHABLE
+    - FM-DB-SESSION-POOL-FULL
+    - FM-DB-INSTANCE-DOWN
+    - FM-DB-DEADLOCK
+    - FM-DB-IDLE-IN-TX
+    - FM-DB-SEQ-SCAN
+    - FM-DB-ROLLBACK-STORM
+  check: recompute_delta_dependent_modes
+  must_appear_in: docs/08-报告模板与结论骨架.md
+  must_contain: 11 个模式依赖 increased/decreased
+  ruled_by: 用户裁定 ④（2026-10-10）：「④先关」⇒ `APP_DELTA_SAMPLE` **保持默认 0（关）**；该裁定的直接后果 = 本批这 7 个模式**仍不可机判**（须报 unjudgeable，不得当 false）。
+- id: D-WAIT-EVENT-ENUM-INCOMPLETE
+  claim: db.session.wait_event 的契约 enum 只有 6 个示例值，真机采集面出现过 ClientRead（不在其内）⇒ 该域是**开放域**，报告不得据 enum 判『非法取值』。
+  evidence:
+    contract_enum:
+    - LockMgrLock
+    - transactionid
+    - relation
+    - tuple
+    - WALWrite
+    - DataFileRead
+    live_observed:
+    - ClientRead
+    observed_at: 2026-10-09（本会话真机只读查询；repo cc-ops）
+  check: assert_enum_missing_client_read
+  must_appear_in: docs/08-报告模板与结论骨架.md
+  must_contain: enum 是
+- id: D-MACHINE-REVIEW-LIMIT
+  claim: M5.3 的人工双人复核已由用户裁定豁免，改由两个**机器角色**承担 ⇒ 报告不得声称『经双人复核』，必须同时声明其局限。
+  evidence:
+    human_review_status: waived
+    limitation_sha256: f1678de381cd1f5d355ea0226b0093529d642d88377c3d546bf6319effea65b3
+  check: assert_audit_waiver_disclosed
+  must_appear_in: docs/08-报告模板与结论骨架.md
+  must_contain: 不能替代人类

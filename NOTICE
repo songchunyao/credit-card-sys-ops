@@ -1,0 +1,122 @@
+credit-card-sys-ops
+Copyright 2026 credit-card-sys-ops contributors
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use
+this file except in compliance with the License. You may obtain a copy of the
+License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+This product includes software developed by the credit-card-sys-ops
+contributors. It is an LLM-agent operations and diagnosis framework for a
+credit-card transaction stack: the framework exposes three comparable tool-face
+schemes — a knowledge-graph scheme backed by Neo4j, an ontology scheme backed by
+RDF triples and SHACL shapes served through GraphDB, and a variant of the
+knowledge-graph scheme — over a shared offline gate registry and evidence-file
+contracts. The repository as published is the offline-verifiable part of that
+framework.
+
+--------------------------------------------------------------------------------
+EXCLUSIONS AND THIRD-PARTY COMPONENTS
+--------------------------------------------------------------------------------
+
+This NOTICE is informational and does not modify the License (see Section 4(d) of
+the License). It records the provenance of the collect layer, and lists the
+components that are deliberately NOT part of this repository or are used as
+separate works. Users who need the latter must supply their own copy, their own
+credentials, or both.
+
+(a) Collect-layer source tree — part of this repository, licensed Apache-2.0.
+
+    The collect-layer source tree (packed to `dist/collect-layer/`) is part of
+    this repository and part of the public release, and it is licensed under the
+    Apache License 2.0 like the rest of this repository (see `LICENSE`). It is
+    the maintainer's own work, not third-party code: it was previously developed
+    in a separate repository of the same author (revision `8dcdefd`,
+    2026-09-28) and has since been brought into this repository.
+    `shared/deploy/port/collect-layer.manifest.yaml` records its per-file
+    bytes/sha256 fingerprints and its source revision, and the packer
+    `shared/deploy/port/pack_collect_layer.py --verify` re-checks them before
+    packing the tree into a self-contained bundle. When the tree is absent, the
+    packer reports BLOCKED rather than PASS: absence is recorded as "not
+    measured", never as "verified".
+
+(b) Base snapshot `tmp/ccf_live5.json` — NOT shipped.
+
+    `tmp/ccf_live5.json` is a snapshot captured from a real (live) deployment and
+    is referenced as the base snapshot of `shared/model/m5-input-facts.yaml`. It
+    is not shipped with this repository, because it is real-environment data
+    rather than project source. Users who need to reproduce the fact-checking
+    paths that depend on it must capture their own snapshot from their own
+    environment; the tooling fails closed when the snapshot is missing instead of
+    silently substituting an empty one.
+
+(c) `async_gaussdb` — optional extra, bring your own driver.
+
+    The GaussDB collection path imports `async_gaussdb`, a non-public PyPI driver
+    that is not distributed with this repository and is not available as a
+    public package under that name. It is documented as an optional extra in
+    `pyproject.toml`, and it intentionally has no wheel to install. Users who
+    want to exercise the GaussDB collection path must supply their own
+    interface-compatible implementation that is importable under the module name
+    `async_gaussdb`, together with their own database credentials. Rationale: the
+    driver is not the project's to redistribute. When it is not supplied, the
+    affected collection and gate paths report BLOCKED by design.
+
+(d) Neo4j, Ontotext GraphDB and Dify — separate third-party works, used as
+    services and images, not vendored.
+
+    This repository contains queries, shapes, prompts, tool-face schemas and
+    deployment descriptors for Neo4j, Ontotext GraphDB and Dify. None of those
+    products is vendored into this repository. They are consumed either as
+    container images or as services the user runs against their own deployment,
+    and they remain governed by their own licenses and terms. Rationale: they are
+    independent works with their own copyright holders; this repository
+    interoperates with them but does not redistribute them. Any user deploying
+    this framework must obtain and license those services themselves, and must
+    supply their own endpoints and credentials.
+
+--------------------------------------------------------------------------------
+ADDITIONAL THIRD-PARTY NOTE
+--------------------------------------------------------------------------------
+
+(e) Vendored Dify plugin fork — upstream states no license.
+
+    `shared/deploy/plugins/neo4j_cypher_query/` is a self-contained fork of an
+    upstream Dify plugin (`src/` source tree, deterministic packer, console-API
+    installer), kept alongside the marketplace-installed plugin rather than
+    replacing it. The upstream project ships no LICENSE file; the files retained
+    there are the upstream plugin descriptors (`.difyignore`, `PRIVACY.md`,
+    `SECURITY.md`, `GUIDE.md`). No license to the upstream work is granted by
+    this repository. Users who redistribute that subtree must satisfy the
+    upstream terms themselves; the prebuilt bundles under
+    `shared/deploy/plugins/neo4j_cypher_query/dist/` are generated artifacts of
+    this repository's own build script.
+
+--------------------------------------------------------------------------------
+CONVENTIONS USED IN THIS REPOSITORY
+--------------------------------------------------------------------------------
+
+(f) Placeholder paths and hosts in comments, defaults and sample output.
+
+    This repository was extracted from a private working environment. Absolute
+    paths, host names and addresses that belonged to that environment have been
+    replaced by placeholders, and the substitution is intentional and
+    consistent:
+
+      * `<workspace>`, `<repo>`, `<upstream-repo>` — local working paths. The
+        `upstream-ops-agent` workspace they refer to is the separate repository
+        of the same author in which the collect layer described in (a) was
+        originally developed; that tree is now part of this repository.
+      * `/opt/upstream-agent`, `/opt/cc-ops` — example installation directories
+        for the older `upstream-ops-agent` deployment and for a deployment of
+        this project. They are defaults in shell scripts and Dockerfiles;
+        override them for your own hosts.
+      * `192.0.2.0/24` — RFC 5737 documentation addresses, used wherever real
+        addresses appeared. They are not routable and not a deployment target.
+      * `example.com` / `git.example.com` — example endpoints in the same spirit.
+
+    Sample evidence, gate output and rationale strings therefore quote
+    measurements taken on hardware that is not yours. They are kept verbatim
+    because they are the justification for declared thresholds; treat them as
+    historical records, not as values that must hold in your environment.

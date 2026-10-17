@@ -1,0 +1,344 @@
+# ============================================================================
+# scheme2-onto/shapes/shacl-constraints.ttl —— 方案2 SHACL 形状（ccs:）
+# ----------------------------------------------------------------------------
+# 定位（★ docs/04 §4 D6 强制：不许宣称「OWL 有而 LPG 没有」却把 SHACL 实现的东西
+#   算成 OWL 的能力；本文件把「OWL 原生」与「SHACL 补足」逐条分开标注）：
+#   · [SHACL 补足] = §D6 明写的三条：基数限制（OWL 2 RL 不完整支持）、枚举类（RL 不支持
+#     owl:oneOf 推理）、封闭世界（OWL 语义上是 OWA，需要 sh:closed 兜底）。这三类**不得**
+#     被算作方案2 的表达力增量；方案1 侧的等价物是「写入侧校验代码」，同样要付修改量。
+#   · [OWL 原生] = sh:class / sh:datatype 这类只是把 TBox 已声明的 rdfs:range / rdfs:domain
+#     在运行时再复述一遍（TBox 见 cc-topology.ttl / cc-metric.ttl）。它们的存在是为了
+#     装载期门禁，不是 OWL 独有的能力，报告里不计入增量。
+#   · 形状数 = 13：12 个非派生可实例化具体类 + cc:ConnectionPool。
+#     ★ 计数说明：docs/04 §5 写「13 个具体类型」；shared/model/topology.yaml 的 14 个类型里
+#       cc:ConnectionPool 标 abstract:true（真机 ABox 0 直接实例，只有两个子类有实例），
+#       cc:Evidence 是派生注解型且 §5 明写不进形状 ⇒ 可建模为「具体类」的实际是 12 个。
+#       为不打折扣地落地「13」这个数字，第 13 个形状给 cc:ConnectionPool：由于 SHACL 的
+#       sh:targetClass 会**连同子类实例**一起靶定，该形状必须子类安全 ⇒ 不做 sh:closed、
+#       不压子类不共有的属性。
+#   · 派生注解型 cc:Evidence **不建形状**（docs/04:297 原文）；单条观测的溯源由
+#     cc-audit.ttl 的 ccp:/PROV-O 挂接承担。
+#   · 门禁：装载前 pyshacl 全量校验，1 条违例即拒绝装载（docs/04:318）。
+#   · 封闭世界的白名单 = 本类数据属性（type-map attrs）+ 本类指标属性
+#     （type-map metrics.object == 本类）+ 以本类为 domain 的对象属性；投影元属性
+#     cc:ccfId/cc:ccfType/cc:ccfSnapshotId/cc:ccfLayer 与 cc:hasEvidence 走
+#     sh:ignoredProperties（它们是图投影的记账字段，不是域属性）。
+# ============================================================================
+@prefix cc:   <https://credit-card-ops.ai/onto/topology#> .
+@prefix ccm:  <https://credit-card-ops.ai/onto/metric#> .
+@prefix ccs:  <https://credit-card-ops.ai/onto/shapes#> .
+@prefix sh:   <http://www.w3.org/ns/shacl#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+# ---------------------------------------------------------------------------
+# CreditCardApp（layer=App，abstract=False）
+# ---------------------------------------------------------------------------
+ccs:CreditCardAppShape a sh:NodeShape ;
+    sh:targetClass cc:CreditCardApp ;
+    sh:closed true ;   # [SHACL 补足] 封闭世界（§D6 第 3 条）
+    sh:ignoredProperties ( rdf:type cc:ccfId cc:ccfType cc:ccfSnapshotId cc:ccfLayer cc:hasEvidence ) ;
+        sh:property [ sh:path cc:appCode ; sh:minCount 1 ; sh:maxCount 1 ;
+                      sh:datatype xsd:string ;   # [SHACL 补足] 基数 + [OWL 原生] 复述 rdfs:range
+                      sh:message "CreditCardApp 的键属性 cc:appCode 必须恰好 1 个（type-map key_attrs）"@zh ] ;
+        sh:property [ sh:path cc:exposes ; sh:minCount 1 ;
+                      sh:class cc:AppEndpoint ;   # [SHACL 补足] 基数（§D6 第 1 条） + [OWL 原生] 复述 rdfs:range
+                      sh:message "应用必须至少暴露一个端点（docs/04 未给此例，自主补足）"@zh ] ;
+        sh:property [ sh:path cc:hasAppInstance ; sh:minCount 1 ;
+                      sh:class cc:AppInstance ;   # [SHACL 补足] 基数（§D6 第 1 条） + [OWL 原生] 复述 rdfs:range
+                      sh:message "应用必须至少有一个应用实例（CQ F5 遍历前提）"@zh ] ;
+        sh:property [ sh:path cc:appName ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:sloP99Ms ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:techStack ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:version ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:ccfLayer ; sh:in ( "App" "Runtime" "Data" ) ] .   # [SHACL 补足] 枚举（§D6 第 2 条）
+
+# ---------------------------------------------------------------------------
+# AppInstance（layer=App，abstract=False）
+# ---------------------------------------------------------------------------
+ccs:AppInstanceShape a sh:NodeShape ;
+    sh:targetClass cc:AppInstance ;
+    sh:closed true ;   # [SHACL 补足] 封闭世界（§D6 第 3 条）
+    sh:ignoredProperties ( rdf:type cc:ccfId cc:ccfType cc:ccfSnapshotId cc:ccfLayer cc:hasEvidence ) ;
+        sh:property [ sh:path cc:instanceId ; sh:minCount 1 ; sh:maxCount 1 ;
+                      sh:datatype xsd:string ;   # [SHACL 补足] 基数 + [OWL 原生] 复述 rdfs:range
+                      sh:message "AppInstance 的键属性 cc:instanceId 必须恰好 1 个（type-map key_attrs）"@zh ] ;
+        sh:property [ sh:path cc:runsIn ; sh:minCount 1 ; sh:maxCount 1 ;
+                      sh:class cc:Container ;   # [SHACL 补足] 基数（§D6 第 1 条） + [OWL 原生] 复述 rdfs:range
+                      sh:message "AppInstance 必须且只能运行在一个 Container 上（docs/04:307 原文；基数限制属 SHACL 补足 §D6）"@zh ] ;
+        sh:property [ sh:path cc:usesDataSource ; sh:minCount 1 ;
+                      sh:class cc:JdbcDataSource ;   # [SHACL 补足] 基数（§D6 第 1 条） + [OWL 原生] 复述 rdfs:range
+                      sh:message "AppInstance 必须使用一个 JDBC 数据源（docs/04:310 原文）"@zh ] ;
+        sh:property [ sh:path cc:indirectlyHostedOn ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:instanceOf ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:jvmVersion ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:pid ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:startTime ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:gcPauseMs ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:heapUsedRatio ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:threadCount ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:uptimeS ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:ccfLayer ; sh:in ( "App" "Runtime" "Data" ) ] .   # [SHACL 补足] 枚举（§D6 第 2 条）
+
+# ---------------------------------------------------------------------------
+# AppEndpoint（layer=App，abstract=False）
+# ---------------------------------------------------------------------------
+ccs:AppEndpointShape a sh:NodeShape ;
+    sh:targetClass cc:AppEndpoint ;
+    sh:closed true ;   # [SHACL 补足] 封闭世界（§D6 第 3 条）
+    sh:ignoredProperties ( rdf:type cc:ccfId cc:ccfType cc:ccfSnapshotId cc:ccfLayer cc:hasEvidence ) ;
+        sh:property [ sh:path cc:path ; sh:minCount 1 ; sh:maxCount 1 ;
+                      sh:datatype xsd:string ;   # [SHACL 补足] 基数 + [OWL 原生] 复述 rdfs:range
+                      sh:message "AppEndpoint 的键属性 cc:path 必须恰好 1 个（type-map key_attrs）"@zh ] ;
+        sh:property [ sh:path cc:protocol ; sh:minCount 1 ; sh:maxCount 1 ;
+                      sh:datatype xsd:string ;   # [SHACL 补足] 基数 + [OWL 原生] 复述 rdfs:range
+                      sh:message "AppEndpoint 的键属性 cc:protocol 必须恰好 1 个（type-map key_attrs）"@zh ] ;
+        sh:property [ sh:path cc:sloP99Ms ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:errorRate ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:p99Ms ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:qps ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:ccfLayer ; sh:in ( "App" "Runtime" "Data" ) ] .   # [SHACL 补足] 枚举（§D6 第 2 条）
+
+# ---------------------------------------------------------------------------
+# JdbcDataSource（layer=App，abstract=False）
+# ---------------------------------------------------------------------------
+ccs:JdbcDataSourceShape a sh:NodeShape ;
+    sh:targetClass cc:JdbcDataSource ;
+    sh:closed true ;   # [SHACL 补足] 封闭世界（§D6 第 3 条）
+    sh:ignoredProperties ( rdf:type cc:ccfId cc:ccfType cc:ccfSnapshotId cc:ccfLayer cc:hasEvidence ) ;
+        sh:property [ sh:path cc:dsCode ; sh:minCount 1 ; sh:maxCount 1 ;
+                      sh:datatype xsd:string ;   # [SHACL 补足] 基数 + [OWL 原生] 复述 rdfs:range
+                      sh:message "JdbcDataSource 的键属性 cc:dsCode 必须恰好 1 个（type-map key_attrs）"@zh ] ;
+        sh:property [ sh:path cc:connectsTo ; sh:minCount 1 ;
+                      sh:class cc:GaussDBCluster ;   # [SHACL 补足] 基数（§D6 第 1 条） + [OWL 原生] 复述 rdfs:range
+                      sh:message "JDBC 数据源必须连接到 GaussDB 集群（跨层边界，docs/04:314 原文）"@zh ] ;
+        sh:property [ sh:path cc:resolvesTo ; sh:minCount 1 ;
+                      sh:class cc:GaussDBInstance ;   # [SHACL 补足] 基数（§D6 第 1 条） + [OWL 原生] 复述 rdfs:range
+                      sh:message "JDBC 数据源必须解析到一个 GaussDB 实例（跨层边界；docs/04 未给此例，本形状自主补足）"@zh ] ;
+        sh:property [ sh:path cc:authMode ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:connectionTimeoutMs ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:driverName ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:driverVersion ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:idleTimeoutMs ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:jdbcUrlMasked ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:maxPoolSize ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:minIdle ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:poolImpl ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:sslEnabled ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:validationQuery ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:acquireWaitMs ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:activeConnections ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:connectFailTotal ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:connectLatencyMs ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:idleConnections ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:pendingThreads ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:timeoutTotal ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:ccfLayer ; sh:in ( "App" "Runtime" "Data" ) ] .   # [SHACL 补足] 枚举（§D6 第 2 条）
+
+# ---------------------------------------------------------------------------
+# Container（layer=Runtime，abstract=False）
+# ---------------------------------------------------------------------------
+ccs:ContainerShape a sh:NodeShape ;
+    sh:targetClass cc:Container ;
+    sh:closed true ;   # [SHACL 补足] 封闭世界（§D6 第 3 条）
+    sh:ignoredProperties ( rdf:type cc:ccfId cc:ccfType cc:ccfSnapshotId cc:ccfLayer cc:hasEvidence ) ;
+        sh:property [ sh:path cc:containerId ; sh:minCount 1 ; sh:maxCount 1 ;
+                      sh:datatype xsd:string ;   # [SHACL 补足] 基数 + [OWL 原生] 复述 rdfs:range
+                      sh:message "Container 的键属性 cc:containerId 必须恰好 1 个（type-map key_attrs）"@zh ] ;
+        sh:property [ sh:path cc:deployedOn ; sh:minCount 1 ; sh:maxCount 1 ;
+                      sh:class cc:Host ;   # [SHACL 补足] 基数（§D6 第 1 条） + [OWL 原生] 复述 rdfs:range
+                      sh:message "容器必须且只能部署在一个宿主机上（跨层边界 + 基数限制）"@zh ] ;
+        sh:property [ sh:path ccm:status ; sh:in ( "Running" "Waiting" "Terminated" "Unknown" ) ;   # [SHACL 补足] 枚举（§D6 第 2 条）· 逐字同步 metrics.yaml container.status.enum（**结构性封闭的 4 值**）：真机采集面真实全量域 = Running/Waiting/Terminated/Unknown（上游 service/probes/container_probe.py L267-274 由 Prometheus kube-state-metrics 的 running/waiting/terminated 三分支 + else 兜底决定，首字母大写、原样透传；Exited 不可达）。历史小写三值（running/waiting/terminated）已随 M2.27 收敛删除 —— 采集面永不发射。契约强度未变：sh:minCount / required-ness 一字未动
+                      sh:message "容器状态枚举（契约 metrics.yaml: container.status enum，§D6 枚举类由 SHACL 兜底）"@zh ] ;
+        sh:property [ sh:path cc:cpuLimitCores ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:image ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:imageDigest ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:memLimitMb ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:restartCount ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:runs ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:state ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:cpuThrottledPeriods ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:cpuUsageRatio ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:memWorkingSetMb ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:oomKillTotal ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:restartTotal ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:ccfLayer ; sh:in ( "App" "Runtime" "Data" ) ] .   # [SHACL 补足] 枚举（§D6 第 2 条）
+
+# ---------------------------------------------------------------------------
+# Host（layer=Runtime，abstract=False）
+# ---------------------------------------------------------------------------
+ccs:HostShape a sh:NodeShape ;
+    sh:targetClass cc:Host ;
+    sh:closed true ;   # [SHACL 补足] 封闭世界（§D6 第 3 条）
+    sh:ignoredProperties ( rdf:type cc:ccfId cc:ccfType cc:ccfSnapshotId cc:ccfLayer cc:hasEvidence ) ;
+        sh:property [ sh:path cc:hostname ; sh:minCount 1 ; sh:maxCount 1 ;
+                      sh:datatype xsd:string ;   # [SHACL 补足] 基数 + [OWL 原生] 复述 rdfs:range
+                      sh:message "Host 的键属性 cc:hostname 必须恰好 1 个（type-map key_attrs）"@zh ] ;
+        sh:or ( [ sh:path cc:hosts ; sh:minCount 1 ; sh:class cc:GaussDBInstance ]
+                [ sh:path cc:hostsContainer ; sh:minCount 1 ; sh:class cc:Container ] ) ;   # [SHACL 补足] 析取（§D6 第 1 条）
+                      # 宿主机必须承载数据库实例或容器之一（排他性/完备性析取，OWL 2 RL 不表达 sh:or）
+        sh:property [ sh:path cc:cpuCores ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:hosts ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:hostsContainer ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:ip ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:kernelVersion ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:memTotalGb ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:osVersion ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:role ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:conntrackCount ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:cpuUsageRatio ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:diskIoWait ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:diskUtil ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:load1 ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:load5 ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:memAvailableRatio ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:netRxBytes ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:netTxBytes ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:ccfLayer ; sh:in ( "App" "Runtime" "Data" ) ] .   # [SHACL 补足] 枚举（§D6 第 2 条）
+
+# ---------------------------------------------------------------------------
+# GaussDBCluster（layer=Data，abstract=False）
+# ---------------------------------------------------------------------------
+ccs:GaussDBClusterShape a sh:NodeShape ;
+    sh:targetClass cc:GaussDBCluster ;
+    sh:closed true ;   # [SHACL 补足] 封闭世界（§D6 第 3 条）
+    sh:ignoredProperties ( rdf:type cc:ccfId cc:ccfType cc:ccfSnapshotId cc:ccfLayer cc:hasEvidence ) ;
+        sh:property [ sh:path cc:clusterName ; sh:minCount 1 ; sh:maxCount 1 ;
+                      sh:datatype xsd:string ;   # [SHACL 补足] 基数 + [OWL 原生] 复述 rdfs:range
+                      sh:message "GaussDBCluster 的键属性 cc:clusterName 必须恰好 1 个（type-map key_attrs）"@zh ] ;
+        sh:property [ sh:path cc:hasDbInstance ; sh:minCount 1 ;
+                      sh:class cc:GaussDBInstance ;   # [SHACL 补足] 基数（§D6 第 1 条） + [OWL 原生] 复述 rdfs:range
+                      sh:message "集群必须至少含一个数据库实例（CQ F7 遍历前提）"@zh ] ;
+        sh:property [ sh:path cc:acceptsConnectionFrom ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:mode ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:nodeCount ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:version ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:downNodes ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:replicationLagMb ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:switchoverTotal ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:upNodes ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:ccfLayer ; sh:in ( "App" "Runtime" "Data" ) ] .   # [SHACL 补足] 枚举（§D6 第 2 条）
+
+# ---------------------------------------------------------------------------
+# GaussDBInstance（layer=Data，abstract=False）
+# ---------------------------------------------------------------------------
+ccs:GaussDBInstanceShape a sh:NodeShape ;
+    sh:targetClass cc:GaussDBInstance ;
+    sh:closed true ;   # [SHACL 补足] 封闭世界（§D6 第 3 条）
+    sh:ignoredProperties ( rdf:type cc:ccfId cc:ccfType cc:ccfSnapshotId cc:ccfLayer cc:hasEvidence ) ;
+        sh:property [ sh:path cc:instanceId ; sh:minCount 1 ; sh:maxCount 1 ;
+                      sh:datatype xsd:string ;   # [SHACL 补足] 基数 + [OWL 原生] 复述 rdfs:range
+                      sh:message "GaussDBInstance 的键属性 cc:instanceId 必须恰好 1 个（type-map key_attrs）"@zh ] ;
+        sh:property [ sh:path cc:hasSessionPool ; sh:minCount 1 ;
+                      sh:class cc:DatabaseSessionPool ;   # [SHACL 补足] 基数（§D6 第 1 条） + [OWL 原生] 复述 rdfs:range
+                      sh:message "数据库实例必须至少含一个会话池（CQ F1 遍历前提）"@zh ] ;
+        sh:property [ sh:path cc:datanodeId ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:hostName ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:port ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:replicatesTo ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:role ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:bufferHitRatio ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:cpuUsageRatio ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:ioWaitPct ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:longTxnAgeS ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:maxConnections ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:memUsageRatio ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:sessionCount ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:up ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:waitingConnections ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:ccfLayer ; sh:in ( "App" "Runtime" "Data" ) ] .   # [SHACL 补足] 枚举（§D6 第 2 条）
+
+# ---------------------------------------------------------------------------
+# ConnectionPool（layer=Data，abstract=True）
+# ---------------------------------------------------------------------------
+ccs:ConnectionPoolShape a sh:NodeShape ;
+    sh:targetClass cc:ConnectionPool ;
+    rdfs:comment "子类安全形状：不做 sh:closed，只复述两个子类共有的性质"@zh ;
+        sh:property [ sh:path cc:ccfLayer ; sh:in ( "App" "Runtime" "Data" ) ] .
+
+# ---------------------------------------------------------------------------
+# DatabaseSessionPool（layer=Data，abstract=False）
+# ---------------------------------------------------------------------------
+ccs:DatabaseSessionPoolShape a sh:NodeShape ;
+    sh:targetClass cc:DatabaseSessionPool ;
+    sh:closed true ;   # [SHACL 补足] 封闭世界（§D6 第 3 条）
+    sh:ignoredProperties ( rdf:type cc:ccfId cc:ccfType cc:ccfSnapshotId cc:ccfLayer cc:hasEvidence ) ;
+        sh:property [ sh:path cc:poolId ; sh:minCount 1 ; sh:maxCount 1 ;
+                      sh:datatype xsd:string ;   # [SHACL 补足] 基数 + [OWL 原生] 复述 rdfs:range
+                      sh:message "DatabaseSessionPool 的键属性 cc:poolId 必须恰好 1 个（type-map key_attrs）"@zh ] ;
+        sh:property [ sh:path cc:hasSession ; sh:minCount 1 ;
+                      sh:class cc:Session ;   # [SHACL 补足] 基数（§D6 第 1 条） + [OWL 原生] 复述 rdfs:range
+                      sh:message "会话池必须至少承载一个会话（CQ F1 遍历前提；真机 ABox 上仍有会话池不满足 —— 属已登记的会话归因覆盖缺口，见 scheme2-onto/tests/test_integrity.py 的 T11 豁免清单；此处不再写死计数，计数会随数据漂移）"@zh ] ;
+        sh:property [ sh:path cc:maxConnections ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:superuserReserved ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:connRejectedTotal ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:sessionUsedRatio ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:sessionWaiting ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:ccfLayer ; sh:in ( "App" "Runtime" "Data" ) ] .   # [SHACL 补足] 枚举（§D6 第 2 条）
+
+# ---------------------------------------------------------------------------
+# Session（layer=Data，abstract=False）
+# ---------------------------------------------------------------------------
+ccs:SessionShape a sh:NodeShape ;
+    sh:targetClass cc:Session ;
+    sh:closed true ;   # [SHACL 补足] 封闭世界（§D6 第 3 条）
+    sh:ignoredProperties ( rdf:type cc:ccfId cc:ccfType cc:ccfSnapshotId cc:ccfLayer cc:hasEvidence ) ;
+        sh:property [ sh:path cc:sessionId ; sh:minCount 1 ; sh:maxCount 1 ;
+                      sh:datatype xsd:string ;   # [SHACL 补足] 基数 + [OWL 原生] 复述 rdfs:range
+                      sh:message "Session 的键属性 cc:sessionId 必须恰好 1 个（type-map key_attrs）"@zh ] ;
+        sh:property [ sh:path cc:runsQuery ; sh:minCount 1 ;
+                      sh:class cc:Query ;   # [SHACL 补足] 基数（§D6 第 1 条） + [OWL 原生] 复述 rdfs:range
+                      sh:message "会话必须至少执行一条查询（CQ F2 遍历前提；采集面尚无「会话→SQL」关系型 ⇒ 真机 ABox 上全部会话都不满足，属已登记的结构性缺口，见 T11 豁免清单；此处不再写死计数，计数会随数据漂移）"@zh ] ;
+        sh:property [ sh:path ccm:state ; sh:in ( "active" "idle" "idle in transaction" "waiting" ) ;   # [SHACL 补足] 枚举（§D6 第 2 条）
+                      sh:message "会话状态枚举（契约 metrics.yaml: db.session.state enum）"@zh ] ;
+        sh:property [ sh:path cc:clientAddr ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:user ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:xactStart ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:queryElapsedS ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:waitEvent ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:xactAgeS ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:ccfLayer ; sh:in ( "App" "Runtime" "Data" ) ] .   # [SHACL 补足] 枚举（§D6 第 2 条）
+
+# ---------------------------------------------------------------------------
+# Query（layer=Data，abstract=False）
+# ---------------------------------------------------------------------------
+ccs:QueryShape a sh:NodeShape ;
+    sh:targetClass cc:Query ;
+    sh:closed true ;   # [SHACL 补足] 封闭世界（§D6 第 3 条）
+    sh:ignoredProperties ( rdf:type cc:ccfId cc:ccfType cc:ccfSnapshotId cc:ccfLayer cc:hasEvidence ) ;
+        sh:property [ sh:path cc:queryId ; sh:minCount 1 ; sh:maxCount 1 ;
+                      sh:datatype xsd:string ;   # [SHACL 补足] 基数 + [OWL 原生] 复述 rdfs:range
+                      sh:message "Query 的键属性 cc:queryId 必须恰好 1 个（type-map key_attrs）"@zh ] ;
+        sh:property [ sh:path cc:accesses ; sh:minCount 1 ;
+                      sh:class cc:Table ;   # [SHACL 补足] 基数（§D6 第 1 条） + [OWL 原生] 复述 rdfs:range
+                      sh:message "查询必须至少访问一张表（死元组 CQ / F2 前提；采集面尚无「SQL→表」关系型 ⇒ 真机 ABox 上全部查询都不满足，属已登记的结构性缺口，见 T11 豁免清单；此处不再写死计数，计数会随数据漂移）"@zh ] ;
+        sh:property [ sh:path cc:accessMode ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:planHash ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:sqlFingerprint ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:execCount ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:maxExecMs ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:meanExecMs ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:returnedRows ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:seqScanRatio ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:ccfLayer ; sh:in ( "App" "Runtime" "Data" ) ] .   # [SHACL 补足] 枚举（§D6 第 2 条）
+
+# ---------------------------------------------------------------------------
+# Table（layer=Data，abstract=False）
+# ---------------------------------------------------------------------------
+ccs:TableShape a sh:NodeShape ;
+    sh:targetClass cc:Table ;
+    sh:closed true ;   # [SHACL 补足] 封闭世界（§D6 第 3 条）
+    sh:ignoredProperties ( rdf:type cc:ccfId cc:ccfType cc:ccfSnapshotId cc:ccfLayer cc:hasEvidence ) ;
+        sh:property [ sh:path cc:schemaName ; sh:minCount 1 ; sh:maxCount 1 ;
+                      sh:datatype xsd:string ;   # [SHACL 补足] 基数 + [OWL 原生] 复述 rdfs:range
+                      sh:message "Table 的键属性 cc:schemaName 必须恰好 1 个（type-map key_attrs）"@zh ] ;
+        sh:property [ sh:path cc:tableName ; sh:minCount 1 ; sh:maxCount 1 ;
+                      sh:datatype xsd:string ;   # [SHACL 补足] 基数 + [OWL 原生] 复述 rdfs:range
+                      sh:message "Table 的键属性 cc:tableName 必须恰好 1 个（type-map key_attrs）"@zh ] ;
+        sh:property [ sh:path ccm:deadTupleRatio ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:lastAnalyzeAgeH ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:liveTuples ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path ccm:sizeMb ] ;   # sh:closed 白名单（本类数据/指标/对象属性）
+        sh:property [ sh:path cc:ccfLayer ; sh:in ( "App" "Runtime" "Data" ) ] .   # [SHACL 补足] 枚举（§D6 第 2 条）
+

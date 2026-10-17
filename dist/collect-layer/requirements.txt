@@ -1,0 +1,22 @@
+# GaussDB 运维 Agent 采集/诊断服务 v6.1
+# 来源: 192.0.2.11:/opt/upstream-agent/venv pip freeze (2026-09-09)
+# 安装: python3 -m venv venv && venv/bin/pip install -r requirements.txt
+annotated-doc==0.0.5
+annotated-types==0.8.0
+anyio==4.15.1
+async_gaussdb==0.30.4
+certifi==2026.7.22
+charset-normalizer==3.5.1
+click==8.5.0
+fastapi==0.141.1
+h11==0.16.0
+idna==3.19
+pydantic==2.13.5
+pydantic_core==2.46.5
+PyYAML==6.0.3
+requests==2.34.2
+starlette==1.6.0
+typing_extensions==4.16.0
+typing-inspection==0.4.4
+urllib3==2.7.0
+uvicorn==0.52.4

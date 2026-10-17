@@ -1,0 +1,547 @@
+# GaussDB 运维 Agent · 高级诊断规则集
+# 补充默认规则未覆盖的复杂场景
+# 通过 tools/ 热加载机制自动注册
+
+rules:
+  # ══════════════════════════════════════════════════════════════════════════
+  # 慢 SQL 耗时构成（2026-09-24，P1）——「慢在哪」的判据面
+  #
+  # ★ 为什么必须有这两条（用户实测反馈驱动）：
+  #   原先只有 r_slow_sql_detected（"平均耗时 > 1s"）—— 它只能说「慢了」，
+  #   **说不出「慢在哪」**。实测 6 条慢 SQL 的 CPU 占比 99.8%~99.9%，
+  #   即耗时在算子/计划侧，与存储无关；而当时唯一的归因出口是存储规则
+  #   ⇒ 结论被顶成「Dorado 控制器异常」。根因是**判据面缺失**，不是数据缺失。
+  #
+  # ★ 判据为什么用「占比」而不是两个独立阈值：
+  #   `cpu_time > X 且 db_time > Y` 不是占比 —— 会漏判（小库小耗时的 CPU 占比同样可能很高）。
+  #   占比由采集侧计算（规则引擎无算术表达式能力），量纲 0–1 分数。
+  #
+  # ★ 与 r_slow_sql_detected 的关系：**不是替代，是分层**
+  #   r_slow_sql_detected   = 现象（有慢 SQL）
+  #   r_cpu_bound_slow_sql  = 归因（慢在 CPU 侧 ⇒ SQL 本身问题）
+  #   r_storage_io_bound_slow_sql = 归因（慢在 IO 侧 ⇒ 才轮到存储链路）
+  #   ⇒ 存储类规则不再独自承担「慢 SQL 的因」，三者在同一层级可比。
+  # ══════════════════════════════════════════════════════════════════════════
+
+  - id: r_cpu_bound_slow_sql
+    name: "慢SQL为CPU密集型（SQL本身问题）"
+    category: slow_sql
+    severity: warning
+    priority: 8
+    description: "慢SQL的CPU耗时占比≥90%，耗时在算子/计划侧，与存储IO无显著关系"
+    when:
+      all:
+        # 前提：确实是慢 SQL（与现象规则同一口径，避免对小 SQL 误报）
+        - { fact: cluster.slow_sql_avg_ms, op: gt, value: 1000 }
+        # 判据：CPU 占比 ≥ 0.9（量纲 0–1 分数）
+        # ⚠ 该事实在 db_time 为 0 / cpu_time 缺失时**不产出** ⇒ 本条件为假
+        #   ⇒ 规则不命中（正确行为：拿不到占比就不做归因，绝不猜）
+        - { fact: sql.cpu_time_ratio, op: ge, value: 0.9 }
+    then:
+      conclusion: "慢SQL耗时以CPU为主（占比≥90%），根因指向SQL写法/执行计划本身（如全表扫描、大JOIN、子查询、聚合），而非存储IO链路"
+      severity_override: warning
+      anchors: [SQL, QueryPlan, Table]
+      serves: [slow_sql]
+      next_actions: [collect_plan, collect_plan_detail, sql_rewrite]
+
+  - id: r_storage_io_bound_slow_sql
+    name: "慢SQL为IO密集型（需查存储链路）"
+    category: slow_sql
+    severity: warning
+    priority: 9
+    description: "慢SQL的数据IO耗时占比高**且 IO 中继升高**，耗时在IO侧，需进一步核查存储链路"
+    when:
+      all:
+        - { fact: cluster.slow_sql_avg_ms, op: gt, value: 1000 }
+        # IO 占比 ≥ 0.5：耗时过半在数据 IO
+        - { fact: sql.data_io_time_ratio, op: ge, value: 0.5 }
+        # ★★ 中继条件（P4）：IO 侧耗时占比高**不等于**存储链路慢 ——
+        #   它也可能只是「用得多」（把一切 IO 型的慢 SQL 都归给存储，正是用户实测遇到的问题的反面）。
+        #   只有当**IO 中继本身升高**时，才有资格把因往存储链路上放。
+        #   测点取 write_chain（WAL/共享存储写，存算分离的核心等待）。阈值 5000μs：实测基线 127μs，
+        #   留 ~40× 余量 —— 目的不是敏感，而是**只在存储真的出问题时才报**（宁可不报，也别报错因）。
+        - { fact: io.relay.write_chain.max_avg_us, op: gt, value: 5000 }
+    then:
+      conclusion: "慢SQL耗时以数据IO为主（占比≥50%）**且 IO 中继（共享存储 WAL 写/组提交）持续升高** ⇒ 可归因存储链路 IO 类：核查 LUN/存储池/磁盘与读放大；中继读数与基线一并给出（io.relay.worst_event / io.relay.write_chain.max_avg_us）"
+      severity_override: warning
+      anchors: [SQL, DoradoVolume, DoradoStoragePool]
+      serves: [slow_sql]
+      next_actions: [collect_slow_sql_topn, check_dorado_vol_mapping, check_dorado_alarm]
+
+  - id: r_io_relay_elevated
+    name: "IO中继升高但慢SQL不成立（存储侧征兆）"
+    category: storage
+    severity: info
+    priority: 11
+    description: "IO 等待中继（共享存储 WAL 写/数据文件读）持续升高，但当前无慢SQL命中 ⇒ 存储侧观察项"
+    when:
+      all:
+        # 中继升高（写链或读链任一）：写链阈值 5000μs（基线 127）；读链取 1909 的 2× 余量到 4000
+        - { fact: io.relay.write_chain.max_avg_us, op: gt, value: 5000 }
+    then:
+      conclusion: "IO 等待中继持续升高（io.relay.worst_event 给出具体事件），但慢SQL现象规则未命中 ⇒ 记为**存储侧观察项**：可能是负载上升但尚未影响业务，也可能是慢盘的早期征兆。★ 本规则**不归因**、不指向任何存储部件 —— 单独的中继升高不足以定位根因（阵列侧盘级时延不可得，见 CG-ST-07 相关登记）"
+      severity_override: info
+      anchors: [DoradoStorage]
+      serves: [general_performance]
+      next_actions: [collect_slow_sql_topn, check_dorado_alarm]
+
+  # ── 隐式类型转换导致索引失效 ──
+  - id: r_implicit_type_cast
+    name: "隐式类型转换检测"
+    category: slow_sql
+    severity: warning
+    priority: 21
+    description: "SQL 中列类型与参数类型不匹配，导致索引失效和全表扫描"
+    when:
+      all:
+        - { fact: sql.plan_type, op: eq, value: "seq_scan" }
+        - fact: table.rows
+          op: gt
+          value: 100000
+        - fact: sql.has_type_cast
+          op: eq
+          value: true
+    then:
+      conclusion: "SQL 存在隐式类型转换，可能导致索引失效"
+      severity_override: warning
+      anchors: [SQL, Table, Column]
+      serves: [slow_sql]
+      next_actions: [sql_rewrite, cast_fix]
+
+  # ── 数据倾斜（Hash 分布不均） ──
+  - id: r_data_skew
+    name: "数据倾斜检测"
+    category: resource
+    severity: critical
+    priority: 23
+    description: "GaussDB 分布式节点间数据量差异超过 50%，导致单节点瓶颈"
+    when:
+      all:
+        - fact: table.data_skew_ratio
+          op: gt
+          value: 0.5
+        - fact: node.cpu_usage
+          op: gt
+          value: 80
+    then:
+      conclusion: "存在数据倾斜，部分 DN 节点数据量差异过大导致单节点 CPU 瓶颈"
+      severity_override: critical
+      anchors: [Table, Node]
+      serves: [resource_bottleneck]
+      next_actions: [rebalance_data, analyze_distribution]
+
+  # ── 死锁检测 ──
+  - id: r_deadlock_detected
+    name: "死锁检测"
+    category: lock
+    severity: critical
+    priority: 5
+    description: "检测到死锁事件"
+    when:
+      all:
+        - fact: alert.type
+          op: eq
+          value: deadlock
+        - fact: alert.status
+          op: eq
+          value: active
+    then:
+      conclusion: "检测到死锁，需立即定位涉及的会话和表"
+      severity_override: critical
+      anchors: [Session, Lock, Table]
+      serves: [lock_contention]
+      next_actions: [collect_blocking_chain, kill_deadlock_sessions]
+
+  # ── 共享内存不足（work_mem / maintenance_work_mem） ──
+  - id: r_work_mem_insufficient
+    name: "共享内存不足检测"
+    category: resource
+    severity: warning
+    priority: 28
+    description: "work_mem 配置过低导致临时文件频繁写入磁盘"
+    when:
+      all:
+        - fact: sql.temp_file_written
+          op: eq
+          value: true
+        - fact: node.disk_io_wait
+          op: gt
+          value: 20
+          threshold: io_wait_pct_light    # A5 阈值档位引用（work_mem 判据的磁盘 IO 等待占比阈值）
+    then:
+      conclusion: "work_mem 配置过低，SQL 排序/聚合操作产生临时文件导致磁盘 IO"
+      severity_override: warning
+      anchors: [SQL, Node, Parameter]
+      serves: [resource_bottleneck]
+      next_actions: [increase_work_mem, optimize_sort]
+
+  # ── 缓存命中率低 ──
+  - id: r_buffer_cache_low_hit
+    name: "缓冲区缓存命中率低检测"
+    category: resource
+    severity: warning
+    priority: 26
+    description: "共享缓冲区命中率过低，大量数据从磁盘读取"
+    when:
+      all:
+        - fact: node.blks_hit
+          op: exists
+          value: true
+        - fact: node.blks_read
+          op: exists
+          value: true
+        - fact: node.buffer_hit_ratio
+          op: lt
+          value: 80
+          threshold: buffer_hit_ratio_severe
+    then:
+      conclusion: "共享缓冲区缓存命中率低于 80%，大量物理读导致性能下降"
+      severity_override: warning
+      anchors: [Node, SQL]
+      serves: [resource_bottleneck]
+      next_actions: [increase_shared_buffers, analyze_cache_hotness]
+
+  # ── 统计信息偏差（死元组过多） ──
+  - id: r_dead_tuple_ratio_high
+    name: "死元组比例过高检测"
+    category: slow_sql
+    severity: info
+    priority: 38
+    description: "表中死元组比例过高，影响查询性能"
+    when:
+      all:
+        - fact: table.n_live_tup
+          op: gt
+          value: 100000
+        - fact: table.n_dead_tup
+          op: gt
+          value: 10000
+        - fact: table.dead_tuple_ratio
+          op: gt
+          value: 0.2
+          threshold: dead_tuple_pct_medium
+    then:
+      conclusion: "表死元组比例超过 20%，VACUUM 可能未有效执行"
+      severity_override: info
+      anchors: [Table]
+      serves: [table_bloat]
+      next_actions: [run_vacuum, analyze_dead_tup]
+
+  # ── WLM 资源队列拥塞 ──
+  - id: r_wlm_queue_congested
+    name: "资源队列拥塞检测"
+    category: resource
+    severity: warning
+    priority: 27
+    description: "WLM 资源队列排队等待过多，SQL 被延迟执行"
+    when:
+      all:
+        - fact: wlm.queue_name
+          op: exists
+          value: true
+        - fact: wlm.waiting_count
+          op: gt
+          value: 50
+    then:
+      conclusion: "WLM 资源队列拥塞，SQL 排队等待导致响应慢"
+      severity_override: warning
+      anchors: [Node, SQL, Parameter]
+      serves: [resource_bottleneck]
+      next_actions: [adjust_wlm_queue, throttle_low_priority]
+
+  # ── 未使用索引（原名 r_index_bloat 名实不符，2026-09-12 拆分为两条）──
+  # 说明：原 r_index_bloat 名为「索引膨胀检测」，但判据是
+  # `index.idx_scan == 0 且 table.rows > 100万` —— 那是「大表上从未被扫描的索引」，
+  # 与膨胀（页内空闲空间占比）无关。属命名与语义漂移，且"膨胀检测"实际从未实现。
+  # 现拆成：r_unused_index（本规则，语义与判据一致）+
+  #         r_index_bloat（新，用真实膨胀率 index.bloat_ratio 判据）。
+  - id: r_unused_index
+    name: "未使用索引检测"
+    category: slow_sql
+    severity: info
+    priority: 37
+    description: "大表上存在从未被扫描的索引，占用空间且拖慢写入"
+    when:
+      all:
+        - fact: index.idx_scan
+          op: eq
+          value: 0
+        - fact: table.rows
+          op: gt
+          value: 1000000
+    then:
+      conclusion: "大表存在未被使用的空扫描索引，可能已被替换或失效"
+      severity_override: info
+      anchors: [Table, Index]
+      serves: [table_bloat,slow_sql]
+      next_actions: [drop_unused_index, rebuild_index]
+
+  # ── 索引膨胀（真实膨胀率判据，2026-09-12 新增）──
+  # 数据源：GaussDB 原生 gs_stat_freespace 的 "approximate expansion rate"，
+  # 由探针 opt-in 段 index_bloat 产出为 index.bloat_ratio（xsd:decimal，如 1.20）。
+  # 阈值依据（生产实测）：本集群 TPC-C 索引膨胀率分布 1.04 / 1.05 / 1.20 / 1.22 / 1.26，
+  # 其中 order_line_pkey 17.0GB×1.20 ⇒ 浪费约 2.8GB。
+  # 取 >1.30 为命中：对应 page 内空闲 >23%、空间浪费 >23%，
+  # 此时 REINDEX/VACUUM FULL 的收益明确；1.20~1.30 属 USTORE 常态，不告警。
+  - id: r_index_bloat
+    name: "索引膨胀检测"
+    category: slow_sql
+    severity: warning
+    priority: 36
+    description: "索引页内空闲空间占比过高（膨胀率超阈值），需重建回收"
+    when:
+      all:
+        - fact: index.bloat_ratio
+          op: gt
+          value: 1.3
+          threshold: bloat_ratio_light
+    then:
+      conclusion: "索引膨胀率超过 1.30，页内大量空闲空间导致索引虚胖、查询 I/O 与写入页分裂增多，建议重建该索引回收空间"
+      severity_override: warning
+      anchors: [Index]
+      serves: [table_bloat]
+      next_actions: [rebuild_index, run_vacuum]
+
+  # ═══════════════════════════════════════════
+  # 存算分离: 高级诊断规则
+  # ═══════════════════════════════════════════
+
+  # ── NVMe路径对称性检测（双控路径必须均衡） ──
+  - id: r_st_nvme_path_imbalance
+    name: "NVMe路径对称性检测"
+    category: storage
+    severity: warning
+    priority: 16
+    description: "NVMe控制器路径分配不均衡，单控制器的active路径数量低于阈值"
+    when:
+      all:
+        - fact: storage.nvme_path_per_ctrl
+          op: lt
+          value: 2
+        - { fact: storage.nvme_path_per_ctrl, op: gt, value: 0 }
+    then:
+      conclusion: "NVMe路径对称性不足，某控制器的活跃路径数<2，冗余能力降低"
+      severity_override: warning
+      anchors: [NvmeController, UltraPathLink]
+      serves: [ultrapath_redundancy_degraded]
+      next_actions: [rebalance_nvme_path, check_ctrl_conn]
+
+  # ── IO调度器一致性检测（集群内不一致） ──
+  - id: r_st_io_scheduler_inconsistency
+    name: "集群IO调度器一致性检测"
+    category: storage
+    severity: info
+    priority: 30
+    description: "集群节点间的NVMe设备IO调度器配置不一致"
+    when:
+      all:
+        - fact: cluster.io_scheduler_consistent
+          op: eq
+          value: false
+    then:
+      conclusion: "集群节点间NVMe设备的IO调度器配置不一致，应统一为none"
+      severity_override: info
+      anchors: [Cluster, Node, IoKernelParam]
+      serves: [resource_bottleneck]
+      next_actions: [unify_io_scheduler]
+
+  # ── PCIe链路异常检测（总线错误） ──
+  - id: r_st_pcie_error_detected
+    name: "PCIe总线错误检测"
+    category: storage
+    severity: critical
+    priority: 9
+    description: "PCIe AER错误日志中发现存储相关设备的总线错误"
+    when:
+      all:
+        - fact: storage.pcie_aer_count
+          op: gt
+          value: 0
+        - { fact: storage.pcie_related_dev, op: exists, value: true }
+    then:
+      conclusion: "存储相关PCIe设备出现总线错误（AER），可能为硬件链路问题"
+      severity_override: critical
+      anchors: [PciDevice, Host]
+      serves: [storage_link_failure]
+      next_actions: [check_pcie_ras, replace_nic_slot]
+
+  # ── NVMe双控连接异常（仅连到一台控制器） ──
+  - id: r_st_nvme_single_ctrl_conn
+    name: "NVMe单控连接检测"
+    category: storage
+    severity: warning
+    priority: 14
+    description: "NVMe子系统只连接到Dorado双控中的一台上，失去冗余"
+    when:
+      all:
+        - fact: storage.connected_ctrl_count
+          op: lt
+          value: 2
+        - { fact: storage.expected_ctrl_count, op: eq, value: 2 }
+    then:
+      conclusion: "NVMe子系统只连接到Dorado一台控制器，失去双控冗余"
+      severity_override: warning
+      anchors: [NvmeSubsystem, NvmeController]
+      serves: [ultrapath_redundancy_degraded]
+      next_actions: [check_dorado_ctrl_failover, check_roce_path]
+
+  # ── UltraPath设备号冲突检测 ──
+  - id: r_st_ultrapath_major_conflict
+    name: "UltraPath设备号冲突检测"
+    category: storage
+    severity: critical
+    priority: 11
+    description: "UltraPath设备号（251）与预期不符，可能与内核模块冲突"
+    when:
+      all:
+        - fact: storage.ultrapath_major
+          op: ne
+          value: 251
+    then:
+      conclusion: "UltraPath使用的主设备号非251，可能与其它内核模块冲突，影响多路径功能"
+      severity_override: critical
+      anchors: [UltraPath, KernelModule]
+      serves: [storage_link_failure]
+      next_actions: [check_ultrapath_registration, rebuild_initramfs]
+
+  # ── RoCE设备MTU不匹配（网络层配置） ──
+  - id: r_st_roce_mtu_mismatch
+    name: "RoCE设备MTU不匹配检测"
+    category: storage
+    severity: warning
+    priority: 23
+    description: "RoCE设备的MTU与交换机端口配置不一致，可能导致丢包"
+    when:
+      all:
+        - fact: storage.roce_mtu
+          op: ne
+          value: 9000
+    then:
+      conclusion: "RoCE设备MTU非9000字节（巨型帧），与存储网络建议配置不一致"
+      severity_override: warning
+      anchors: [RoceDevice, NicInterface]
+      serves: [storage_link_failure]
+      next_actions: [set_roce_mtu_jumbo, check_switch_config]
+
+  # ── NVMe Namespace错误计数异常 ──
+  - id: r_st_nvme_err_count_high
+    name: "NVMe错误计数异常检测"
+    category: storage
+    severity: warning
+    priority: 17
+    description: "NVMe设备错误计数持续增长，可能存在链路层问题"
+    when:
+      all:
+        - fact: storage.nvme_err_count_delta
+          op: gt
+          value: 100
+        - { fact: storage.nvme_err_count_delta_rate, op: gt, value: 10 }
+    then:
+      conclusion: "NVMe设备错误计数持续增长，可能存在链路层问题（光纤/光模块）"
+      severity_override: warning
+      anchors: [BlockDevice, RoceDevice]
+      serves: [storage_link_failure]
+      next_actions: [check_fiber_loopback, check_optical_module]
+
+# ── Dorado存储设备侧 ──
+
+  # ── Dorado控制器内存过载 ──
+  - id: r_st_dorado_ctrl_mem_high
+    name: "Dorado控制器内存使用率检测"
+    category: dorado_device
+    severity: warning
+    priority: 16
+    description: "OceanStor Dorado控制器内存使用率超过75%"
+    when:
+      all:
+        - fact: dorado.dorado_ctrl_mem_usage
+          op: gt
+          value: 75
+    then:
+      conclusion: "Dorado控制器内存使用率超过75%，可能影响缓存效率和写入性能"
+      severity_override: warning
+      anchors: [DoradoController]
+      serves: [dorado_device_fault]
+      next_actions: [check_dorado_cache_miss, check_dorado_write_quota]
+
+  # ── Dorado卷类型合规检测 ──
+  - id: r_st_dorado_vol_type_mapping_check
+    name: "Dorado卷类型映射合规检测"
+    category: dorado_device
+    # ★ 2026-09-21 改 warning → info：本规则的条件是"卷命名符合规范"，
+    #   命中 = **合规通过**，不是发现异常。原为 warning ⇒ 健康集群上稳定产出
+    #   一条 warning，被上层读成"存在待处理告警"（基线即污染）。
+    #   注：`then.severity_override` **只有 v2 的 YAML 消费路径读它**
+    #   （service/knowledge_api.py），本体/规则引擎不读 ⇒ 要真正降档必须改**顶层**
+    #   severity，否则图里仍是 warning（本次实测踩到）。
+    severity: info
+    priority: 25
+    description: "检查Dorado卷的命名规范与本体类型定义是否一致"
+    when:
+      any:
+        - { fact: dorado.dorado_vol_name, op: regex, value: "xlog" }
+        - { fact: dorado.dorado_vol_name, op: regex, value: "data" }
+        - { fact: dorado.dorado_vol_name, op: regex, value: "log" }
+    then:
+      # ★ 2026-09-21 改：本规则的**条件是"卷命名符合规范"**，即命中 = **合规通过**，
+      #   而不是发现异常。原结论写成肯定句却归在 warning 档，会在健康集群上
+      #   稳定输出一条 warning，被上层读成"存在待处理告警"（基线即污染）。
+      #   ⇒ 保留该项体检能力，但把结论明确成「检测项通过」（severity 仍由
+      #     severity_override 归 info），使「命中 ≠ 故障」一目了然。
+      conclusion: "检测项通过：Dorado卷类型命名符合规范（xlog共享日志卷/data数据卷/log日志卷），已确认与OS层UltraPath设备的对应关系"
+      severity_override: info
+      anchors: [DoradoVolume, BlockDevice]
+      serves: [xlog_volume_mapping_issue]
+      next_actions: [correlate_vol_to_ultrapath, verify_nvme_namespace]
+
+  # ── Dorado共享日志卷多主机映射检测 ──
+  - id: r_st_dorado_shared_xlog_vol
+    name: "Dorado共享日志卷多主机映射检测"
+    category: dorado_device
+    severity: warning
+    priority: 30
+    description: "检测共享日志卷是否存在「声明了多节点却有节点未映射」的映射缺失（双写路径不完整）"
+    when:
+      all:
+        - fact: dorado.dorado_xlog_vol_unmapped_count
+          op: gt
+          value: 0
+    then:
+      # ★ 2026-09-21 改判据方向：「合规即命中」→「**违规即命中**」。
+      #   原判据 all[vol_type eq xlog ∧ mapped_hosts contains Host_11/12/13]
+      #   描述的是**合规状态** ⇒ 健康集群上**恒命中**，基线永远带一条 info，
+      #   「normal 零命中」不可能达成；且它其实**检不出违规**（任一 xlog 卷映射齐全
+      #   即整体通过）。现判 `unmapped_count gt 0`：存在未映射齐的共享卷才命中。
+      #   计数事实由 storage_probe 产出（以**卷名声明的节点**为期望集，
+      #   不搞"所有业务卷都要覆盖全节点"的一刀切 —— 那会误报 12 条单节点专有卷）。
+      conclusion: "共享日志卷映射缺失：存在声明了多节点却有节点未映射的共享卷（详见采集日志），xlog 双写路径不完整，节点故障时写入冗余不可用"
+      anchors: [DoradoVolume, Host]
+      serves: [xlog_volume_mapping_issue]
+      next_actions: [verify_xlog_mount, check_xlog_write_latency]
+
+  # ── 按需计划面（方向2，2026-09-24）──
+  # ★ 为什么需要它：原先的计划判据只来自 `statement_history.query_plan`，而该列在本
+  #   实例**只有 2 条有值**（track_stmt_stat_level=OFF,L0）⇒ 绝大多数慢 SQL 看不到计划。
+  #   方向2 改为按需 EXPLAIN 现取（实测 9/9 可得），本规则消费那批事实。
+  # ★ 只判**结构**（出现了什么算子/扫了哪些表），不判选择性 —— 因为含占位符的 SQL
+  #   用的是合成样本值，行数是近似（采集侧另有 `sql.plan_now_fidelity` 标注，
+  #   供呈现层区分 exact / synthesized_binds）。
+  - id: r_plan_now_risk
+    name: "按需计划结构性风险（内层全扫放大/大排序）"
+    category: slow_sql
+    severity: warning
+    priority: 35
+    description: "从**现取的真实执行计划**里检出结构性风险，不依赖历史留存"
+    # ★ 只判**既有规则未覆盖**的两类结构风险，避免与 r_full_table_scan 重复计入同一机理：
+    #   seq_scan 由 r_full_table_scan（sql.plan_type=seq_scan 且 table.rows>100万）承担；
+    #   本规则负责「内层全扫被循环放大」与「大结果集排序」—— 两者既有规则都没有判据。
+    when:
+      any:
+        - { fact: sql.plan_risk, op: eq, value: nestloop_seqscan }
+        - { fact: sql.plan_risk, op: eq, value: big_sort }
+    then:
+      conclusion: "现取执行计划检出结构性风险（内层全表扫描被嵌套循环放大／大结果集排序）—— 既有规则未覆盖这两类，且退化与 SQL 写法或索引缺失直接相关，而非存储侧问题。注：若该 SQL 含占位符，计划形状可靠但行数为近似值。"
+      severity_override: warning
+      anchors: [SQL, Table, QueryPlan]
+      serves: [slow_sql]
+      next_actions: [collect_plan_detail, collect_index_info, collect_table_scan]

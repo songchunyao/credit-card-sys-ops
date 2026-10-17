@@ -1,0 +1,82 @@
+# =============================================================================
+# .gitignore —— credit-card-sys-ops（开源导出树）
+#
+# 两条硬规则：
+#   ① 仓库里**只允许**空白模板（`deploy/.env.example`、`deploy/credentials.example`）；
+#      填好的 `.env` / `deploy/credentials` 含真实口令，**永不入库**。
+#   ② 构建 / 部署 / 自检 / 门禁产生的运行期目录与日志不入库。
+#
+# 说明：本树不含私有仓的 `tmp/` 工作区（其中是现网采集快照与探针原始输出），
+#       因此这里没有针对 `tmp/` 的白名单规则；若你在完整仓里工作，白名单机制见
+#       `shared/deploy/port/tmp-evidence-whitelist.txt`。
+# =============================================================================
+
+# ── Python 产物 ─────────────────────────────────────────────────
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# ── 虚拟环境 ─────────────────────────────────────────────────────
+.venv/
+.venv-*/
+venv/
+
+# ── 凭据与本地配置（顺序要紧：`!.env.example` 必须排在 `.env`/`.env.*` 之后）──
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.p12
+id_rsa*
+id_ed25519*
+.git-credentials
+
+# ── 凭据填单：模板可入库，填好的**永不入库** ─────────────────────
+#   deploy/credentials.example 是空白模板（无真实口令）⇒ 保留
+#   deploy/credentials         是填好的那份（含真实口令）⇒ 必须忽略
+deploy/credentials
+
+# ── 容器化部署的运行期产物（由 deploy/install.sh 生成）────────────
+#   .work/   ：叠加契约 targets.deploy.yaml、验收结果 verify.json
+#   .deps/   ：自动安装的外部依赖源码树（如克隆下来的 Dify）
+#   secrets/ ：可选挂载的 SSH 私钥目录（对应 CC_SSH_DIR）
+#   dist/release/：deploy/make_bundle.sh 的默认输出目录
+deploy/.work/
+deploy/.deps/
+deploy/secrets/
+dist/release/
+
+# ── 本地工作区、自检与门禁的临时产物 ─────────────────────────────
+#   注意：`tempfile.mkdtemp()` 在系统临时目录不可写时会退化为**在当前目录**建目录
+#   （Windows 上常见），所以下面这些前缀必须忽略，否则会污染工作树。
+tmp/
+tmp*/
+
+# Raw SSE captures written by the smoke runner (shared/deploy/smoke/m5_run.py
+# records its output directory as sse/). Regenerated on every run.
+sse/
+/m32_*/
+/m5_s2c_ref_*/
+/m5_selftest_*/
+/g24_*/
+/gate_runner_selftest_*/
+/_w28_selftest_*/
+/f5-selftest-*/
+/_verify_logs/
+*.log
+
+# ── 编辑器 / 系统 ────────────────────────────────────────────────
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini
+*~
+*.swp

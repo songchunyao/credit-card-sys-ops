@@ -1,0 +1,513 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://credit-card-ops.ai/ccf/1.0.1/schema.json",
+  "title": "CCF · Credit Card Fact 统一事实契约 v1.0.1",
+  "description": "统一采集层的唯一输出形态。方案1 的投影器 P1 与方案2 的投影器 P2 消费【同一份】CCF 文件，二者的差异只能来自载体，不能来自事实。本 schema 只描述事实层（ABox），不含任何类/公理/规则（那是各方案原生编写的 TBox）。上游契约：shared/model/{topology,metrics,fault-modes,causal-edges}.yaml。★ 规范性要求见 x-ccf-rules。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ccfVersion", "snapshotId", "capturedAt", "collector", "payloadPolicy", "objects", "relations", "observations", "expected", "integrity"],
+  "properties": {
+    "ccfVersion": {
+      "const": "1.0.1",
+      "description": "事实契约版本。任何破坏性变更必须升版本，且两侧投影器同步升级。"
+    },
+    "snapshotId": {
+      "type": "string",
+      "pattern": "^ccf-[0-9]{8}T[0-9]{6}Z-[a-z0-9]{6}$",
+      "description": "快照唯一标识。进入评测的记录 id 前缀即由它派生（硬约束 C5：结论可追溯到 CCF 记录 id）。"
+    },
+    "capturedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "采集完成时刻（UTC，ISO 8601，秒级）。"
+    },
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to"],
+      "description": "本次采集覆盖的观测时间窗。速率类指标（*_total / qps / error_rate）必须有窗口，否则不可比。",
+      "properties": {
+        "from": { "type": "string", "format": "date-time" },
+        "to": { "type": "string", "format": "date-time" }
+      }
+    },
+    "collector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "mode", "endpoint"],
+      "description": "采集器身份与模式。★ mode=live 产出的快照不得进入 T1 主判据（T1 必须离线固定输入）。",
+      "properties": {
+        "name": { "type": "string", "examples": ["upstream-ops-agent"] },
+        "version": { "type": "string" },
+        "mode": { "enum": ["live", "mock", "replay"] },
+        "endpoint": { "type": "string", "description": "采集端点，如 http://host:8187。" },
+        "probes": {
+          "type": "object",
+          "description": "四类探针的本次可用性。container/app 两类是本项目相对上游采集代理的新增面。",
+          "additionalProperties": false,
+          "properties": {
+            "gaussdb": { "$ref": "#/$defs/probeStatus" },
+            "os": { "$ref": "#/$defs/probeStatus" },
+            "container": { "$ref": "#/$defs/probeStatus" },
+            "app": { "$ref": "#/$defs/probeStatus" },
+            "derived": { "$ref": "#/$defs/probeStatus" }
+          }
+        }
+      }
+    },
+    "payloadPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["CAP_VALUES", "CAP_OBJS", "MAX_STR", "parallel", "factsTotal", "pathsReturned", "valuesTruncated"],
+      "description": "★ 硬约束 C6『载荷冻结』的载体。原始四层采集实测约 3 167 条事实 ≈ 16.6 万 tokens，超过任何模型上下文，故两侧（含 BASE 基线）必须消费【同一形态】的有界聚合事实。若两侧这三项上限或 parallel 取值不同，『分析效率』的差异就来自配置而非载体，主判据失效。效率指标必须连同本块一起上报，否则时延差异无法归因。",
+      "properties": {
+        "CAP_VALUES": {
+          "type": "integer",
+          "const": 8,
+          "description": "对应采集层 service/common.py:223 _AGG_DEFAULT_CAP_VALUES。违反 const 即证明不是同一形态。"
+        },
+        "CAP_OBJS": {
+          "type": "integer",
+          "const": 4,
+          "description": "对应 service/common.py:224 _AGG_DEFAULT_CAP_OBJS。"
+        },
+        "MAX_STR": {
+          "type": "integer",
+          "const": 120,
+          "description": "对应 service/common.py:225 _AGG_MAX_STR。"
+        },
+        "parallel": {
+          "type": "boolean",
+          "description": "采集层 collect_layers(parallel=) 标志。并行度会影响耗时与结果顺序，两侧必须一致。"
+        },
+        "aggMode": {
+          "type": "string",
+          "description": "聚合模式标识（如 perPath / perObject / none）。none 表示未经 compress_facts()，此形态在四层规模下不可用于评测。"
+        },
+        "factsTotal": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "压缩前的事实总条数。"
+        },
+        "pathsReturned": { "type": "integer", "minimum": 0 },
+        "valuesTruncated": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "被 CAP_VALUES / CAP_OBJS / MAX_STR 截断的值个数。★ 非零时必须在 integrity.droppedFacts 中可追溯。"
+        },
+        "compressionRatio": {
+          "type": "number",
+          "description": "实测 compress_facts() 的压缩比（既有实现为 3.4×~10.7×）。"
+        }
+      }
+    },
+    "objects": {
+      "type": "array",
+      "description": "拓扑对象实例。同一 type 内 id 唯一；跨 type 也唯一（id 带类型前缀）。",
+      "items": { "$ref": "#/$defs/object" }
+    },
+    "relations": {
+      "type": "array",
+      "description": "拓扑关系断言。from/to 必须指向 objects 中存在的 id（引用完整性由 integrity.referenceIntegrity 断言）。",
+      "items": { "$ref": "#/$defs/relation" }
+    },
+    "observations": {
+      "type": "array",
+      "description": "指标观测。★ 这是封闭世界推理（CWA）的证据载体：status 必须区分『采到了值』『尝试采集但无值』『采集成功但结果为空集』。",
+      "items": { "$ref": "#/$defs/observation" }
+    },
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["types", "metrics", "objectsMin"],
+      "description": "本次采集『应当』覆盖什么。用于防空图通过门禁（G5）与缺失检测。★ 没有 expected 就无法区分『故障不存在』与『根本没采』。",
+      "properties": {
+        "types": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/typeCode" },
+          "minItems": 1,
+          "description": "本次场景中应当出现的对象类型。"
+        },
+        "metrics": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/metricCode" },
+          "minItems": 1,
+          "description": "本次场景中应当被尝试采集的指标。"
+        },
+        "objectsMin": {
+          "type": "object",
+          "description": "每个类型的实例数下界。任一类型实际数量 < 下界 ⇒ 快照不完整，拒绝进入评测。",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
+        "relationsMin": {
+          "type": "object",
+          "description": "每个关系类型的断言数下界（可选）。",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["counts", "referenceIntegrity", "expectedCoverage", "droppedFacts", "collectorProvenance", "canonicalSha256"],
+      "description": "自校验块。★ 由 CCF 固化器（shared/collect/freeze.py）在写出前计算并回读验证；任何一项失败都必须中止，不得写出快照。",
+      "properties": {
+        "counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["objects", "relations", "observations"],
+          "properties": {
+            "objects": { "type": "integer", "minimum": 0 },
+            "relations": { "type": "integer", "minimum": 0 },
+            "observations": { "type": "integer", "minimum": 0 },
+            "byType": { "type": "object", "additionalProperties": { "type": "integer" } },
+            "byObservationStatus": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "collected": { "type": "integer", "minimum": 0 },
+                "notCollected": { "type": "integer", "minimum": 0 },
+                "collectedEmpty": { "type": "integer", "minimum": 0 }
+              }
+            }
+          }
+        },
+        "referenceIntegrity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["ok", "danglingRelationEnds", "danglingObservationRefs"],
+          "properties": {
+            "ok": { "type": "boolean" },
+            "danglingRelationEnds": { "type": "array", "items": { "type": "string" } },
+            "danglingObservationRefs": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "expectedCoverage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["ok", "missingTypes", "missingMetrics", "underMinTypes"],
+          "description": "防空图通过。★ ok=false 时快照必须被拒绝（门禁 G5）。",
+          "properties": {
+            "ok": { "type": "boolean" },
+            "missingTypes": { "type": "array", "items": { "$ref": "#/$defs/typeCode" } },
+            "missingMetrics": { "type": "array", "items": { "$ref": "#/$defs/metricCode" } },
+            "underMinTypes": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "canonicalSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "规范化序列化（键按字典序、数组按 id 排序、数字去掉尾随零、无空格）后的 SHA-256。两次采集同一输入必须得到同一哈希。"
+        },
+        "droppedFacts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["total", "byReason"],
+          "description": "★ v1.0.1 新增。聚合有上限（payloadPolicy.CAP_*），被截断/丢弃的条目必须在此显式登记。不登记的直接后果：「两侧命中率低」会被误读成「载体差」，而实际是事实被丢了。",
+          "properties": {
+            "total": { "type": "integer", "minimum": 0 },
+            "byReason": {
+              "type": "object",
+              "additionalProperties": { "type": "integer", "minimum": 0 },
+              "description": "按原因计数，如 value_cap / obj_cap / str_truncated / probe_error / dedup。"
+            },
+            "examples": {
+              "type": "array",
+              "items": { "type": "string" },
+              "maxItems": 50,
+              "description": "最多 50 条样例（objectId + metricCode），供人工核对丢弃是否伤及关键证据链。"
+            }
+          }
+        },
+        "collectorProvenance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["collectSource", "simulated", "unmatchedExits", "parallel", "agg", "healthSha256"],
+          "description": "★ v1.0.1 新增。由 CCF 固化器（shared/collect/freeze.py）在写出前读取采集层 GET /health 的采集源回执（upstream-ops-agent service/collect_api.py:1310-1320）并固化。★ 裁决 6 的 T1 机械门禁依据：跑 T1 用例前必须断言 simulated=false 且 unmatchedExits 为空。这把『mode=live 的产物不得进入 T1 主判据』从人工纪律变成 CI 门禁。",
+          "properties": {
+            "collectSource": {
+              "enum": ["live", "record", "replay"],
+              "description": "对应采集层 GDO_COLLECT_SOURCE。T1 主判据只接受 live（离线固化前）产出的记录；T2 效率判据使用 replay。"
+            },
+            "simulated": {
+              "type": "boolean",
+              "description": "true 表示本次采集至少有一个 tap 走了仿真层。★ T1 断言必须为 false。"
+            },
+            "unmatchedExits": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "仿真层未登记的出口（SimMiss / 绕过 network guard 的调用）。★ 非空即表示录制不完整，fail-closed：该快照不得进入任何判据。"
+            },
+            "parallel": { "type": "boolean" },
+            "agg": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["CAP_VALUES", "CAP_OBJS", "MAX_STR"],
+              "description": "与顶层 payloadPolicy 的三项上限必须逐字相同（双向一致性由固化器断言）。",
+              "properties": {
+                "CAP_VALUES": { "type": "integer" },
+                "CAP_OBJS": { "type": "integer" },
+                "MAX_STR": { "type": "integer" }
+              }
+            },
+            "healthSha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$",
+              "description": "/health 回执原文的 SHA-256，用于事后证明固化时采集层的确处于该状态。"
+            },
+            "envFingerprint": {
+              "type": "string",
+              "description": "可选的 .env / 环境变量指纹（脱敏）。★ 应对隐藏耦合 H1（探针模块级读 .env，晚加载 ⇒ 静默 0 事实）与 H13（.env:16 TPOPS_API_BASE 而探针读 TPOPS_BASE，该行完全不生效）。"
+            }
+          }
+        }
+      }
+    },
+    "x": {
+      "type": "object",
+      "description": "扩展区。★ 两侧投影器都不得读取此处任何内容；放入 x 的数据不参与等价性自检。仅用于承载 debug 信息。",
+      "additionalProperties": true
+    }
+  },
+
+  "$defs": {
+
+    "typeCode": {
+      "description": "来自 shared/model/topology.yaml 的 13 个类型之一（ConnectionPool 为抽象，不在其中）。",
+      "enum": [
+        "CreditCardApp", "AppInstance", "AppEndpoint", "JdbcDataSource",
+        "Container", "Host",
+        "GaussDBCluster", "GaussDBInstance", "DatabaseSessionPool",
+        "Session", "Query", "Table"
+      ]
+    },
+
+    "layerCode": {
+      "description": "层是推理的第一公民。Data 层对象若缺少层标注，跨层分析会退化为连通性检查。",
+      "enum": ["App", "Runtime", "Data"]
+    },
+
+    "relationCode": {
+      "description": "来自 shared/model/topology.yaml 的 14 个关系之一。★ HAS_APP_INSTANCE 与 HAS_DB_INSTANCE 是两个不同关系（2026-xx 契约修正）。",
+      "enum": [
+        "HAS_APP_INSTANCE", "EXPOSES", "RUNS_IN", "DEPLOYED_ON",
+        "USES_DATASOURCE", "CONNECTS_TO", "RESOLVES_TO",
+        "HAS_DB_INSTANCE", "HOSTS", "HAS_SESSION_POOL", "HAS_SESSION",
+        "RUNS_QUERY", "ACCESSES", "REPLICATES_TO"
+      ]
+    },
+
+    "metricCode": {
+      "description": "来自 shared/model/metrics.yaml 的 91 个指标之一。数值型与分类型混列，分类型见 x-categorical-metrics。",
+      "enum": [
+        "app.uptime_s", "app.heap_used_ratio", "app.gc_pause_ms", "app.thread_count",
+        "app.endpoint.p99_ms", "app.endpoint.error_rate", "app.endpoint.qps",
+        "app.endpoint.tps", "app.endpoint.p50_ms", "app.endpoint.p95_ms", "app.endpoint.max_ms",
+        "app.endpoint.success_total", "app.endpoint.fail_total",
+        "host.fs_max_used_pct",
+        "host.disk_io_errors_total",
+        "host.net_iface_down_count",
+        "host.net_iface_total",
+        "db.cluster.replay_lag_bytes_max",
+        "db.cluster.replication_not_streaming_count",
+        "db.cluster.alert_active_count",
+        "db.table.index_count",
+        "db.table.unused_index_count",
+        "db.cluster.replication_pending_bytes",
+        "db.cluster.replication_flush_pending_bytes",
+        "db.cluster.walsender_count",
+        "db.cluster.replication_slot_count",
+        "db.cluster.replication_slot_active_count",
+        "db.cluster.is_standby",
+        "app.datasource.active_connections", "app.datasource.idle_connections",
+        "app.datasource.pending_threads", "app.datasource.acquire_wait_ms",
+        "app.datasource.connect_latency_ms", "app.datasource.connect_fail_total",
+        "app.datasource.timeout_total",
+        "container.cpu_usage_ratio", "container.cpu_throttled_periods",
+        "container.mem_working_set_mb", "container.oom_kill_total",
+        "container.restart_total", "container.status",
+        "host.cpu_usage_ratio", "host.mem_available_ratio", "host.load1", "host.load5",
+        "host.disk_util", "host.disk_io_wait", "host.conntrack_count",
+        "host.net_rx_bytes", "host.net_tx_bytes",
+        "db.cluster.up_nodes", "db.cluster.down_nodes", "db.cluster.replication_lag_mb",
+        "db.cluster.switchover_total",
+        "db.instance.cpu_usage_ratio", "db.instance.mem_usage_ratio",
+        "db.instance.session_count", "db.instance.max_connections",
+        "db.instance.waiting_connections", "db.instance.long_txn_age_s",
+        "db.instance.io_wait_pct", "db.instance.buffer_hit_ratio", "db.instance.up",
+        "db.pool.session_used_ratio", "db.pool.session_waiting", "db.pool.conn_rejected_total",
+        "db.session.state", "db.session.wait_event", "db.session.xact_age_s",
+        "db.session.query_elapsed_s",
+        "db.query.mean_exec_ms", "db.query.max_exec_ms", "db.query.exec_count",
+        "db.query.returned_rows", "db.query.seq_scan_ratio",
+        "db.table.live_tuples", "db.table.dead_tuple_ratio",
+        "db.table.last_analyze_age_h", "db.table.size_mb",
+        "db.cluster.deadlocks", "db.cluster.xact_rollback", "db.cluster.slow_query_count",
+        "db.instance.active_sessions", "db.instance.idle_in_xact", "db.instance.lock_waits",
+        "db.cluster.temp_files", "db.cluster.temp_file_written", "db.table.seq_scan",
+        "db.table.idx_scan", "db.table.dead_tuples", "db.table.hot_update_ratio_pct"
+      ]
+    },
+
+    "objectId": {
+      "type": "string",
+      "pattern": "^(app|appinst|endpoint|jdbsrc|ctr|host|dbcluster|dbinst|dbpool|session|query|table):[A-Za-z0-9._:-]+$",
+      "description": "带类型前缀的稳定 id，如 app:cc-payment / ctr:cc-pay-7f3a / dbinst:db-cc-01。前缀与类型必须一致（由 x-ccf-rules 断言）。"
+    },
+
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "collectedAt"],
+      "description": "每条事实都必须能回答『谁、何时、从哪采的』。这是审计链的地基。",
+      "properties": {
+        "source": { "enum": ["gaussdb", "os", "container", "app", "derived"] },
+        "probe": { "type": "string", "description": "具体探针/端点标识，用于故障时定位是哪个采集面坏了。" },
+        "collectedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+
+    "probeStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["available"],
+      "properties": {
+        "available": { "enum": ["full", "partial", "none"] },
+        "note": { "type": "string" },
+        "endpoint": { "type": "string" }
+      }
+    },
+
+    "object": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "layer", "key", "attrs", "provenance"],
+      "properties": {
+        "id": { "$ref": "#/$defs/objectId" },
+        "type": { "$ref": "#/$defs/typeCode" },
+        "layer": { "$ref": "#/$defs/layerCode" },
+        "key": {
+          "type": "object",
+          "description": "标识性属性（topology.yaml 的 key_attrs）。AppEndpoint 为 path+protocol，Table 为 schemaName+tableName。",
+          "minProperties": 1
+        },
+        "attrs": {
+          "type": "object",
+          "description": "非标识性属性。★ 属性名必须与 topology.yaml 的 attrs 键逐字一致；两侧投影器不得改名或加前缀。"
+        },
+        "provenance": { "$ref": "#/$defs/provenance" }
+      }
+    },
+
+    "relation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "from", "to", "provenance"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^rel-[0-9]{6}$" },
+        "type": { "$ref": "#/$defs/relationCode" },
+        "from": { "$ref": "#/$defs/objectId" },
+        "to": { "$ref": "#/$defs/objectId" },
+        "attrs": { "type": "object" },
+        "crossLayer": {
+          "type": "boolean",
+          "description": "冗余标注，便于人工核对；权威定义在 topology.yaml。两侧投影器必须忽略此字段。"
+        },
+        "provenance": { "$ref": "#/$defs/provenance" }
+      }
+    },
+
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "objectId", "metricCode", "status", "observedAt", "provenance"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^obs-[0-9]{6}$" },
+        "objectId": { "$ref": "#/$defs/objectId" },
+        "metricCode": { "$ref": "#/$defs/metricCode" },
+        "status": {
+          "enum": ["collected", "notCollected", "collectedEmpty"],
+          "description": "★ CWA 的核心字段。collected=取到值；notCollected=尝试采集但无值（探针不可用/对象不存在/该指标不适用）；collectedEmpty=采集成功但结果是空集（如该会话当前无等待事件）。三者语义完全不同，投影器必须原样保留，规则层判断否定性证据时必须区分：只有 notCollected 才能作为『该项未被观测』的依据。"
+        },
+        "value": {
+          "type": ["number", "integer", "boolean"],
+          "description": "数值型取值。status != collected 时不得出现。"
+        },
+        "valueText": {
+          "type": "string",
+          "description": "分类型取值（db.session.state / db.session.wait_event / container.status）。"
+        },
+        "unit": { "type": "string" },
+        "rawValue": {
+          "type": ["number", "integer", "boolean", "string"],
+          "description": "★ v1.0.1 新增。采集层归一化之前的原始取值。value/unit 是归一化后的结果；归一化本身可能出错（单位换算、量纲错配），保留原始值才能审计『是采集错了还是归一化错了』。两侧投影器必须以相同方式处理（默认只用 value，rawValue 仅供审计与回溯）。"
+        },
+        "rawUnit": {
+          "type": "string",
+          "description": "★ v1.0.1 新增。采集侧上报的原始单位。与 unit 不同即说明发生过换算，换算发生在采集层（两侧相同），不是载体差异。"
+        },
+        "observedAt": { "type": "string", "format": "date-time" },
+        "counterReset": {
+          "type": "boolean",
+          "description": "累计型计数器（*_total / *_periods）在窗口内是否发生重置。为 true 时速率不可计算，规则层必须放弃该证据。"
+        },
+        "delta": {
+          "type": ["number", "integer"],
+          "description": "★ 新增（X-7 裁定；可选字段，故 ccfVersion 仍为 1.0.1，非破坏性）。窗口增量：同一实体、同一指标在 deltaWindowS 内的变化量，由采集侧计算。predicate: increased / decreased 必须据此判定 —— delta 存在且为正 ⇒ increased 成立；为负 ⇒ decreased 成立；**delta 缺失 ⇒ 该判据 unjudgeable**（既不成立也不证伪，按 WARN『待标定/不可机判』处理并登记台账），严禁静默当作 false。★ 值域 = 有限数值（int 或 float 皆可；bool / NaN / Inf 不算数值）。**小数 delta 合法**：容器侧整数事件计数器会取整（container_probe.py:168 `d = int(round(d))`），而 app 侧 `_counter_delta()` 对 `app.uptime_s`（连续秒）返回原样差值、不取整 ⇒ 门禁不得要求 delta 为整数。"
+        },
+        "deltaWindowS": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "★ 新增（X-7 裁定；可选字段，故 ccfVersion 仍为 1.0.1，非破坏性）；★ 值域收紧（M2.14 复核裁定，此前误留的旧版本字样与 const 1.0.1 冲突，已删）。delta 的窗口长度（秒）。出现 delta 时必须同时出现，否则无法解释该增量。★ 值域 = 整数秒且 ≥1，与采集侧共享参数 DELTA_WINDOW_S（P11：整数秒、默认 300 冻结、两侧同名同义）逐字一致；0 / 负数 / 小数都是非法值 ⇒ 采集侧（freeze.py#delta_from_fact）在窗口非法时一律不产出 delta，**宁可该判据 unjudgeable，也不得伪造窗口**。"
+        },
+        "reason": {
+          "type": "string",
+          "description": "status != collected 时的原因（如 probe_unavailable / object_absent / metric_not_applicable / empty_result_set）。"
+        },
+        "provenance": { "$ref": "#/$defs/provenance" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "collected" } }, "required": ["status"] },
+          "then": { "anyOf": [{ "required": ["value"] }, { "required": ["valueText"] }] },
+          "else": { "required": ["reason"] }
+        },
+        { "if": { "required": ["delta"] }, "then": { "required": ["deltaWindowS"] } }
+      ]
+    }
+  },
+
+  "x-categorical-metrics": [
+    "container.status",
+    "db.session.state",
+    "db.session.wait_event"
+  ],
+
+  "x-id-prefix-by-type": {
+    "CreditCardApp": "app",
+    "AppInstance": "appinst",
+    "AppEndpoint": "endpoint",
+    "JdbcDataSource": "jdbsrc",
+    "Container": "ctr",
+    "Host": "host",
+    "GaussDBCluster": "dbcluster",
+    "GaussDBInstance": "dbinst",
+    "DatabaseSessionPool": "dbpool",
+    "Session": "session",
+    "Query": "query",
+    "Table": "table"
+  },
+
+  "x-ccf-rules": {
+    "R1-canonical": "写出前必须规范化：JSON 键按字典序、数组按 id 字典序、浮点去掉尾随零、UTF-8 无 BOM、LF 换行、无多余空白。同一输入两次采集的 canonicalSha256 必须相同，否则 T1 离线基准不成立。",
+    "R2-no-carrier-vocabulary": "禁止出现载体词汇（cypher / sparql / rdf / owl / 图 / 本体 / 三元组 / 节点 / 边）。字段名已刻意采用中性名（objects/relations/observations），两侧投影器必须原样使用。",
+    "R3-attribute-fidelity": "属性名与单位必须与 topology.yaml、metrics.yaml 逐字一致。禁止投影器侧做单位换算（换算应发生在采集层或规则层，且在两侧以相同方式发生）。",
+    "R4-abox-only": "CCF 只承载事实（ABox）。类层次、公理、规则、因果边定义属于 TBox，由两方案各自原生编写，不得出现在 CCF 中。",
+    "R5-immutable-snapshot": "进入评测的 CCF 文件一旦写出即不可变。任何修改必须产生新 snapshotId，禁止就地编辑（否则无法证明两侧消费的是同一份事实）。",
+    "R6-no-derived-truth": "source=derived 的观测必须在 provenance.probe 中写明派生表达式，且两侧投影器必须以相同方式接受它；派生不得引入载体相关的计算。",
+    "R7-completeness-declared": "expected 块必须声明本次场景期望覆盖的类型与指标。空 expected 视为无效快照。",
+    "R8-negative-evidence": "任何用于『排除法』推理的指标，其 status 必须显式给出（collected/notCollected/collectedEmpty）。仅有 notCollected 才能作为否定性证据；collectedEmpty 不得当作否定性证据。",
+    "R9-payload-frozen": "★ v1.0.1 新增（硬约束 C6）。两侧（含 BASE 基线）消费的载荷形态必须逐字相同：payloadPolicy.{CAP_VALUES,CAP_OBJS,MAX_STR} 与 parallel 固定，且必须与 integrity.collectorProvenance.agg 双向一致。不变量：payloadPolicy.valuesTruncated > 0 ⇒ integrity.droppedFacts.total > 0。未使用有界聚合（aggMode=none）的快照在四层规模下不得进入评测。",
+    "R10-provenance-gate": "★ v1.0.1 新增。进入 T1 主判据的快照必须满足：integrity.collectorProvenance.simulated == false 且 unmatchedExits 为空（fail-closed）。进入 T2 效率判据的快照必须满足：simulated == true 或 collectSource == replay，且 unmatchedExits 为空。两种情形都不允许 unmatchedExits 非空。"
+  }
+}

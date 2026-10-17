@@ -1,0 +1,17 @@
+# ============================================================================
+# tmp/cc_probe_inject_b.ttl —— 规则可触发性证明的「注入夹具 B」（非契约数据）
+# ----------------------------------------------------------------------------
+# 目的：r05（JDBC 认证/驱动不兼容，排除法）需要「窗口内有失败计数」这一非零条件，
+#       而真机快照里 app.datasource.connect_fail_total = 0（一切正常）⇒ r05 产出 0。
+#       为证明 r05 不是死代码，注入一个最小事实：
+#         · JdbcDataSource.connect_fail_total = 3
+#       注意：真机快照里 cc:driverVersion 已被采集为
+#         "/*$mvn.project.property.parsedversion.osgiversion$*/"（含 `$` ⇒ 疑似未解析的
+#         驱动版本占位符），这正是 r05 的判据 4；因此只需补上失败计数即可触发。
+# ★ 测试夹具，不进 TBox、不进交付本体。
+# ============================================================================
+@prefix ccm: <https://credit-card-ops.ai/onto/metric#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<https://credit-card-ops.ai/onto/inst/jdbsrc/ds-cc-pay-gaussdb>
+    ccm:connectFailTotal "3"^^xsd:integer .

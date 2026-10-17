@@ -1,0 +1,138 @@
+# =============================================================================
+# deploy/compose.standalone.yml —— 「standalone」档叠加文件：自带 Neo4j + GraphDB
+#
+# 用法（**必须**与基础文件一起用）：
+#     docker compose -f deploy/compose.yml -f deploy/compose.standalone.yml up -d
+#   install.sh --mode standalone 就是拼这一条，不需要手工拼。
+#
+# 本文件做两件事：
+#   ① 新增两个基础载体容器（neo4j / graphdb），只在本档存在；
+#   ② 把应用服务的载体地址从 host.docker.internal 覆盖为**容器内服务名**。
+#
+# ★ 为什么用叠加文件而不是 compose profiles：
+#   profiles 未启用时服务被**静默跳过**，档位切换失败没有任何提示；
+#   而 `-f 少给一个文件` 会立刻报错。**档位切换必须是响亮的，不是静默的。**
+#
+# ★★ 与 192.0.2.10 现网的冲突提示（务必先读）：
+#   该机已有 neo4j-gaussdb（:7475/:7688，含 423 节点 v2 图，**不得重建**）
+#   与 gdo-graphdb（:7200，含 gdo* 仓库，**不得改写**）。
+#   ⇒ 在 旧载体机 上**必须**用默认的 attached 档。若强行用本档，宿主端口会冲突，
+#     且会引入第二个 Neo4j（targets.yaml#neo4j.isolation.must_not 明确禁止）。
+#   install.sh 的 preflight 会在起栈前检出这些端口占用并**拒绝**，不会硬闯。
+# =============================================================================
+
+services:
+
+  # =========================================================================
+  # 基础载体 ①：Neo4j 5-community（KG 侧）
+  #   端口沿用本项目契约（**非默认端口**，targets.yaml#neo4j.ports）：
+  #     HTTP 7475 ← 7474 ；Bolt 7688 ← 7687
+  # =========================================================================
+  neo4j:
+    image: ${CC_NEO4J_IMAGE:-neo4j:5-community}
+    container_name: cc-ops-neo4j
+    restart: unless-stopped
+    networks: [ccops]
+    # ★ :? 让「忘了设口令」变成**起栈即失败**，而不是静默起一个免密图库。
+    environment:
+      NEO4J_AUTH: "neo4j/${CC_NEO4J_PASSWORD:?standalone 档必须在 .env 里设 CC_NEO4J_PASSWORD}"
+      # ★★ 这里**绝不能**叫 `NEO4J_PASSWORD` ★★
+      #   Neo4j 官方镜像把**所有** `NEO4J_` 前缀的环境变量当成**配置项**
+      #   （下划线转点、双下划线转下划线，即 NEO4J_a_b → a.b）。
+      #   于是 `NEO4J_PASSWORD` 被解析成配置 `PASSWORD`，Neo4j 直接拒绝启动：
+      #       Failed to read config: Unrecognized setting.
+      #       No declared setting with name: PASSWORD.
+      #   实测后果：容器 **crash-loop**，`docker inspect` 显示 unhealthy、
+      #   退出码 137，而 `docker compose up` 报的是
+      #   「dependency failed to start: container cc-ops-neo4j is unhealthy」
+      #   —— 表象在依赖方，根因在载体自身，极易查错方向。
+      #   ⇒ 借用本项目自己的键名 `CC_NEO4J_PASSWORD`（不撞 NEO4J_ 前缀）供
+      #     healthcheck 读取；它只存在于该容器内，不落盘、不打印。
+      CC_NEO4J_PASSWORD: "${CC_NEO4J_PASSWORD}"
+      # 内存预算与现网 neo4j-gaussdb 同量级（targets.yaml / docs 记录约 1.5 GB）
+      NEO4J_server_memory_heap_initial__size: "${CC_NEO4J_HEAP:-1G}"
+      NEO4J_server_memory_heap_max__size: "${CC_NEO4J_HEAP:-1G}"
+      NEO4J_server_memory_pagecache_size: "${CC_NEO4J_PAGECACHE:-512m}"
+    ports:
+      - "${CC_BIND_IP:-0.0.0.0}:7475:7474"
+      - "${CC_BIND_IP:-0.0.0.0}:7688:7687"
+    volumes:
+      - ccops-neo4j-data:/data
+    # cypher-shell 是 neo4j 官方镜像自带的，比 curl/wget 可靠。
+    # 口令变量用 CC_NEO4J_PASSWORD（见上，不能是 NEO4J_PASSWORD）。
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p \"$$CC_NEO4J_PASSWORD\" 'RETURN 1' >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      # 首次启动要初始化 store + 起 JVM，60s 常常不够（实测约 60–120s）
+      start_period: 120s
+      retries: 20
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  # =========================================================================
+  # 基础载体 ②：GraphDB 10.8.0（ONTO 侧）
+  #   ★ 刻意**不定义 healthcheck**：ontotext/graphdb 基础镜像里 curl/wget 不保证存在，
+  #     写一个"探测工具可能不存在"的探针，会得到**永远 unhealthy** 的假故障，
+  #     进而把 depends_on 卡死。就绪等待改由 install.sh 在宿主侧用 curl 轮询
+  #     `/rest/repositories`（宿主必有 curl/wget），并在那里建仓 + 装 TBox。
+  # =========================================================================
+  graphdb:
+    image: ${CC_GRAPHDB_IMAGE:-ontotext/graphdb:10.8.0}
+    container_name: cc-ops-graphdb
+    restart: unless-stopped
+    networks: [ccops]
+    environment:
+      GDB_JAVA_OPTS: "${CC_GRAPHDB_JAVA_OPTS:--Xms512m -Xmx${CC_GRAPHDB_HEAP:-4g}}"
+    ports:
+      - "${CC_BIND_IP:-0.0.0.0}:7200:7200"
+    volumes:
+      - ccops-graphdb-data:/opt/graphdb/home
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  # =========================================================================
+  # 应用服务：把载体地址从宿主网关覆盖为容器内服务名
+  #   （compose 按**服务名**合并 environment 的键，故这里只写要改的键）
+  # =========================================================================
+  collect:
+    environment:
+      NEO4J_HTTP: "http://neo4j:7474"
+    depends_on:
+      neo4j:
+        condition: service_healthy
+
+  kg:
+    environment:
+      CC_NEO4J_HTTP_URL: "http://neo4j:7474"
+    depends_on:
+      neo4j:
+        condition: service_healthy
+
+  kgt:
+    environment:
+      CC_NEO4J_URI: "bolt://neo4j:7687"
+    depends_on:
+      neo4j:
+        condition: service_healthy
+
+  onto:
+    environment:
+      CC_GRAPHDB_URL: "http://graphdb:7200"
+    # graphdb 无 healthcheck ⇒ 只能排到"已启动"；真正的就绪等待在 install.sh
+    depends_on:
+      graphdb:
+        condition: service_started
+
+# ---------------------------------------------------------------------------
+volumes:
+  ccops-neo4j-data:
+    name: ccops-neo4j-data
+  ccops-graphdb-data:
+    name: ccops-graphdb-data

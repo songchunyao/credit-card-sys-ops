@@ -1,0 +1,349 @@
+# =============================================================================
+# deploy/compose.yml —— credit-card-sys-ops 应用层编排（5 个服务）
+#
+# ★★ 两档拓扑（**用叠加文件实现，不用 profiles**）★★
+#   叠加文件比 profiles 更不容易出静默事故：profiles 未启用时服务被**静默跳过**，
+#   而 `-f a.yml -f b.yml` 少了文件是**立刻报错**。故本项目的档位切换一律用 `-f`：
+#
+#     档 1「attached」——复用既有 Neo4j / GraphDB（**192.0.2.10 现网必须走这档**：
+#                        内存仅余 ~5 GB 且既有两个载体容器不得重建）
+#         docker compose -f deploy/compose.yml up -d
+#
+#     档 2「standalone」——自带 Neo4j + GraphDB（任意新 Linux 服务器一键起）
+#         docker compose -f deploy/compose.yml -f deploy/compose.standalone.yml up -d
+#
+#   install.sh 的 `--mode` 参数就是在这两者间切换，**不需要**手工拼 -f。
+#
+# ★★ 三个必须遵守的约定（每条都对应一次真实事故）★★
+#   1. `.env` 只认 **compose 文件同目录**：compose 的 env_file 相对路径是相对
+#      compose 文件而不是 cwd；放错位置**不报错**，所有 ${VAR} 静默走默认值。
+#   2. 环境变量必须 **export 才胜过 .env 文件**（仅对 compose 自身的 ${VAR} 插值而言）。
+#   3. 端口／卷／口令全部经 .env 注入；**镜像内零密钥**。
+# =============================================================================
+
+name: cc-ops
+
+# ---------------------------------------------------------------------------
+# 应用服务的公共锚点（YAML 锚点，仅用于少写重复，不改变语义）
+# ---------------------------------------------------------------------------
+x-app: &app
+  restart: unless-stopped
+  # ★ attached 档要访问宿主上的 Neo4j/GraphDB ⇒ 需要 host.docker.internal。
+  #   Linux 上该名称**默认不存在**，必须显式映射到宿主网关；缺它时容器内的
+  #   "连不上载体"与"载体没起"无法区分（会排查到错误的方向）。
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+  networks: [ccops]
+  # ★ 刻意**不用** `env_file: .env`：
+  #   ① 它对本编排是多余的 —— compose 会自动读取 **compose 文件同目录**的 .env 做
+  #      `${VAR}` 插值，插值不需要 env_file；
+  #   ② 它有害 —— env_file 会把 .env 里**所有**键无差别塞进**每一个**容器，
+  #      于是 DIFY_PASSWORD、GAUSSDB_SSH_PASSWORD 之类会平白出现在 kg/onto 容器里。
+  #      凭据只应出现在真正需要它的那个服务上（见各服务下面的 environment 白名单）。
+  #   ⇒ 「按需显式注入」而非「整份 .env 撒出去」。这也是"镜像内零密钥"的延伸。
+  # 日志轮转（宿主上另有 shared/deploy/logrotate/ 的 cc-tools-audit.conf）
+  logging:
+    driver: json-file
+    options:
+      max-size: "20m"
+      max-file: "5"
+  stop_grace_period: 20s
+
+services:
+
+  # =========================================================================
+  # :8187 采集层（数据面）—— 本仓采集层 `dist/collect-layer/` 的四层探针
+  # （源出同一作者的既有工作区 upstream-ops-agent；该树现已并入本仓）
+  # =========================================================================
+  collect:
+    <<: *app
+    image: cc-ops/collect:${CC_IMAGE_TAG:-latest}
+    container_name: cc-ops-collect
+    ports:
+      - "${CC_BIND_IP:-0.0.0.0}:8187:8187"
+    # ★★ 键名**逐字取自代码实测**（AST 扫 os.environ.get + os.environ[...]），
+    #    不是照抄 .env.example —— 后者已漂移（它写的 DORADO_* 在代码里**根本不存在**，
+    #    代码读的是 MCP_STORAGE_DM_*）。键名写错**不报错**，只会静默采空。
+    #    权威对照见 deploy/README.md §「采集层环境变量权威表」。
+    environment:
+      # ── 服务自身监听（collect_api.py:1316-1317 读这两个键）──
+      SERVICE_HOST: "0.0.0.0"
+      SERVICE_PORT: "8187"
+      SVC_PORT: "8187"          # uvicorn 启动端口（Dockerfile CMD 用）
+      PYTHONPATH: /app
+      # ── 被观测的 GaussDB 集群（L3）──
+      GAUSSDB_DSN: "${GAUSSDB_DSN:-}"
+      GAUSSDB_NODES: "${GAUSSDB_NODES:-}"
+      GAUSSDB_CLUSTER_ID: "${GAUSSDB_CLUSTER_ID:-}"
+      # OS 探针走 ssh 子进程；MUX 三键可把单命令均值 3.97s 降到 0.16s（≈25×）
+      GAUSSDB_SSH_USER: "${GAUSSDB_SSH_USER:-root}"
+      GAUSSDB_SSH_PORT: "${GAUSSDB_SSH_PORT:-22}"
+      GAUSSDB_SSH_PASSWORD: "${GAUSSDB_SSH_PASSWORD:-}"
+      GAUSSDB_SSH_KEY: "${GAUSSDB_SSH_KEY:-}"
+      GAUSSDB_SSH_MUX: "${GAUSSDB_SSH_MUX:-}"
+      GAUSSDB_SSH_MUX_DIR: "${GAUSSDB_SSH_MUX_DIR:-}"
+      GAUSSDB_SSH_MUX_PERSIST: "${GAUSSDB_SSH_MUX_PERSIST:-}"
+      # ── 存储域：OceanStor Dorado DeviceManager（**不是** DORADO_*）──
+      MCP_STORAGE_DM_BASE_URL: "${MCP_STORAGE_DM_BASE_URL:-}"
+      MCP_STORAGE_DM_USER: "${MCP_STORAGE_DM_USER:-}"
+      MCP_STORAGE_DM_PASSWORD: "${MCP_STORAGE_DM_PASSWORD:-}"
+      MCP_STORAGE_DM_VERIFY_SSL: "${MCP_STORAGE_DM_VERIFY_SSL:-}"
+      # ── TPOPS 平台 ──
+      TPOPS_BASE: "${TPOPS_BASE:-}"
+      TPOPS_USER: "${TPOPS_USER:-}"
+      TPOPS_PASSWORD: "${TPOPS_PASSWORD:-}"
+      # ── ★★ L1/L2 被测载体（2026-10-12 重写为**裸 docker 容器**通道）★★ ──
+      #   ★ 下面的键由上游 container_probe.py / app_probe.py 读取。键名写错**不报错**，
+      #     只会静默采空（与本段开头的告诫同理）⇒ 改动务必与探针源码对账。
+      CC_DOCKER_SOCK: "${CC_DOCKER_SOCK:-/var/run/docker.sock}"
+      # 容器名过滤（当前命名 credit-card-sim-cardsim-<N>，可 scale）
+      CC_APP_CONTAINER: "${CC_APP_CONTAINER:-credit-card-sim-cardsim}"
+      # 宿主只读观测面（挂载见本服务 volumes；路径要与挂载点一致）
+      CC_HOST_PROC: "${CC_HOST_PROC:-/host/proc}"
+      CC_HOST_CGROUP: "${CC_HOST_CGROUP:-/host/sys/fs/cgroup}"
+      # ★ 数值键：Docker API 超时秒（代码默认 10）
+      CC_DOCKER_TIMEOUT: "${CC_DOCKER_TIMEOUT:-10}"
+      # 应用身份（缺省即当前被测系统；换应用形态时经 .env 覆盖）
+      CC_APP_CODE: "${CC_APP_CODE:-CC-SIM}"
+      CC_APP_NAME: "${CC_APP_NAME:-credit-card-simulator}"
+      CC_APP_TECHSTACK: "${CC_APP_TECHSTACK:-Java+HikariCP+gsjdbc4}"
+      # SLO 目标（ms）。**允许留空** ⇒ 探针不写 sloP99Ms 属性（不猜默认值）
+      CC_APP_SLO_P99_MS: "${CC_APP_SLO_P99_MS:-}"
+      # ★ 数值键：连接池归因查询的 DB 超时秒（代码默认 8）
+      CC_APP_DB_TIMEOUT: "${CC_APP_DB_TIMEOUT:-8}"
+      # 容器探针的窗口基线状态文件（累计计数器的窗口增量靠它做差；路径可配）
+      CC_PROBE_STATE: "${CC_PROBE_STATE:-/tmp/cc-container-probe-state.json}"
+      # ── ★ P0-B：应用实时遥测日志（延迟/TPS/池获取）──
+      # 容器内路径必须与上面 volumes 的挂载点逐字一致
+      CC_APP_LOGDIR: "${CC_APP_LOGDIR:-/host/ccsim-logs}"
+      # ★ 数值键：遥测时效上限秒。超过即报 notCollected(telemetry_stale)，
+      #   不把几小时前的读数当现值（应用在 hold 待命时日志会静止）
+      CC_APP_TELEMETRY_MAX_AGE_S: "${CC_APP_TELEMETRY_MAX_AGE_S:-900}"
+      # ── 以下属**上一版 k8s / HTTP 通道的残留**：新探针**不再读取**。
+      #    保留仅为不改变 .env 既有键的存在性。**不要**照它们配 L1/L2。
+      CC_APP_URL: "${CC_APP_URL:-}"
+      CC_APP_TIMEOUT: "${CC_APP_TIMEOUT:-10}"
+      APP_DELTA_SAMPLE: "${APP_DELTA_SAMPLE:-}"
+      K8S_PROM_URL: "${K8S_PROM_URL:-}"
+      K8S_PROM_TIMEOUT: "${K8S_PROM_TIMEOUT:-12}"
+      CC_APP_NAMESPACE: "${CC_APP_NAMESPACE:-}"
+      CC_APP_POD: "${CC_APP_POD:-}"
+      # ── 日志检索（ES）──
+      K8S_ES_HOST: "${K8S_ES_HOST:-}"
+      # ── 窗口基线与输出预算 ──
+      #   ★★★ 这四个是**数值键**，由 collect_api.py:1160-1170 用 int() 解析：
+      #       _MSG_MAX = int(os.environ.get("LOG_MSG_MAX", "200"))
+      #   `os.environ.get(K, default)` 只在键**不存在**时返回 default；
+      #   一旦把键设成空串，get 返回的是 ""，`int("")` 直接 ValueError
+      #   ⇒ **容器起不来、且是 crash-loop**。
+      #   这**正是本项目踩过的真实事故**（联调首跑 cc-ops-collect 就是这样挂的）：
+      #      compose 写 `LOG_MSG_MAX: "${LOG_MSG_MAX:-}"` + .env 里 `LOG_MSG_MAX=`（空）
+      #      ⇒ 空串进容器 ⇒ ValueError: invalid literal for int() with base 10: ''
+      #   ⇒ 修法：默认值**一律写成代码自己的默认值**（这里 200/400/16000）。
+      #      这样"用户留空"与"用户没写"都落到同一个安全值上。
+      #   同批已核对：代码里 int()/float() 解析的环境变量**共 7 个**
+      #      （LOG_MSG_MAX/LOG_SUGG_MAX/LOG_PAYLOAD_BUDGET/SERVICE_PORT
+      #        + CC_APP_TIMEOUT/DELTA_WINDOW_S/K8S_PROM_TIMEOUT），
+      #      本文件对这 7 个全部带非空默认值；`deploy/selfcheck.py` 的 S8 会持续断言这一点。
+      DELTA_WINDOW_S: "${DELTA_WINDOW_S:-300}"
+      LOG_MSG_MAX: "${LOG_MSG_MAX:-200}"
+      LOG_SUGG_MAX: "${LOG_SUGG_MAX:-400}"
+      LOG_PAYLOAD_BUDGET: "${LOG_PAYLOAD_BUDGET:-16000}"
+      OS_ERR_CHECKPOINT: "${OS_ERR_CHECKPOINT:-}"
+      # ★ 刻意**不**注入 NEO4J_HTTP / NEO4J_AUTH：分层后数据面已消除 Neo4j 依赖
+      #   （collect_api.py 只保留"由知识面注册"的占位，docs/50 §4.1）。
+      #   .env.example 里的这两键是分层前的残留，**不要**照它配。
+    volumes:
+      # 可选：OS 探针走密钥模式时的私钥目录（口令模式不需要，留空目录也无害）
+      - "${CC_SSH_DIR:-./secrets/ssh}:/home/cco/.ssh:ro"
+      # ── ★★ L1/L2 探针的宿主只读观测面（2026-10-12 新增，全部只读）★★ ──
+      #   背景：L2 载体已从 k8s 改为**裸 docker 容器**，探针不能再走 Prometheus，
+      #   必须直接读宿主。三条挂载逐条对应一个数据来源（详见上游
+      #   service/probes/{container,app}_probe.py 的文件头）：
+      #     ① docker.sock → Docker Engine API：容器身份/状态/限额/**Config.Env**。
+      #        容器 Env 是 JDBC 配置的唯一可得来源（宿主 /proc/<pid>/environ 是 0400 需 root）。
+      #        ★ 只做 GET（探针不写任何写操作路由）；需配合下面 group_add 才能访问。
+      #     ② 宿主 /proc   → /proc/<宿主pid>/{status,stat,cmdline}（0444 世界可读）
+      #        ⇒ L1 的 app.thread_count / app.uptime_s。**不是** PID 命名空间穿透，
+      #        而是把宿主的 /proc 树以只读方式挂到 /host/proc。
+      #     ③ 宿主 cgroup  → cpu.stat 的 nr_throttled、memory.events 的 oom_kill
+      #        ⇒ RUNTIME-INVENTORY §2.3 明示的 FM-CTR-CPU-THROTTLED / FM-CTR-OOM-KILLED 直接证据源。
+      #   ★ 三条全部 `:ro`：采集层只读，不给任何写能力（除 docker.sock 因 UDS 语义无法只读挂载，
+      #     但探针只发 GET）。
+      - "/var/run/docker.sock:/var/run/docker.sock"
+      - "/proc:/host/proc:ro"
+      - "/sys/fs/cgroup:/host/sys/fs/cgroup:ro"
+      #     ④ 应用实时遥测日志（P0-B）：应用每 reportInterval（默认 5s）写一行
+      #        `[run] phase=MEASURED t=… tps=… p50=… p95=… p99=…`，另有
+      #        `连接池获取偏慢 … 耗时=Xms` 与池建/关记录。
+      #        这是**延迟/TPS 类故障的唯一判据来源**（应用不监听任何端口）。
+      #        只读；应用侧目录 `results/logs` 是 755/644，cco 可读（已实测）。
+      - "${CC_APP_LOG_HOST_DIR:-/root/credit-card-sim/results/logs}:/host/ccsim-logs:ro"
+    # ★ 访问 docker.sock 需要宿主 docker 组（srw-rw---- root:docker）；
+    #   容器进程是 cco(10001)，不在该组 ⇒ 必须显式 group_add。
+    #   gid 随宿主而变（部署宿主 实测 988），故经 .env 注入而不是写死。
+    group_add:
+      - "${CC_DOCKER_GID:-988}"
+    # 数据面不依赖知识载体，但排在载体之后起，日志更易读
+    healthcheck:
+      test: ["CMD", "sh", "-c", "curl -fsS http://127.0.0.1:8187/health >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 6s
+      start_period: 25s
+      retries: 3
+
+  # =========================================================================
+  # :8301 方案1 知识服务（KG-Q · Neo4j + Cypher 规则推理）
+  # =========================================================================
+  kg:
+    <<: *app
+    image: cc-ops/kg:${CC_IMAGE_TAG:-latest}
+    container_name: cc-ops-kg
+    ports:
+      - "${CC_BIND_IP:-0.0.0.0}:8301:8301"
+    environment:
+      CC_TOOLS_HOST: "0.0.0.0"
+      CC_TOOLS_PORT: "8301"
+      CC_NEO4J_HTTP_URL: "${CC_NEO4J_HTTP_URL:-http://host.docker.internal:7475}"
+      CC_NEO4J_USER: "${CC_NEO4J_USER:-neo4j}"
+      CC_NEO4J_DATABASE: "${CC_NEO4J_DATABASE:-neo4j}"
+      CC_NEO4J_PASSWORD: "${CC_NEO4J_PASSWORD:-}"
+      # 中性取数面（read_facts 纯代理透传到 :8304）
+      CC_LIVE_FACTS_URL: "${CC_LIVE_FACTS_URL:-http://live-facts:8304/tools/read_facts}"
+      CC_AUDIT_LOG: /var/lib/cc-ops/audit/cc_tools_audit.jsonl
+      CC_QUERY_TIMEOUT_S: "${CC_QUERY_TIMEOUT_S:-4.0}"
+    volumes:
+      - ccops-audit:/var/lib/cc-ops/audit
+
+  # =========================================================================
+  # :8302 方案2 知识服务（ONTO-Q · GraphDB + OWL 2 RL 推理）
+  # =========================================================================
+  onto:
+    <<: *app
+    image: cc-ops/onto:${CC_IMAGE_TAG:-latest}
+    container_name: cc-ops-onto
+    ports:
+      - "${CC_BIND_IP:-0.0.0.0}:8302:8302"
+    environment:
+      CC_TOOLS_ONTO_HOST: "0.0.0.0"
+      CC_TOOLS_ONTO_PORT: "8302"
+      CC_GRAPHDB_URL: "${CC_GRAPHDB_URL:-http://host.docker.internal:7200}"
+      CC_GRAPHDB_REPOSITORY: "${CC_GRAPHDB_REPOSITORY:-cc-ops}"
+      CC_GRAPHDB_USER: "${CC_GRAPHDB_USER:-}"
+      CC_GRAPHDB_PASSWORD: "${CC_GRAPHDB_PASSWORD:-}"
+      CC_GRAPHDB_SNAPSHOT_ID: "${CC_GRAPHDB_SNAPSHOT_ID:-}"
+      CC_LIVE_FACTS_URL: "${CC_LIVE_FACTS_URL:-http://live-facts:8304/tools/read_facts}"
+      CC_AUDIT_LOG: /var/lib/cc-ops/audit/cc_tools_onto_audit.jsonl
+      CC_GRAPHDB_INTERNAL_TIMEOUT: "${CC_GRAPHDB_INTERNAL_TIMEOUT:-4.0}"
+    volumes:
+      - ccops-audit:/var/lib/cc-ops/audit
+
+  # =========================================================================
+  # :8303 方案3 门面（KG-T · LLM 直引知识图谱；5 工具）
+  #   ★ 与 :8301 是两个独立容器（进程隔离 = KG-T 的纪律护栏，docs/09:72）
+  # =========================================================================
+  kgt:
+    <<: *app
+    image: cc-ops/kgt:${CC_IMAGE_TAG:-latest}
+    container_name: cc-ops-kgt
+    ports:
+      - "${CC_BIND_IP:-0.0.0.0}:8303:8303"
+    environment:
+      CC_KGT_HOST: "0.0.0.0"
+      CC_KGT_PORT: "8303"
+      CC_KGT_ARM: "${CC_KGT_ARM:-KG-T}"
+      # topology_reader.py 走 Bolt（neo4j 驱动已装进本镜像）
+      CC_NEO4J_URI: "${CC_NEO4J_URI:-bolt://host.docker.internal:7688}"
+      CC_NEO4J_USER: "${CC_NEO4J_USER:-neo4j}"
+      CC_NEO4J_PASSWORD: "${CC_NEO4J_PASSWORD:-}"
+      CC_NEO4J_DATABASE: "${CC_NEO4J_DATABASE:-neo4j}"
+      CC_LIVE_FACTS_URL: "${CC_LIVE_FACTS_URL:-http://live-facts:8304/tools/read_facts}"
+      CC_AUDIT_LOG: /var/lib/cc-ops/audit/cc_tools_kgt_audit.jsonl
+    volumes:
+      - ccops-audit:/var/lib/cc-ops/audit
+
+  # =========================================================================
+  # :8305 方案3 补充臂（KG-T-dyn）—— **同一镜像、不同进程**
+  # ★ 为什么必须有它：binding.yaml 的 provider_names 声明了 6 个 provider，其中
+  #   `cc-kgt-dyn-tools` 的 service_base 是 :8305。少这个容器，注册器到它就会失败。
+  #   项目对它的定位是"补充臂、不进主判据"（fairness 里单列），但**声明面必须完整**，
+  #   否则 fail-closed 的注册流程会整批受影响。
+  #   ★ 与 :8303 是**两个独立容器**：进程隔离本身就是纪律护栏（docs/09:72）。
+  # =========================================================================
+  kgt-dyn:
+    <<: *app
+    image: cc-ops/kgt:${CC_IMAGE_TAG:-latest}
+    container_name: cc-ops-kgt-dyn
+    ports:
+      - "${CC_BIND_IP:-0.0.0.0}:8305:8305"
+    # ★★ 必须显式覆盖 command —— 这是真跑才暴露的坑 ★★
+    #   镜像 Dockerfile.kgt 的 CMD 写死了 `--arm KG-T --host 0.0.0.0 --port 8303`，
+    #   而 **argparse 的显式参数优先于环境变量** ⇒ 只设 CC_KGT_ARM/CC_KGT_PORT 是
+    #   无效的：容器会在**容器内 8303** 起 KG-T 臂，而端口映射发布的是 8305。
+    #   症状极具迷惑性：容器 **healthy**（镜像 HEALTHCHECK 探的是 8303，确实通），
+    #   但 `docker exec … curl 127.0.0.1:8305` 连接被拒、宿主 curl 报
+    #   `Connection reset by peer`。⇒ command 与 healthcheck 都要按 8305 重写。
+    command: ["python", "scheme1-kg/service/cc_tools_kgt.py",
+              "--serve", "--arm", "KG-T-dyn", "--host", "0.0.0.0", "--port", "8305"]
+    healthcheck:
+      test: ["CMD", "sh", "-c", "curl -fsS http://127.0.0.1:8305/health >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 6s
+      start_period: 45s
+      retries: 3
+    environment:
+      CC_KGT_HOST: "0.0.0.0"
+      CC_KGT_PORT: "8305"
+      CC_KGT_ARM: "KG-T-dyn"
+      CC_NEO4J_URI: "${CC_NEO4J_URI:-bolt://host.docker.internal:7688}"
+      CC_NEO4J_USER: "${CC_NEO4J_USER:-neo4j}"
+      CC_NEO4J_PASSWORD: "${CC_NEO4J_PASSWORD:-}"
+      CC_NEO4J_DATABASE: "${CC_NEO4J_DATABASE:-neo4j}"
+      CC_LIVE_FACTS_URL: "${CC_LIVE_FACTS_URL:-http://live-facts:8304/tools/read_facts}"
+      CC_AUDIT_LOG: /var/lib/cc-ops/audit/cc_tools_kgt_dyn_audit.jsonl
+    volumes:
+      - ccops-audit:/var/lib/cc-ops/audit
+
+  # =========================================================================
+  # :8304 中性取数服务（read_facts）—— 三载体的 read_facts 与 Dify 免费臂共用
+  # =========================================================================
+  live-facts:
+    <<: *app
+    image: cc-ops/live-facts:${CC_IMAGE_TAG:-latest}
+    container_name: cc-ops-live-facts
+    ports:
+      - "${CC_BIND_IP:-0.0.0.0}:8304:8304"
+    environment:
+      CC_LIVE_FACTS_HOST: "0.0.0.0"
+      CC_LIVE_FACTS_PORT: "8304"
+      CC_LIVE_FACTS_ROOT: /app
+      # ★ 用例是**进程级**信道（D48）：非空即以 --case 固定该例，进程内不可变。
+      #   切例 = `docker compose up -d --force-recreate live-facts`。留空 = live 模式。
+      M5_CASE_ID: "${M5_CASE_ID:-}"
+      # 重建工作集时向采集面取数（同网络内用服务名）
+      # ★ R-56（2026-10-12）：**这个变量名就是 live-facts 实际读取的那个**
+      #   —— `shared/collect/live_facts.py::collect_base_url()` 依序读
+      #   GDO_COLLECT_URL、CC_GATHER_URL（后者可给完整端点，会被归一化成基址）。
+      #   此前只给 CC_GATHER_URL 而 fetch_live 只读 GDO_COLLECT_URL ⇒ 静默回落到
+      #   模块内硬编码的另一台主机（192.0.2.10:8187，其库为备机）⇒ read_facts 恒不可用。
+      # ⚠ 刻意**不**在这里设 GDO_COLLECT_URL：同一个变量还会决定
+      #   `DEFAULT_PROVENANCE_URL` ⇒ 写进 CCF 的 `collector.collectUrl`
+      #   ⇒ 改动会改变冻结基底的字节与快照身份（影响 M5 可复现性）。
+      CC_GATHER_URL: "${CC_GATHER_URL:-http://collect:8187/tools/gather}"
+    healthcheck:
+      test: ["CMD", "sh", "-c", "curl -fsS http://127.0.0.1:8304/health >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 8s
+      start_period: 20s
+      retries: 3
+
+# ---------------------------------------------------------------------------
+volumes:
+  # 审计链（R-27：追加式 JSONL，重启后继续追加 ⇒ 必须持久化，不能随容器删）
+  ccops-audit:
+    name: ccops-audit
+
+networks:
+  ccops:
+    name: ccops
+    driver: bridge

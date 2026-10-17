@@ -1,0 +1,19 @@
+[Unit]
+Description=cc-tools KG 只读知识服务 (:8301)
+After=network-online.target docker.service
+Wants=network-online.target
+StartLimitIntervalSec=600
+StartLimitBurst=30
+
+[Service]
+Type=forking
+PIDFile=/opt/cc-tools-kg/cc_tools.pid
+WorkingDirectory=/opt/cc-tools-kg
+ExecStartPre=/bin/bash -c 'for i in $(seq 1 60); do (exec 3<>/dev/tcp/127.0.0.1/7688) 2>/dev/null && exit 0; sleep 5; done; echo "Neo4j :7688 未在 300s 内就绪" >&2; exit 1'
+ExecStart=/bin/bash -c 'cd /opt/cc-tools-kg && exec bash start_cc_tools.sh'
+Restart=on-failure
+RestartSec=15
+TimeoutStartSec=360
+
+[Install]
+WantedBy=multi-user.target

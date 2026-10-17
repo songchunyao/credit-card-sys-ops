@@ -1,0 +1,710 @@
+# ============================================================================
+# scheme2-onto/ontology/cc-metric.ttl  ·  方案2 指标与观测模块（ccm:）
+# ----------------------------------------------------------------------------
+# 职责（docs/04 §3 模块表）：70 个指标 + 阈值个体 + sosa:Observation 挂接。
+# 命名空间（逐字取自 type-map.yaml#namespaces.onto）：ccm = .../onto/metric#
+# 上游契约：shared/model/metrics.yaml（70 指标：code/object/layer/unit/type/…
+#           + threshold_policy.hardcode_forbidden=true）
+#           shared/model/fault-modes.yaml#thresholds（12 档，warning/critical/rationale；
+#           ★ 计数随契约版本提升：v1.0.1=11 档 → v1.0.2=12 档，新增 dead_tuple_ratio_light）
+#
+# ★ X-1（docs/04 §6 prologue 声明 cct: <.../threshold#> 与 cco: <.../obs#>，
+#   两者都不在 type-map#namespaces 允许集合内）⇒ 阈值个体落 ccm:，
+#   命名 ccm:t_<阈值名>（档位节点 ccm:t_<阈值名>_<warning|critical>）。
+#   不新造命名空间。
+#
+# ★ U2（docs/04 §10 待确认：是否引入 SOSA）的落地口径 —— 本模块**如实标注为未结案**，
+#   但按 §1「规范栈必须」给最小挂接（不引入额外观测个体层）：
+#     cc:Evidence          rdfs:subClassOf ccm:MetricObservation   （证据即观测记录）
+#     ccm:MetricObservation rdfs:subClassOf sosa:Observation
+#     + 3 条属性对齐子公理（见文件末尾）。若 U2 最终裁为「不引入 SOSA」，
+#       需删除的公理仅这 4 条（成本已记账，见报告）。
+#   ★ 用 dcterms:references 而**非** owl:imports 引用 SOSA：
+#     owl:imports 会让装载器尝试联网抓取，与「门禁：装载前必须本地校验通过」冲突。
+#
+# ★ OWL 原生 vs SHACL 补足（docs/04 §D6，必须分开计）：
+#   OWL 原生（本模块）：rdfs:domain/range、owl:unionOf 域、rdfs:subClassOf、
+#     owl:disjointWith（阈值档位互斥）、子属性对齐公理（⊑ sosa:）。
+#   SHACL 补足（ccs:，不在本模块）：key_attrs 的 sh:minCount 1（OWL-RL 无 min 侧
+#     基数）、枚举 sh:in、数值区间 sh:minInclusive/maxInclusive、sh:closed 的 CWA。
+# ============================================================================
+@prefix ccm:     <https://credit-card-ops.ai/onto/metric#> .
+@prefix cc:      <https://credit-card-ops.ai/onto/topology#> .
+@prefix cco:     <https://credit-card-ops.ai/onto/core#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix dcat:    <http://www.w3.org/ns/dcat#> .
+@prefix sosa:    <http://www.w3.org/ns/sosa/> .
+
+# ===========================================================================
+# 1) 模块本体声明
+# ===========================================================================
+ccm: a owl:Ontology , dcat:Dataset ;
+    dcterms:title "信用卡跨层运维本体 · 指标模块（cc-metric）"@zh ;
+    dcterms:description "70 指标（含 domain/range 与 unionOf 共享域）+ 12 阈值档（24 档位节点，契约 v1.0.2）+ 1 个非零基线常量 + SOSA 最小挂接。"@zh ;
+    dcterms:references <http://www.w3.org/ns/sosa/> ;
+    cco:contractSource "shared/model/metrics.yaml + shared/model/fault-modes.yaml#thresholds" ;
+    skos:note "阈值个体按 X-1 落在 ccm:（docs\\04 §6 声明的 cct:/cco#obs 前缀不在映射表内）；档位以 ccm:tierReference 字符串 \"threshold:<名>#<warning|critical>\" 作为规则连接键，规则内零数字字面量。"@zh .
+
+# ===========================================================================
+# 2) 类（6 个名词类 + 1 个观测挂接类）
+# ===========================================================================
+ccm:Metric a owl:Class ;
+    rdfs:subClassOf cco:DependentEntity ;
+    rdfs:label "指标件"@zh ;
+    rdfs:comment "一个指标 = 一条对某类实体的可观测性质（68 个属性 IRI 承载 91 个指标：ccm:cpuUsageRatio 被 3 个指标复用）。"@zh ;
+    cco:rigidity "+R" ; cco:identity "+I" ; cco:unity "+U" ; cco:dependence "+D" ;
+    cco:identityCriterion "指标码 metricCode" ;
+    cco:contractSource "metrics.yaml#/metrics" .
+
+ccm:MetricRelatedArtifact a owl:Class ;
+    rdfs:subClassOf cco:DependentEntity ;
+    rdfs:label "指标相关构件"@zh ;
+    cco:isAbstract true ;
+    rdfs:comment "与指标相关但本身不是指标的可命名构件（阈值名、档位、基线常量）的共同父类。"@zh ;
+    cco:rigidity "+R" ; cco:identity "+I" ; cco:unity "+U" ; cco:dependence "+D" ;
+    cco:identityCriterion "构件名：阈值名 / 档位码（<阈值名>#warning|critical）/ 基线常量名" ;
+    cco:contractSource "fault-modes.yaml#/thresholds（父类为方案2 自定，进报告诚实清单）" .
+
+ccm:Threshold a owl:Class ;
+    rdfs:subClassOf ccm:MetricRelatedArtifact ;
+    rdfs:label "阈值档"@zh ;
+    rdfs:comment "一个阈值名（如 mean_exec_ms_light）下挂 warning / critical 两个档位节点。"@zh ;
+    cco:rigidity "+R" ; cco:identity "+I" ; cco:unity "+U" ; cco:dependence "+D" ;
+    cco:identityCriterion "阈值名 thresholdName" ;
+    cco:contractSource "fault-modes.yaml#/thresholds" .
+
+ccm:WarningThreshold a owl:Class ;
+    rdfs:subClassOf ccm:Threshold ;
+    owl:disjointWith ccm:CriticalThreshold ;
+    rdfs:label "warning 档"@zh ;
+    rdfs:comment "命名约定：*_light → warning（fault-modes.yaml#meta，docs\\04 §6）。"@zh ;
+    cco:rigidity "+R" ; cco:identity "+I" ; cco:unity "+U" ; cco:dependence "+D" ;
+    cco:identityCriterion "档位三元引用 threshold:<名>#warning" ;
+    cco:contractSource "fault-modes.yaml#/thresholds (命名约定 *_light → warning)" .
+
+ccm:CriticalThreshold a owl:Class ;
+    rdfs:subClassOf ccm:Threshold ;
+    rdfs:label "critical 档"@zh ;
+    rdfs:comment "命名约定：*_severe / *_high → critical。"@zh ;
+    cco:rigidity "+R" ; cco:identity "+I" ; cco:unity "+U" ; cco:dependence "+D" ;
+    cco:identityCriterion "档位三元引用 threshold:<名>#critical" ;
+    cco:contractSource "fault-modes.yaml#/thresholds (命名约定 *_severe/*_high → critical)" .
+
+ccm:MetricObservation a owl:Class ;
+    rdfs:subClassOf sosa:Observation , cco:Occurrent ;
+    rdfs:label "指标观测"@zh ;
+    rdfs:comment "★ U6 已结案（每条 CCF 观测一个证据个体、不聚合）⇒ 真机落成形态是 cc:Evidence；故此处以 cc:Evidence rdfs:subClassOf ccm:MetricObservation 把两者接上（不额外制造观测个体层，避开 U2 的『多一跳』成本）。"@zh ;
+    cco:contractSource "docs\\04 §1 规范栈（SOSA 必须）+ §10 U2/U6" .
+
+cc:Evidence rdfs:subClassOf ccm:MetricObservation ;
+    rdfs:comment "★ U2 挂接点（跨模块公理，写在指标模块以便集中审计）。"@zh .
+
+# ===========================================================================
+# 3) 指标数据属性（68 条属性 IRI 承载 91 个指标）
+#    domain = 指标 object 字段对应的类；range = type-map 的 xsd
+#    ★ 跨类型共享属性用 owl:unionOf 域（否则 OWL 会强制单一 domain ⇒ 归错类）
+# ===========================================================================
+# ---- 应用层 / AppInstance ----
+ccm:uptimeS a owl:DatatypeProperty ; rdfs:domain cc:AppInstance ; rdfs:range xsd:integer .
+ccm:heapUsedRatio a owl:DatatypeProperty ; rdfs:domain cc:AppInstance ; rdfs:range xsd:decimal .
+ccm:gcPauseMs a owl:DatatypeProperty ; rdfs:domain cc:AppInstance ; rdfs:range xsd:decimal .
+ccm:threadCount a owl:DatatypeProperty ; rdfs:domain cc:AppInstance ; rdfs:range xsd:integer .
+# ---- 应用层 / AppEndpoint ----
+ccm:p99Ms a owl:DatatypeProperty ; rdfs:domain cc:AppEndpoint ; rdfs:range xsd:decimal .
+ccm:errorRate a owl:DatatypeProperty ; rdfs:domain cc:AppEndpoint ; rdfs:range xsd:decimal .
+ccm:qps a owl:DatatypeProperty ; rdfs:domain cc:AppEndpoint ; rdfs:range xsd:decimal .
+ccm:tps a owl:DatatypeProperty ; rdfs:domain cc:AppEndpoint ; rdfs:range xsd:decimal .
+ccm:p50Ms a owl:DatatypeProperty ; rdfs:domain cc:AppEndpoint ; rdfs:range xsd:decimal .
+ccm:p95Ms a owl:DatatypeProperty ; rdfs:domain cc:AppEndpoint ; rdfs:range xsd:decimal .
+ccm:maxMs a owl:DatatypeProperty ; rdfs:domain cc:AppEndpoint ; rdfs:range xsd:decimal .
+ccm:successTotal a owl:DatatypeProperty ; rdfs:domain cc:AppEndpoint ; rdfs:range xsd:integer .
+ccm:failTotal a owl:DatatypeProperty ; rdfs:domain cc:AppEndpoint ; rdfs:range xsd:integer .
+ccm:fsMaxUsedPct a owl:DatatypeProperty ; rdfs:domain cc:Host ; rdfs:range xsd:decimal .
+ccm:diskIoErrorsTotal a owl:DatatypeProperty ; rdfs:domain cc:Host ; rdfs:range xsd:integer .
+ccm:netIfaceDownCount a owl:DatatypeProperty ; rdfs:domain cc:Host ; rdfs:range xsd:integer .
+ccm:netIfaceTotal a owl:DatatypeProperty ; rdfs:domain cc:Host ; rdfs:range xsd:integer .
+ccm:replayLagBytesMax a owl:DatatypeProperty ; rdfs:domain cc:GaussDBCluster ; rdfs:range xsd:integer .
+ccm:replicationNotStreamingCount a owl:DatatypeProperty ; rdfs:domain cc:GaussDBCluster ; rdfs:range xsd:integer .
+ccm:alertActiveCount a owl:DatatypeProperty ; rdfs:domain cc:GaussDBCluster ; rdfs:range xsd:integer .
+ccm:indexCount a owl:DatatypeProperty ; rdfs:domain cc:Table ; rdfs:range xsd:integer .
+ccm:unusedIndexCount a owl:DatatypeProperty ; rdfs:domain cc:Table ; rdfs:range xsd:integer .
+ccm:replicationPendingBytes a owl:DatatypeProperty ; rdfs:domain cc:GaussDBCluster ; rdfs:range xsd:integer .
+ccm:replicationFlushPendingBytes a owl:DatatypeProperty ; rdfs:domain cc:GaussDBCluster ; rdfs:range xsd:integer .
+ccm:walsenderCount a owl:DatatypeProperty ; rdfs:domain cc:GaussDBCluster ; rdfs:range xsd:integer .
+ccm:replicationSlotCount a owl:DatatypeProperty ; rdfs:domain cc:GaussDBCluster ; rdfs:range xsd:integer .
+ccm:replicationSlotActiveCount a owl:DatatypeProperty ; rdfs:domain cc:GaussDBCluster ; rdfs:range xsd:integer .
+ccm:isStandby a owl:DatatypeProperty ; rdfs:domain cc:GaussDBCluster ; rdfs:range xsd:boolean .
+# ---- 应用层 / JdbcDataSource ----
+ccm:activeConnections a owl:DatatypeProperty ; rdfs:domain cc:JdbcDataSource ; rdfs:range xsd:integer ;
+    rdfs:comment "★ threshold_ref = JdbcDataSource.maxPoolSize（实体自带属性型绑定，值只从 cc:maxPoolSize 取）。"@zh .
+ccm:idleConnections a owl:DatatypeProperty ; rdfs:domain cc:JdbcDataSource ; rdfs:range xsd:integer .
+ccm:pendingThreads a owl:DatatypeProperty ; rdfs:domain cc:JdbcDataSource ; rdfs:range xsd:integer .
+ccm:acquireWaitMs a owl:DatatypeProperty ; rdfs:domain cc:JdbcDataSource ; rdfs:range xsd:decimal .
+ccm:connectLatencyMs a owl:DatatypeProperty ; rdfs:domain cc:JdbcDataSource ; rdfs:range xsd:decimal ;
+    rdfs:comment "F5 vs F6 的区分器：立刻失败(认证) vs 超时(网络)。"@zh .
+ccm:connectFailTotal a owl:DatatypeProperty ; rdfs:domain cc:JdbcDataSource ; rdfs:range xsd:integer .
+ccm:timeoutTotal a owl:DatatypeProperty ; rdfs:domain cc:JdbcDataSource ; rdfs:range xsd:integer .
+# ---- 承载层 / Container（+ 与 Host、GaussDBInstance 共享的 cpu_usage_ratio）----
+ccm:cpuUsageRatio a owl:DatatypeProperty ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( cc:Container cc:Host cc:GaussDBInstance ) ] ;
+    rdfs:range xsd:decimal ;
+    rdfs:comment "★ 共享属性：container.cpu_usage_ratio / host.cpu_usage_ratio / db.instance.cpu_usage_ratio 三个指标码同形 ⇒ 一个属性 IRI + unionOf 域（3 个指标个体各自登记 object/layer）。"@zh .
+ccm:cpuThrottledPeriods a owl:DatatypeProperty ; rdfs:domain cc:Container ; rdfs:range xsd:integer .
+ccm:memWorkingSetMb a owl:DatatypeProperty ; rdfs:domain cc:Container ; rdfs:range xsd:integer ;
+    rdfs:comment "★ threshold_ref = Container.memLimitMb（实体自带属性型绑定，因果边 E12 条件同源）。"@zh .
+ccm:oomKillTotal a owl:DatatypeProperty ; rdfs:domain cc:Container ; rdfs:range xsd:integer .
+ccm:restartTotal a owl:DatatypeProperty ; rdfs:domain cc:Container ; rdfs:range xsd:integer .
+ccm:status a owl:DatatypeProperty ; rdfs:domain cc:Container ; rdfs:range xsd:string ;
+    rdfs:comment "契约取 value 中：running | waiting | terminated（枚举强制在 SHACL ccs:ContainerShape）。"@zh .
+# ---- 承载层 / Host ----
+ccm:memAvailableRatio a owl:DatatypeProperty ; rdfs:domain cc:Host ; rdfs:range xsd:decimal .
+ccm:load1 a owl:DatatypeProperty ; rdfs:domain cc:Host ; rdfs:range xsd:decimal ;
+    rdfs:comment "契约无单位（unit: null）；阈值 load1_per_core_light 的 rationale 要求按 cc:cpuCores 归一化。"@zh .
+ccm:load5 a owl:DatatypeProperty ; rdfs:domain cc:Host ; rdfs:range xsd:decimal .
+ccm:diskUtil a owl:DatatypeProperty ; rdfs:domain cc:Host ; rdfs:range xsd:decimal .
+ccm:diskIoWait a owl:DatatypeProperty ; rdfs:domain cc:Host ; rdfs:range xsd:decimal .
+ccm:conntrackCount a owl:DatatypeProperty ; rdfs:domain cc:Host ; rdfs:range xsd:integer .
+ccm:netRxBytes a owl:DatatypeProperty ; rdfs:domain cc:Host ; rdfs:range xsd:integer .
+ccm:netTxBytes a owl:DatatypeProperty ; rdfs:domain cc:Host ; rdfs:range xsd:integer .
+# ---- 数据层 / GaussDBCluster ----
+ccm:upNodes a owl:DatatypeProperty ; rdfs:domain cc:GaussDBCluster ; rdfs:range xsd:integer .
+ccm:downNodes a owl:DatatypeProperty ; rdfs:domain cc:GaussDBCluster ; rdfs:range xsd:integer .
+ccm:replicationLagMb a owl:DatatypeProperty ; rdfs:domain cc:GaussDBCluster ; rdfs:range xsd:decimal .
+ccm:switchoverTotal a owl:DatatypeProperty ; rdfs:domain cc:GaussDBCluster ; rdfs:range xsd:integer .
+# ---- 数据层 / GaussDBInstance ----
+ccm:memUsageRatio a owl:DatatypeProperty ; rdfs:domain cc:GaussDBInstance ; rdfs:range xsd:decimal .
+ccm:sessionCount a owl:DatatypeProperty ; rdfs:domain cc:GaussDBInstance ; rdfs:range xsd:integer .
+ccm:maxConnections a owl:DatatypeProperty ; rdfs:domain cc:GaussDBInstance ; rdfs:range xsd:integer ;
+    rdfs:comment "实体自带配置值（不硬编码，沿用 onto-ops-agent D3 原则），db.pool.session_used_ratio 的分母。"@zh .
+ccm:waitingConnections a owl:DatatypeProperty ; rdfs:domain cc:GaussDBInstance ; rdfs:range xsd:integer .
+ccm:longTxnAgeS a owl:DatatypeProperty ; rdfs:domain cc:GaussDBInstance ; rdfs:range xsd:integer .
+ccm:ioWaitPct a owl:DatatypeProperty ; rdfs:domain cc:GaussDBInstance ; rdfs:range xsd:decimal ;
+    rdfs:comment "阈值审核清单实测生产值域 [0.22, 0.72]%，旧项目阈值写 >20 ⇒ 差 28 倍，永不命中（契约原始 note）。"@zh .
+ccm:bufferHitRatio a owl:DatatypeProperty ; rdfs:domain cc:GaussDBInstance ; rdfs:range xsd:decimal .
+ccm:up a owl:DatatypeProperty ; rdfs:domain cc:GaussDBInstance ; rdfs:range xsd:boolean ;
+    rdfs:comment "F7 直接证据；规则里以 predicate is_false 判定（布尔状态谓词，不走阈值）。"@zh .
+# ---- 数据层 / DatabaseSessionPool ----
+ccm:sessionUsedRatio a owl:DatatypeProperty ; rdfs:domain cc:DatabaseSessionPool ; rdfs:range xsd:decimal ;
+    rdfs:comment "契约表达式 db.instance.session_count / db.instance.max_connections（登记为 ccm:metricExpression）。"@zh .
+ccm:sessionWaiting a owl:DatatypeProperty ; rdfs:domain cc:DatabaseSessionPool ; rdfs:range xsd:integer .
+ccm:connRejectedTotal a owl:DatatypeProperty ; rdfs:domain cc:DatabaseSessionPool ; rdfs:range xsd:integer .
+# ---- 数据层 / Session ----
+ccm:state a owl:DatatypeProperty ; rdfs:domain cc:Session ; rdfs:range xsd:string ;
+    rdfs:comment "契约取 value 中：active | idle | idle in transaction | waiting。"@zh .
+ccm:waitEvent a owl:DatatypeProperty ; rdfs:domain cc:Session ; rdfs:range xsd:string ;
+    rdfs:comment "契约取 value 中：LockMgrLock | transactionid | relation | tuple | WALWrite | DataFileRead。"@zh .
+ccm:xactAgeS a owl:DatatypeProperty ; rdfs:domain cc:Session ; rdfs:range xsd:integer .
+ccm:queryElapsedS a owl:DatatypeProperty ; rdfs:domain cc:Session ; rdfs:range xsd:decimal .
+# ---- 数据层 / Query ----
+ccm:meanExecMs a owl:DatatypeProperty ; rdfs:domain cc:Query ; rdfs:range xsd:decimal .
+ccm:maxExecMs a owl:DatatypeProperty ; rdfs:domain cc:Query ; rdfs:range xsd:decimal .
+ccm:execCount a owl:DatatypeProperty ; rdfs:domain cc:Query ; rdfs:range xsd:integer .
+ccm:returnedRows a owl:DatatypeProperty ; rdfs:domain cc:Query ; rdfs:range xsd:integer .
+ccm:seqScanRatio a owl:DatatypeProperty ; rdfs:domain cc:Query ; rdfs:range xsd:decimal .
+# ---- 数据层 / Table ----
+ccm:liveTuples a owl:DatatypeProperty ; rdfs:domain cc:Table ; rdfs:range xsd:integer .
+ccm:deadTupleRatio a owl:DatatypeProperty ; rdfs:domain cc:Table ; rdfs:range xsd:decimal ;
+    rdfs:comment "★ docs\\04 §6 的 r02 示例把它写进 FM-DB-SLOW-QUERY 判据，但 fault-modes.yaml 的 detect 里没有它（X-2）⇒ 本实现不作为规则条件。"@zh .
+ccm:lastAnalyzeAgeH a owl:DatatypeProperty ; rdfs:domain cc:Table ; rdfs:range xsd:decimal .
+ccm:sizeMb a owl:DatatypeProperty ; rdfs:domain cc:Table ; rdfs:range xsd:decimal .
+
+# ★ P0-A（2026-10-12）：新增 12 个 DB 指标的数据属性
+ccm:deadlocks a owl:DatatypeProperty ; rdfs:domain cc:GaussDBCluster ; rdfs:range xsd:integer .
+ccm:xactRollback a owl:DatatypeProperty ; rdfs:domain cc:GaussDBCluster ; rdfs:range xsd:integer .
+ccm:slowQueryCount a owl:DatatypeProperty ; rdfs:domain cc:GaussDBCluster ; rdfs:range xsd:integer .
+ccm:activeSessions a owl:DatatypeProperty ; rdfs:domain cc:GaussDBInstance ; rdfs:range xsd:integer .
+ccm:idleInXact a owl:DatatypeProperty ; rdfs:domain cc:GaussDBInstance ; rdfs:range xsd:integer .
+ccm:lockWaits a owl:DatatypeProperty ; rdfs:domain cc:GaussDBInstance ; rdfs:range xsd:integer .
+ccm:tempFiles a owl:DatatypeProperty ; rdfs:domain cc:GaussDBCluster ; rdfs:range xsd:integer .
+ccm:tempFileWritten a owl:DatatypeProperty ; rdfs:domain cc:GaussDBCluster ; rdfs:range xsd:boolean .
+ccm:seqScan a owl:DatatypeProperty ; rdfs:domain cc:Table ; rdfs:range xsd:integer .
+ccm:idxScan a owl:DatatypeProperty ; rdfs:domain cc:Table ; rdfs:range xsd:integer .
+ccm:deadTuples a owl:DatatypeProperty ; rdfs:domain cc:Table ; rdfs:range xsd:integer .
+ccm:hotUpdateRatioPct a owl:DatatypeProperty ; rdfs:domain cc:Table ; rdfs:range xsd:decimal .
+
+# ===========================================================================
+# 4) 指标件元数据属性与阈值属性（对象属性 7 条 + 数据属性 13 条）
+# ===========================================================================
+ccm:metricProperty a owl:ObjectProperty ; rdfs:domain ccm:Metric ; rdfs:range owl:DatatypeProperty ;
+    rdfs:label "指标属性"@zh ;
+    rdfs:comment "指标件 → 承载观测值的数据属性（70 个指标 → 68 个属性 IRI：ccm:cpuUsageRatio 被 3 个指标码复用）。"@zh .
+ccm:metricObjectType a owl:ObjectProperty ; rdfs:domain ccm:Metric ; rdfs:range owl:Class ;
+    rdfs:label "指标适用类型"@zh ;
+    rdfs:comment "取 metrics.yaml 的 object 字段，指向 cc: 类。"@zh .
+ccm:hasThreshold a owl:ObjectProperty ; rdfs:domain ccm:Metric ; rdfs:range ccm:Threshold ;
+    owl:inverseOf ccm:thresholdMetric ;
+    rdfs:label "拥有阈值名"@zh .
+ccm:thresholdMetric a owl:ObjectProperty ; rdfs:domain ccm:Threshold ; rdfs:range ccm:Metric ;
+    rdfs:label "阈值所属指标"@zh .
+ccm:warningTier a owl:ObjectProperty ; rdfs:domain ccm:Threshold ; rdfs:range ccm:WarningThreshold ;
+    rdfs:label "warning 档位"@zh .
+ccm:criticalTier a owl:ObjectProperty ; rdfs:domain ccm:Threshold ; rdfs:range ccm:CriticalThreshold ;
+    rdfs:label "critical 档位"@zh .
+ccm:tierOf a owl:ObjectProperty ; rdfs:domain ccm:Threshold ; rdfs:range ccm:Threshold ;
+    rdfs:label "档位所属阈值名"@zh .
+
+ccm:metricCode a owl:DatatypeProperty ; rdfs:domain ccm:Metric ; rdfs:range xsd:string ;
+    rdfs:comment "逐字取自 metrics.yaml 的 code（可追溯到契约条目）。"@zh .
+ccm:metricLayer a owl:DatatypeProperty ; rdfs:domain ccm:Metric ; rdfs:range xsd:string ;
+    rdfs:comment "App | Runtime | Data（枚举强制在 SHACL ccs:MetricShape）。"@zh .
+ccm:metricUnit a owl:DatatypeProperty ; rdfs:domain ccm:Metric ; rdfs:range xsd:string .
+ccm:metricRangeMin a owl:DatatypeProperty ; rdfs:domain ccm:Metric ; rdfs:range xsd:decimal .
+ccm:metricRangeMax a owl:DatatypeProperty ; rdfs:domain ccm:Metric ; rdfs:range xsd:decimal .
+ccm:metricEnumValue a owl:DatatypeProperty ; rdfs:domain ccm:Metric ; rdfs:range xsd:string .
+ccm:metricExpression a owl:DatatypeProperty ; rdfs:domain ccm:Metric ; rdfs:range xsd:string .
+ccm:metricNote a owl:DatatypeProperty ; rdfs:domain ccm:Metric ; rdfs:range xsd:string .
+ccm:thresholdName a owl:DatatypeProperty ; rdfs:domain ccm:Threshold ; rdfs:range xsd:string .
+ccm:thresholdValue a owl:DatatypeProperty ; rdfs:domain ccm:Threshold ; rdfs:range xsd:decimal ;
+    rdfs:comment "★ 只在**本体侧**出现数值：规则（rules/*.rq）一律通过 ccm:tierReference 引用，绝不内联数字。"@zh .
+ccm:tierReference a owl:DatatypeProperty ; rdfs:domain ccm:Threshold ; rdfs:range xsd:string ;
+    rdfs:comment "★ 契约引用键，形如 threshold:<阈值名>#<warning|critical>（档位必填）。规则用 VALUES 绑定它。"@zh .
+ccm:uncalibrated a owl:DatatypeProperty ; rdfs:domain ccm:Threshold ; rdfs:range xsd:boolean ;
+    rdfs:comment "true = 契约里该档 warning/critical 为 null（未标定）⇒ 依赖它的规则真机必产 0 条，属标定缺口而非实现缺陷。"@zh .
+ccm:rationale a owl:DatatypeProperty ; rdfs:domain ccm:Threshold ; rdfs:range xsd:string ;
+    rdfs:comment "threshold_policy.required_fields 之一（rationale 必填）。"@zh .
+
+# ===========================================================================
+# 5) 91 个指标件（ccm:m_<code 点换下划线>）
+# ===========================================================================
+# ---- 应用层 ----
+ccm:m_app_uptime_s a ccm:Metric ; ccm:metricCode "app.uptime_s" ; cco:metricCode "app.uptime_s" ; ccm:metricProperty ccm:uptimeS ;
+    ccm:metricObjectType cc:AppInstance ; ccm:metricLayer "App" ; ccm:metricUnit "s" ;
+    ccm:metricNote "归零 = 实例重启（FM-APP-INSTANCE-RESTART 的直接证据）"@zh .
+ccm:m_app_heap_used_ratio a ccm:Metric ; ccm:metricCode "app.heap_used_ratio" ; cco:metricCode "app.heap_used_ratio" ; ccm:metricProperty ccm:heapUsedRatio ;
+    ccm:metricObjectType cc:AppInstance ; ccm:metricLayer "App" ; ccm:metricUnit "ratio" ;
+    ccm:metricRangeMin 0 ; ccm:metricRangeMax 1 .
+ccm:m_app_gc_pause_ms a ccm:Metric ; ccm:metricCode "app.gc_pause_ms" ; cco:metricCode "app.gc_pause_ms" ; ccm:metricProperty ccm:gcPauseMs ;
+    ccm:metricObjectType cc:AppInstance ; ccm:metricLayer "App" ; ccm:metricUnit "ms" .
+ccm:m_app_thread_count a ccm:Metric ; ccm:metricCode "app.thread_count" ; cco:metricCode "app.thread_count" ; ccm:metricProperty ccm:threadCount ;
+    ccm:metricObjectType cc:AppInstance ; ccm:metricLayer "App" ; ccm:metricUnit "个" .
+ccm:m_app_endpoint_p99_ms a ccm:Metric ; ccm:metricCode "app.endpoint.p99_ms" ; cco:metricCode "app.endpoint.p99_ms" ; ccm:metricProperty ccm:p99Ms ;
+    ccm:metricObjectType cc:AppEndpoint ; ccm:metricLayer "App" ; ccm:metricUnit "ms" ;
+    ccm:metricNote "最上层症状；蓝本信用卡支付服务 SLO P99 = 200ms"@zh .
+ccm:m_app_endpoint_error_rate a ccm:Metric ; ccm:metricCode "app.endpoint.error_rate" ; cco:metricCode "app.endpoint.error_rate" ; ccm:metricProperty ccm:errorRate ;
+    ccm:metricObjectType cc:AppEndpoint ; ccm:metricLayer "App" ; ccm:metricUnit "ratio" ;
+    ccm:metricRangeMin 0 ; ccm:metricRangeMax 1 .
+ccm:m_app_endpoint_qps a ccm:Metric ; ccm:metricCode "app.endpoint.qps" ; cco:metricCode "app.endpoint.qps" ; ccm:metricProperty ccm:qps ;
+    ccm:metricObjectType cc:AppEndpoint ; ccm:metricLayer "App" ; ccm:metricUnit "次/s" ;
+    ccm:hasThreshold ccm:t_qps_high .
+ccm:m_app_endpoint_tps a ccm:Metric ; ccm:metricCode "app.endpoint.tps" ; cco:metricCode "app.endpoint.tps" ; ccm:metricProperty ccm:tps ;
+    ccm:metricObjectType cc:AppEndpoint ; ccm:metricLayer "App" ; ccm:metricUnit "次/s" .
+ccm:m_app_endpoint_p50_ms a ccm:Metric ; ccm:metricCode "app.endpoint.p50_ms" ; cco:metricCode "app.endpoint.p50_ms" ; ccm:metricProperty ccm:p50Ms ;
+    ccm:metricObjectType cc:AppEndpoint ; ccm:metricLayer "App" ; ccm:metricUnit "ms" .
+ccm:m_app_endpoint_p95_ms a ccm:Metric ; ccm:metricCode "app.endpoint.p95_ms" ; cco:metricCode "app.endpoint.p95_ms" ; ccm:metricProperty ccm:p95Ms ;
+    ccm:metricObjectType cc:AppEndpoint ; ccm:metricLayer "App" ; ccm:metricUnit "ms" .
+ccm:m_app_endpoint_max_ms a ccm:Metric ; ccm:metricCode "app.endpoint.max_ms" ; cco:metricCode "app.endpoint.max_ms" ; ccm:metricProperty ccm:maxMs ;
+    ccm:metricObjectType cc:AppEndpoint ; ccm:metricLayer "App" ; ccm:metricUnit "ms" .
+ccm:m_app_endpoint_success_total a ccm:Metric ; ccm:metricCode "app.endpoint.success_total" ; cco:metricCode "app.endpoint.success_total" ; ccm:metricProperty ccm:successTotal ;
+    ccm:metricObjectType cc:AppEndpoint ; ccm:metricLayer "App" ; ccm:metricUnit "次" .
+ccm:m_app_endpoint_fail_total a ccm:Metric ; ccm:metricCode "app.endpoint.fail_total" ; cco:metricCode "app.endpoint.fail_total" ; ccm:metricProperty ccm:failTotal ;
+    ccm:metricObjectType cc:AppEndpoint ; ccm:metricLayer "App" ; ccm:metricUnit "次" .
+ccm:m_app_datasource_active_connections a ccm:Metric ; ccm:metricCode "app.datasource.active_connections" ; cco:metricCode "app.datasource.active_connections" ;
+    ccm:metricProperty ccm:activeConnections ; ccm:metricObjectType cc:JdbcDataSource ; ccm:metricLayer "App" ;
+    ccm:metricUnit "个" .
+ccm:m_host_fs_max_used_pct a ccm:Metric ; ccm:metricCode "host.fs_max_used_pct" ; cco:metricCode "host.fs_max_used_pct" ; ccm:metricProperty ccm:fsMaxUsedPct ;
+    ccm:metricObjectType cc:Host ; ccm:metricLayer "Runtime" ; ccm:metricUnit "percent" ;
+    ccm:hasThreshold ccm:t_fs_usage_pct_light .
+ccm:m_host_disk_io_errors_total a ccm:Metric ; ccm:metricCode "host.disk_io_errors_total" ; cco:metricCode "host.disk_io_errors_total" ; ccm:metricProperty ccm:diskIoErrorsTotal ;
+    ccm:metricObjectType cc:Host ; ccm:metricLayer "Runtime" ; ccm:metricUnit "次" .
+ccm:m_host_net_iface_down_count a ccm:Metric ; ccm:metricCode "host.net_iface_down_count" ; cco:metricCode "host.net_iface_down_count" ; ccm:metricProperty ccm:netIfaceDownCount ;
+    ccm:metricObjectType cc:Host ; ccm:metricLayer "Runtime" ; ccm:metricUnit "个" .
+ccm:m_host_net_iface_total a ccm:Metric ; ccm:metricCode "host.net_iface_total" ; cco:metricCode "host.net_iface_total" ; ccm:metricProperty ccm:netIfaceTotal ;
+    ccm:metricObjectType cc:Host ; ccm:metricLayer "Runtime" ; ccm:metricUnit "个" .
+ccm:m_db_cluster_replay_lag_bytes_max a ccm:Metric ; ccm:metricCode "db.cluster.replay_lag_bytes_max" ; cco:metricCode "db.cluster.replay_lag_bytes_max" ; ccm:metricProperty ccm:replayLagBytesMax ;
+    ccm:metricObjectType cc:GaussDBCluster ; ccm:metricLayer "Data" ; ccm:metricUnit "bytes" .
+ccm:m_db_cluster_replication_not_streaming_count a ccm:Metric ; ccm:metricCode "db.cluster.replication_not_streaming_count" ; cco:metricCode "db.cluster.replication_not_streaming_count" ; ccm:metricProperty ccm:replicationNotStreamingCount ;
+    ccm:metricObjectType cc:GaussDBCluster ; ccm:metricLayer "Data" ; ccm:metricUnit "个" .
+ccm:m_db_cluster_alert_active_count a ccm:Metric ; ccm:metricCode "db.cluster.alert_active_count" ; cco:metricCode "db.cluster.alert_active_count" ; ccm:metricProperty ccm:alertActiveCount ;
+    ccm:metricObjectType cc:GaussDBCluster ; ccm:metricLayer "Data" ; ccm:metricUnit "个" .
+ccm:m_db_table_index_count a ccm:Metric ; ccm:metricCode "db.table.index_count" ; cco:metricCode "db.table.index_count" ; ccm:metricProperty ccm:indexCount ;
+    ccm:metricObjectType cc:Table ; ccm:metricLayer "Data" ; ccm:metricUnit "个" .
+ccm:m_db_table_unused_index_count a ccm:Metric ; ccm:metricCode "db.table.unused_index_count" ; cco:metricCode "db.table.unused_index_count" ; ccm:metricProperty ccm:unusedIndexCount ;
+    ccm:metricObjectType cc:Table ; ccm:metricLayer "Data" ; ccm:metricUnit "个" .
+ccm:m_db_cluster_replication_pending_bytes a ccm:Metric ; ccm:metricCode "db.cluster.replication_pending_bytes" ; cco:metricCode "db.cluster.replication_pending_bytes" ; ccm:metricProperty ccm:replicationPendingBytes ;
+    ccm:metricObjectType cc:GaussDBCluster ; ccm:metricLayer "Data" ; ccm:metricUnit "bytes" .
+ccm:m_db_cluster_replication_flush_pending_bytes a ccm:Metric ; ccm:metricCode "db.cluster.replication_flush_pending_bytes" ; cco:metricCode "db.cluster.replication_flush_pending_bytes" ; ccm:metricProperty ccm:replicationFlushPendingBytes ;
+    ccm:metricObjectType cc:GaussDBCluster ; ccm:metricLayer "Data" ; ccm:metricUnit "bytes" .
+ccm:m_db_cluster_walsender_count a ccm:Metric ; ccm:metricCode "db.cluster.walsender_count" ; cco:metricCode "db.cluster.walsender_count" ; ccm:metricProperty ccm:walsenderCount ;
+    ccm:metricObjectType cc:GaussDBCluster ; ccm:metricLayer "Data" ; ccm:metricUnit "个" .
+ccm:m_db_cluster_replication_slot_count a ccm:Metric ; ccm:metricCode "db.cluster.replication_slot_count" ; cco:metricCode "db.cluster.replication_slot_count" ; ccm:metricProperty ccm:replicationSlotCount ;
+    ccm:metricObjectType cc:GaussDBCluster ; ccm:metricLayer "Data" ; ccm:metricUnit "个" .
+ccm:m_db_cluster_replication_slot_active_count a ccm:Metric ; ccm:metricCode "db.cluster.replication_slot_active_count" ; cco:metricCode "db.cluster.replication_slot_active_count" ; ccm:metricProperty ccm:replicationSlotActiveCount ;
+    ccm:metricObjectType cc:GaussDBCluster ; ccm:metricLayer "Data" ; ccm:metricUnit "个" .
+ccm:m_db_cluster_is_standby a ccm:Metric ; ccm:metricCode "db.cluster.is_standby" ; cco:metricCode "db.cluster.is_standby" ; ccm:metricProperty ccm:isStandby ;
+    ccm:metricObjectType cc:GaussDBCluster ; ccm:metricLayer "Data" ; ccm:metricUnit "" .
+ccm:m_app_datasource_idle_connections a ccm:Metric ; ccm:metricCode "app.datasource.idle_connections" ; cco:metricCode "app.datasource.idle_connections" ;
+    ccm:metricProperty ccm:idleConnections ; ccm:metricObjectType cc:JdbcDataSource ; ccm:metricLayer "App" ;
+    ccm:metricUnit "个" .
+ccm:m_app_datasource_pending_threads a ccm:Metric ; ccm:metricCode "app.datasource.pending_threads" ; cco:metricCode "app.datasource.pending_threads" ;
+    ccm:metricProperty ccm:pendingThreads ; ccm:metricObjectType cc:JdbcDataSource ; ccm:metricLayer "App" ;
+    ccm:metricUnit "个" ; ccm:metricNote ">0 = 有线程在等连接（F1 判定关键）"@zh .
+ccm:m_app_datasource_acquire_wait_ms a ccm:Metric ; ccm:metricCode "app.datasource.acquire_wait_ms" ; cco:metricCode "app.datasource.acquire_wait_ms" ;
+    ccm:metricProperty ccm:acquireWaitMs ; ccm:metricObjectType cc:JdbcDataSource ; ccm:metricLayer "App" ;
+    ccm:metricUnit "ms" ; ccm:hasThreshold ccm:t_acquire_wait_ms_light .
+ccm:m_app_datasource_connect_latency_ms a ccm:Metric ; ccm:metricCode "app.datasource.connect_latency_ms" ; cco:metricCode "app.datasource.connect_latency_ms" ;
+    ccm:metricProperty ccm:connectLatencyMs ; ccm:metricObjectType cc:JdbcDataSource ; ccm:metricLayer "App" ;
+    ccm:metricUnit "ms" ; ccm:metricNote "F5 vs F6 的区分器：立刻失败(认证) vs 超时(网络)"@zh .
+ccm:m_app_datasource_connect_fail_total a ccm:Metric ; ccm:metricCode "app.datasource.connect_fail_total" ; cco:metricCode "app.datasource.connect_fail_total" ;
+    ccm:metricProperty ccm:connectFailTotal ; ccm:metricObjectType cc:JdbcDataSource ; ccm:metricLayer "App" ;
+    ccm:metricUnit "次" .
+ccm:m_app_datasource_timeout_total a ccm:Metric ; ccm:metricCode "app.datasource.timeout_total" ; cco:metricCode "app.datasource.timeout_total" ;
+    ccm:metricProperty ccm:timeoutTotal ; ccm:metricObjectType cc:JdbcDataSource ; ccm:metricLayer "App" ;
+    ccm:metricUnit "次" .
+# ---- 承载层 ----
+ccm:m_container_cpu_usage_ratio a ccm:Metric ; ccm:metricCode "container.cpu_usage_ratio" ; cco:metricCode "container.cpu_usage_ratio" ;
+    ccm:metricProperty ccm:cpuUsageRatio ; ccm:metricObjectType cc:Container ; ccm:metricLayer "Runtime" ;
+    ccm:metricUnit "ratio" ; ccm:metricRangeMin 0 ; ccm:metricRangeMax 1 .
+ccm:m_container_cpu_throttled_periods a ccm:Metric ; ccm:metricCode "container.cpu_throttled_periods" ; cco:metricCode "container.cpu_throttled_periods" ;
+    ccm:metricProperty ccm:cpuThrottledPeriods ; ccm:metricObjectType cc:Container ; ccm:metricLayer "Runtime" ;
+    ccm:metricUnit "次" ; ccm:metricNote "F3 关键：CPU 用量可能不高，但被限流"@zh .
+ccm:m_container_mem_working_set_mb a ccm:Metric ; ccm:metricCode "container.mem_working_set_mb" ; cco:metricCode "container.mem_working_set_mb" ;
+    ccm:metricProperty ccm:memWorkingSetMb ; ccm:metricObjectType cc:Container ; ccm:metricLayer "Runtime" ;
+    ccm:metricUnit "MB" .
+ccm:m_container_oom_kill_total a ccm:Metric ; ccm:metricCode "container.oom_kill_total" ; cco:metricCode "container.oom_kill_total" ;
+    ccm:metricProperty ccm:oomKillTotal ; ccm:metricObjectType cc:Container ; ccm:metricLayer "Runtime" ;
+    ccm:metricUnit "次" ; ccm:metricNote "F4 唯一证据源"@zh .
+ccm:m_container_restart_total a ccm:Metric ; ccm:metricCode "container.restart_total" ; cco:metricCode "container.restart_total" ;
+    ccm:metricProperty ccm:restartTotal ; ccm:metricObjectType cc:Container ; ccm:metricLayer "Runtime" ;
+    ccm:metricUnit "次" .
+ccm:m_container_status a ccm:Metric ; ccm:metricCode "container.status" ; cco:metricCode "container.status" ; ccm:metricProperty ccm:status ;
+    ccm:metricObjectType cc:Container ; ccm:metricLayer "Runtime" ;
+    ccm:metricEnumValue "running" , "waiting" , "terminated" ;
+    ccm:metricNote "契约 unit: null（本指标无单位）"@zh .
+ccm:m_host_cpu_usage_ratio a ccm:Metric ; ccm:metricCode "host.cpu_usage_ratio" ; cco:metricCode "host.cpu_usage_ratio" ;
+    ccm:metricProperty ccm:cpuUsageRatio ; ccm:metricObjectType cc:Host ; ccm:metricLayer "Runtime" ;
+    ccm:metricUnit "ratio" ; ccm:metricRangeMin 0 ; ccm:metricRangeMax 1 ;
+    ccm:hasThreshold ccm:t_cpu_usage_ratio_severe .
+ccm:m_host_mem_available_ratio a ccm:Metric ; ccm:metricCode "host.mem_available_ratio" ; cco:metricCode "host.mem_available_ratio" ;
+    ccm:metricProperty ccm:memAvailableRatio ; ccm:metricObjectType cc:Host ; ccm:metricLayer "Runtime" ;
+    ccm:metricUnit "ratio" ; ccm:metricRangeMin 0 ; ccm:metricRangeMax 1 ;
+    ccm:hasThreshold ccm:t_mem_available_ratio_severe .
+ccm:m_host_load1 a ccm:Metric ; ccm:metricCode "host.load1" ; cco:metricCode "host.load1" ; ccm:metricProperty ccm:load1 ;
+    ccm:metricObjectType cc:Host ; ccm:metricLayer "Runtime" ; ccm:hasThreshold ccm:t_load1_per_core_light ;
+    ccm:metricNote "契约 unit: null（本指标无单位）"@zh .
+ccm:m_host_load5 a ccm:Metric ; ccm:metricCode "host.load5" ; cco:metricCode "host.load5" ; ccm:metricProperty ccm:load5 ;
+    ccm:metricObjectType cc:Host ; ccm:metricLayer "Runtime" ;
+    ccm:metricNote "契约 unit: null（本指标无单位）"@zh .
+ccm:m_host_disk_util a ccm:Metric ; ccm:metricCode "host.disk_util" ; cco:metricCode "host.disk_util" ; ccm:metricProperty ccm:diskUtil ;
+    ccm:metricObjectType cc:Host ; ccm:metricLayer "Runtime" ; ccm:metricUnit "percent" ;
+    ccm:metricRangeMin 0 ; ccm:metricRangeMax 100 .
+ccm:m_host_disk_io_wait a ccm:Metric ; ccm:metricCode "host.disk_io_wait" ; cco:metricCode "host.disk_io_wait" ; ccm:metricProperty ccm:diskIoWait ;
+    ccm:metricObjectType cc:Host ; ccm:metricLayer "Runtime" ; ccm:metricUnit "percent" ;
+    ccm:metricRangeMin 0 ; ccm:metricRangeMax 100 .
+ccm:m_host_conntrack_count a ccm:Metric ; ccm:metricCode "host.conntrack_count" ; cco:metricCode "host.conntrack_count" ; ccm:metricProperty ccm:conntrackCount ;
+    ccm:metricObjectType cc:Host ; ccm:metricLayer "Runtime" ; ccm:metricUnit "个" .
+ccm:m_host_net_rx_bytes a ccm:Metric ; ccm:metricCode "host.net_rx_bytes" ; cco:metricCode "host.net_rx_bytes" ; ccm:metricProperty ccm:netRxBytes ;
+    ccm:metricObjectType cc:Host ; ccm:metricLayer "Runtime" ; ccm:metricUnit "bytes" .
+ccm:m_host_net_tx_bytes a ccm:Metric ; ccm:metricCode "host.net_tx_bytes" ; cco:metricCode "host.net_tx_bytes" ; ccm:metricProperty ccm:netTxBytes ;
+    ccm:metricObjectType cc:Host ; ccm:metricLayer "Runtime" ; ccm:metricUnit "bytes" .
+# ---- 数据层 ----
+ccm:m_db_cluster_up_nodes a ccm:Metric ; ccm:metricCode "db.cluster.up_nodes" ; cco:metricCode "db.cluster.up_nodes" ; ccm:metricProperty ccm:upNodes ;
+    ccm:metricObjectType cc:GaussDBCluster ; ccm:metricLayer "Data" ; ccm:metricUnit "个" .
+ccm:m_db_cluster_down_nodes a ccm:Metric ; ccm:metricCode "db.cluster.down_nodes" ; cco:metricCode "db.cluster.down_nodes" ; ccm:metricProperty ccm:downNodes ;
+    ccm:metricObjectType cc:GaussDBCluster ; ccm:metricLayer "Data" ; ccm:metricUnit "个" .
+ccm:m_db_cluster_replication_lag_mb a ccm:Metric ; ccm:metricCode "db.cluster.replication_lag_mb" ; cco:metricCode "db.cluster.replication_lag_mb" ;
+    ccm:metricProperty ccm:replicationLagMb ; ccm:metricObjectType cc:GaussDBCluster ; ccm:metricLayer "Data" ;
+    ccm:metricUnit "MB" .
+ccm:m_db_cluster_switchover_total a ccm:Metric ; ccm:metricCode "db.cluster.switchover_total" ; cco:metricCode "db.cluster.switchover_total" ;
+    ccm:metricProperty ccm:switchoverTotal ; ccm:metricObjectType cc:GaussDBCluster ; ccm:metricLayer "Data" ;
+    ccm:metricUnit "次" ; ccm:metricNote "F7 关键"@zh .
+ccm:m_db_instance_cpu_usage_ratio a ccm:Metric ; ccm:metricCode "db.instance.cpu_usage_ratio" ; cco:metricCode "db.instance.cpu_usage_ratio" ;
+    ccm:metricProperty ccm:cpuUsageRatio ; ccm:metricObjectType cc:GaussDBInstance ; ccm:metricLayer "Data" ;
+    ccm:metricUnit "ratio" ; ccm:metricRangeMin 0 ; ccm:metricRangeMax 1 .
+ccm:m_db_instance_mem_usage_ratio a ccm:Metric ; ccm:metricCode "db.instance.mem_usage_ratio" ; cco:metricCode "db.instance.mem_usage_ratio" ;
+    ccm:metricProperty ccm:memUsageRatio ; ccm:metricObjectType cc:GaussDBInstance ; ccm:metricLayer "Data" ;
+    ccm:metricUnit "ratio" ; ccm:metricRangeMin 0 ; ccm:metricRangeMax 1 .
+ccm:m_db_instance_session_count a ccm:Metric ; ccm:metricCode "db.instance.session_count" ; cco:metricCode "db.instance.session_count" ;
+    ccm:metricProperty ccm:sessionCount ; ccm:metricObjectType cc:GaussDBInstance ; ccm:metricLayer "Data" ;
+    ccm:metricUnit "个" .
+ccm:m_db_instance_max_connections a ccm:Metric ; ccm:metricCode "db.instance.max_connections" ; cco:metricCode "db.instance.max_connections" ;
+    ccm:metricProperty ccm:maxConnections ; ccm:metricObjectType cc:GaussDBInstance ; ccm:metricLayer "Data" ;
+    ccm:metricUnit "个" ; ccm:metricNote "实体自带配置，不硬编码（沿用 onto-ops-agent D3 原则）"@zh .
+ccm:m_db_instance_waiting_connections a ccm:Metric ; ccm:metricCode "db.instance.waiting_connections" ; cco:metricCode "db.instance.waiting_connections" ;
+    ccm:metricProperty ccm:waitingConnections ; ccm:metricObjectType cc:GaussDBInstance ; ccm:metricLayer "Data" ;
+    ccm:metricUnit "个" .
+ccm:m_db_instance_long_txn_age_s a ccm:Metric ; ccm:metricCode "db.instance.long_txn_age_s" ; cco:metricCode "db.instance.long_txn_age_s" ;
+    ccm:metricProperty ccm:longTxnAgeS ; ccm:metricObjectType cc:GaussDBInstance ; ccm:metricLayer "Data" ;
+    ccm:metricUnit "s" .
+ccm:m_db_instance_io_wait_pct a ccm:Metric ; ccm:metricCode "db.instance.io_wait_pct" ; cco:metricCode "db.instance.io_wait_pct" ;
+    ccm:metricProperty ccm:ioWaitPct ; ccm:metricObjectType cc:GaussDBInstance ; ccm:metricLayer "Data" ;
+    ccm:metricUnit "percent" ; ccm:metricRangeMin 0 ; ccm:metricRangeMax 100 ;
+    ccm:metricNote "阈值审核清单实测：生产值域 [0.22, 0.72]%，而旧阈值写 >20 → 差 28×，永不可能命中"@zh .
+ccm:m_db_instance_buffer_hit_ratio a ccm:Metric ; ccm:metricCode "db.instance.buffer_hit_ratio" ; cco:metricCode "db.instance.buffer_hit_ratio" ;
+    ccm:metricProperty ccm:bufferHitRatio ; ccm:metricObjectType cc:GaussDBInstance ; ccm:metricLayer "Data" ;
+    ccm:metricUnit "percent" ; ccm:metricRangeMin 0 ; ccm:metricRangeMax 100 .
+ccm:m_db_instance_up a ccm:Metric ; ccm:metricCode "db.instance.up" ; cco:metricCode "db.instance.up" ; ccm:metricProperty ccm:up ;
+    ccm:metricObjectType cc:GaussDBInstance ; ccm:metricLayer "Data" ;
+    ccm:metricNote "F7 直接证据；契约 unit: null（本指标无单位）"@zh .
+ccm:m_db_pool_session_used_ratio a ccm:Metric ; ccm:metricCode "db.pool.session_used_ratio" ; cco:metricCode "db.pool.session_used_ratio" ;
+    ccm:metricProperty ccm:sessionUsedRatio ; ccm:metricObjectType cc:DatabaseSessionPool ; ccm:metricLayer "Data" ;
+    ccm:metricUnit "ratio" ; ccm:metricRangeMin 0 ; ccm:metricRangeMax 1 ;
+    ccm:metricExpression "db.instance.session_count / db.instance.max_connections" ;
+    ccm:hasThreshold ccm:t_session_used_ratio_light , ccm:t_session_used_ratio_severe .
+ccm:m_db_pool_session_waiting a ccm:Metric ; ccm:metricCode "db.pool.session_waiting" ; cco:metricCode "db.pool.session_waiting" ;
+    ccm:metricProperty ccm:sessionWaiting ; ccm:metricObjectType cc:DatabaseSessionPool ; ccm:metricLayer "Data" ;
+    ccm:metricUnit "个" .
+ccm:m_db_pool_conn_rejected_total a ccm:Metric ; ccm:metricCode "db.pool.conn_rejected_total" ; cco:metricCode "db.pool.conn_rejected_total" ;
+    ccm:metricProperty ccm:connRejectedTotal ; ccm:metricObjectType cc:DatabaseSessionPool ; ccm:metricLayer "Data" ;
+    ccm:metricUnit "次" .
+ccm:m_db_session_state a ccm:Metric ; ccm:metricCode "db.session.state" ; cco:metricCode "db.session.state" ; ccm:metricProperty ccm:state ;
+    ccm:metricObjectType cc:Session ; ccm:metricLayer "Data" ;
+    ccm:metricEnumValue "active" , "idle" , "idle in transaction" , "waiting" ;
+    ccm:metricNote "契约 unit: null（本指标无单位）"@zh .
+ccm:m_db_session_wait_event a ccm:Metric ; ccm:metricCode "db.session.wait_event" ; cco:metricCode "db.session.wait_event" ; ccm:metricProperty ccm:waitEvent ;
+    ccm:metricObjectType cc:Session ; ccm:metricLayer "Data" ;
+    ccm:metricEnumValue "LockMgrLock" , "transactionid" , "relation" , "tuple" , "WALWrite" , "DataFileRead" ;
+    ccm:metricNote "契约 unit: null（本指标无单位）"@zh .
+ccm:m_db_session_xact_age_s a ccm:Metric ; ccm:metricCode "db.session.xact_age_s" ; cco:metricCode "db.session.xact_age_s" ; ccm:metricProperty ccm:xactAgeS ;
+    ccm:metricObjectType cc:Session ; ccm:metricLayer "Data" ; ccm:metricUnit "s" ;
+    ccm:hasThreshold ccm:t_xact_age_s_light .
+ccm:m_db_session_query_elapsed_s a ccm:Metric ; ccm:metricCode "db.session.query_elapsed_s" ; cco:metricCode "db.session.query_elapsed_s" ;
+    ccm:metricProperty ccm:queryElapsedS ; ccm:metricObjectType cc:Session ; ccm:metricLayer "Data" ;
+    ccm:metricUnit "s" .
+ccm:m_db_query_mean_exec_ms a ccm:Metric ; ccm:metricCode "db.query.mean_exec_ms" ; cco:metricCode "db.query.mean_exec_ms" ; ccm:metricProperty ccm:meanExecMs ;
+    ccm:metricObjectType cc:Query ; ccm:metricLayer "Data" ; ccm:metricUnit "ms" ;
+    ccm:metricNote "实测样本：慢 SQL 平均 30.8s、TOP 51.9s（来自 upstream-eval 真实用例）"@zh ;
+    ccm:hasThreshold ccm:t_mean_exec_ms_light .
+ccm:m_db_query_max_exec_ms a ccm:Metric ; ccm:metricCode "db.query.max_exec_ms" ; cco:metricCode "db.query.max_exec_ms" ; ccm:metricProperty ccm:maxExecMs ;
+    ccm:metricObjectType cc:Query ; ccm:metricLayer "Data" ; ccm:metricUnit "ms" .
+ccm:m_db_query_exec_count a ccm:Metric ; ccm:metricCode "db.query.exec_count" ; cco:metricCode "db.query.exec_count" ; ccm:metricProperty ccm:execCount ;
+    ccm:metricObjectType cc:Query ; ccm:metricLayer "Data" ; ccm:metricUnit "次" .
+ccm:m_db_query_returned_rows a ccm:Metric ; ccm:metricCode "db.query.returned_rows" ; cco:metricCode "db.query.returned_rows" ; ccm:metricProperty ccm:returnedRows ;
+    ccm:metricObjectType cc:Query ; ccm:metricLayer "Data" ; ccm:metricUnit "行" .
+ccm:m_db_query_seq_scan_ratio a ccm:Metric ; ccm:metricCode "db.query.seq_scan_ratio" ; cco:metricCode "db.query.seq_scan_ratio" ;
+    ccm:metricProperty ccm:seqScanRatio ; ccm:metricObjectType cc:Query ; ccm:metricLayer "Data" ;
+    ccm:metricUnit "ratio" ; ccm:metricRangeMin 0 ; ccm:metricRangeMax 1 .
+ccm:m_db_table_live_tuples a ccm:Metric ; ccm:metricCode "db.table.live_tuples" ; cco:metricCode "db.table.live_tuples" ; ccm:metricProperty ccm:liveTuples ;
+    ccm:metricObjectType cc:Table ; ccm:metricLayer "Data" ; ccm:metricUnit "行" .
+ccm:m_db_table_dead_tuple_ratio a ccm:Metric ; ccm:metricCode "db.table.dead_tuple_ratio" ; cco:metricCode "db.table.dead_tuple_ratio" ;
+    ccm:metricProperty ccm:deadTupleRatio ; ccm:metricObjectType cc:Table ; ccm:metricLayer "Data" ;
+    ccm:metricUnit "ratio" ; ccm:metricRangeMin 0 ; ccm:metricRangeMax 1 ;
+    ccm:metricNote "docs\\04 §6 r02 示例把它写进慢查询判据，但 fault-modes.yaml 的 detect 无此项（X-2）⇒ 规则不使用它"@zh .
+ccm:m_db_table_last_analyze_age_h a ccm:Metric ; ccm:metricCode "db.table.last_analyze_age_h" ; cco:metricCode "db.table.last_analyze_age_h" ;
+    ccm:metricProperty ccm:lastAnalyzeAgeH ; ccm:metricObjectType cc:Table ; ccm:metricLayer "Data" ;
+    ccm:metricUnit "h" .
+ccm:m_db_table_size_mb a ccm:Metric ; ccm:metricCode "db.table.size_mb" ; cco:metricCode "db.table.size_mb" ; ccm:metricProperty ccm:sizeMb ;
+    ccm:metricObjectType cc:Table ; ccm:metricLayer "Data" ; ccm:metricUnit "MB" .
+
+# ---- ★ P0-A（2026-10-12）：新增 12 个 DB 指标件 ----
+ccm:m_db_cluster_deadlocks a ccm:Metric ; ccm:metricCode "db.cluster.deadlocks" ; cco:metricCode "db.cluster.deadlocks" ; ccm:metricProperty ccm:deadlocks ;
+    ccm:metricObjectType cc:GaussDBCluster ; ccm:metricLayer "Data" ; ccm:metricUnit "次" .
+ccm:m_db_cluster_xact_rollback a ccm:Metric ; ccm:metricCode "db.cluster.xact_rollback" ; cco:metricCode "db.cluster.xact_rollback" ; ccm:metricProperty ccm:xactRollback ;
+    ccm:metricObjectType cc:GaussDBCluster ; ccm:metricLayer "Data" ; ccm:metricUnit "次" .
+ccm:m_db_cluster_slow_query_count a ccm:Metric ; ccm:metricCode "db.cluster.slow_query_count" ; cco:metricCode "db.cluster.slow_query_count" ; ccm:metricProperty ccm:slowQueryCount ;
+    ccm:metricObjectType cc:GaussDBCluster ; ccm:metricLayer "Data" ; ccm:metricUnit "次" .
+ccm:m_db_instance_active_sessions a ccm:Metric ; ccm:metricCode "db.instance.active_sessions" ; cco:metricCode "db.instance.active_sessions" ; ccm:metricProperty ccm:activeSessions ;
+    ccm:metricObjectType cc:GaussDBInstance ; ccm:metricLayer "Data" ; ccm:metricUnit "个" .
+ccm:m_db_instance_idle_in_xact a ccm:Metric ; ccm:metricCode "db.instance.idle_in_xact" ; cco:metricCode "db.instance.idle_in_xact" ; ccm:metricProperty ccm:idleInXact ;
+    ccm:metricObjectType cc:GaussDBInstance ; ccm:metricLayer "Data" ; ccm:metricUnit "个" .
+ccm:m_db_instance_lock_waits a ccm:Metric ; ccm:metricCode "db.instance.lock_waits" ; cco:metricCode "db.instance.lock_waits" ; ccm:metricProperty ccm:lockWaits ;
+    ccm:metricObjectType cc:GaussDBInstance ; ccm:metricLayer "Data" ; ccm:metricUnit "个" .
+ccm:m_db_cluster_temp_files a ccm:Metric ; ccm:metricCode "db.cluster.temp_files" ; cco:metricCode "db.cluster.temp_files" ; ccm:metricProperty ccm:tempFiles ;
+    ccm:metricObjectType cc:GaussDBInstance ; ccm:metricLayer "Data" ; ccm:metricUnit "个" .
+ccm:m_db_cluster_temp_file_written a ccm:Metric ; ccm:metricCode "db.cluster.temp_file_written" ; cco:metricCode "db.cluster.temp_file_written" ; ccm:metricProperty ccm:tempFileWritten ;
+    ccm:metricObjectType cc:GaussDBInstance ; ccm:metricLayer "Data" ; ccm:metricUnit "" .
+ccm:m_db_table_seq_scan a ccm:Metric ; ccm:metricCode "db.table.seq_scan" ; cco:metricCode "db.table.seq_scan" ; ccm:metricProperty ccm:seqScan ;
+    ccm:metricObjectType cc:Table ; ccm:metricLayer "Data" ; ccm:metricUnit "次" .
+ccm:m_db_table_idx_scan a ccm:Metric ; ccm:metricCode "db.table.idx_scan" ; cco:metricCode "db.table.idx_scan" ; ccm:metricProperty ccm:idxScan ;
+    ccm:metricObjectType cc:Table ; ccm:metricLayer "Data" ; ccm:metricUnit "次" .
+ccm:m_db_table_dead_tuples a ccm:Metric ; ccm:metricCode "db.table.dead_tuples" ; cco:metricCode "db.table.dead_tuples" ; ccm:metricProperty ccm:deadTuples ;
+    ccm:metricObjectType cc:Table ; ccm:metricLayer "Data" ; ccm:metricUnit "行" .
+ccm:m_db_table_hot_update_ratio_pct a ccm:Metric ; ccm:metricCode "db.table.hot_update_ratio_pct" ; cco:metricCode "db.table.hot_update_ratio_pct" ; ccm:metricProperty ccm:hotUpdateRatioPct ;
+    ccm:metricObjectType cc:Table ; ccm:metricLayer "Data" ; ccm:metricUnit "percent" ; ccm:metricRangeMin 0 ; ccm:metricRangeMax 100 .
+
+# ===========================================================================
+# 6) 12 个阈值名 + 24 个档位节点（契约 v1.0.2；★ 计数随契约版本提升而提升，
+#    不得改成「自己数自己」的自证式动态计数）
+#
+#    2 类绑定方式（与 fault-modes.yaml#meta.threshold_policy.binding_modes 对齐）：
+#      · threshold_node：指标 -ccm:hasThreshold-> 阈值名 -ccm:warningTier/criticalTier-> 档位
+#      · entity_property：阈值即实体自身属性（app.datasource.acquire_wait_ms→maxPoolSize 等）
+#    档位节点必带 ccm:tierReference（"threshold:<名>#<档位>"，契约引用键，档位必填）；
+#    未标定档（warning/critical 皆 null）带 ccm:uncalibrated true 且**不写** ccm:thresholdValue。
+#   ★ 档位必填：每个档位节点带 ccm:tierReference "threshold:<名>#<warning|critical>"
+#   ★ 2026-10-12：acquire_wait_ms_light **已标定**（520/1560）；
+#     余 2 档 warning/critical 仍为 null（load1_per_core_light / qps_high）⇒ 仍标 ccm:uncalibrated true。
+# ===========================================================================
+ccm:t_acquire_wait_ms_light a ccm:Threshold ; ccm:thresholdName "acquire_wait_ms_light" ;
+    ccm:thresholdMetric ccm:m_app_datasource_acquire_wait_ms ;
+    ccm:warningTier ccm:t_acquire_wait_ms_light_warning ; ccm:criticalTier ccm:t_acquire_wait_ms_light_critical ;
+    ccm:rationale "★ 2026-10-12 标定（原两档 null ⇒ FM-APP-POOL-EXHAUSTED 不可机判）：样本 = 真机历史日志全部轮次的 `连接池获取 … 耗时=Xms`（n=91），按应用自身判据分层剔除启动填充：INFO 层 n=64 健康期 P95=260ms × k=2.0 ⇒ warning=520；warning × k_crit=3.0 ⇒ critical=1560。交叉验证：应用自判『偏慢』最小耗时 532ms（相差 2.3%）。"@zh .
+ccm:t_acquire_wait_ms_light_warning a ccm:WarningThreshold ; ccm:tierOf ccm:t_acquire_wait_ms_light ;
+    ccm:tierReference "threshold:acquire_wait_ms_light#warning" ; ccm:thresholdValue 520 .
+ccm:t_acquire_wait_ms_light_critical a ccm:CriticalThreshold ; ccm:tierOf ccm:t_acquire_wait_ms_light ;
+    ccm:tierReference "threshold:acquire_wait_ms_light#critical" ; ccm:thresholdValue 1560 .
+ccm:t_fs_usage_pct_light a ccm:Threshold ; ccm:thresholdName "fs_usage_pct_light" ;
+    ccm:thresholdMetric ccm:m_host_fs_max_used_pct ;
+    ccm:warningTier ccm:t_fs_usage_pct_light_warning ; ccm:criticalTier ccm:t_fs_usage_pct_light_critical ;
+    ccm:rationale "★ 2026-10-12 标定（原两档 null ⇒ FM-APP-POOL-EXHAUSTED 不可机判）：样本 = 真机历史日志全部轮次的 `连接池获取 … 耗时=Xms`（n=91），按应用自身判据分层剔除启动填充：INFO 层 n=64 健康期 P95=260ms × k=2.0 ⇒ warning=80；warning × k_crit=3.0 ⇒ critical=90。交叉验证：应用自判『偏慢』最小耗时 532ms（相差 2.3%）。"@zh .
+ccm:t_fs_usage_pct_light_warning a ccm:WarningThreshold ; ccm:tierOf ccm:t_fs_usage_pct_light ;
+    ccm:tierReference "threshold:fs_usage_pct_light#warning" ; ccm:thresholdValue 80 .
+ccm:t_fs_usage_pct_light_critical a ccm:CriticalThreshold ; ccm:tierOf ccm:t_fs_usage_pct_light ;
+    ccm:tierReference "threshold:fs_usage_pct_light#critical" ; ccm:thresholdValue 90 .
+
+ccm:t_session_used_ratio_light a ccm:Threshold ; ccm:thresholdName "session_used_ratio_light" ;
+    ccm:thresholdMetric ccm:m_db_pool_session_used_ratio ;
+    ccm:warningTier ccm:t_session_used_ratio_light_warning ; ccm:criticalTier ccm:t_session_used_ratio_light_critical ;
+    ccm:rationale "★ 2026-10-13 按契约对齐（原 0.70/0.85 为陈旧工程基线）：健康期近空闲 ⇒ 取「会话池已用一半」这一运维有意义的界线 0.5；×k_crit=3.0 被域上限 1 封顶 ⇒ critical=1。出处 shared/model/fault-modes.yaml#thresholds[session_used_ratio_light]"@zh .
+ccm:t_session_used_ratio_light_warning a ccm:WarningThreshold ; ccm:tierOf ccm:t_session_used_ratio_light ;
+    ccm:tierReference "threshold:session_used_ratio_light#warning" ; ccm:thresholdValue "0.5"^^xsd:decimal .
+ccm:t_session_used_ratio_light_critical a ccm:CriticalThreshold ; ccm:tierOf ccm:t_session_used_ratio_light ;
+    ccm:tierReference "threshold:session_used_ratio_light#critical" ; ccm:thresholdValue "1"^^xsd:decimal .
+
+ccm:t_session_used_ratio_severe a ccm:Threshold ; ccm:thresholdName "session_used_ratio_severe" ;
+    ccm:thresholdMetric ccm:m_db_pool_session_used_ratio ;
+    ccm:warningTier ccm:t_session_used_ratio_severe_warning ; ccm:criticalTier ccm:t_session_used_ratio_severe_critical ;
+    ccm:rationale "★ 2026-10-13 按契约对齐（原 0.85/0.95 为陈旧值）：severe 与 light 必须分开声明，否则 critical=warning×3 会被域上限 1.0 封顶而两档取值相同 ⇒ warning=0.8（池只剩两成余量）、critical=1。出处 shared/model/fault-modes.yaml#thresholds[session_used_ratio_severe]"@zh .
+ccm:t_session_used_ratio_severe_warning a ccm:WarningThreshold ; ccm:tierOf ccm:t_session_used_ratio_severe ;
+    ccm:tierReference "threshold:session_used_ratio_severe#warning" ; ccm:thresholdValue "0.8"^^xsd:decimal .
+ccm:t_session_used_ratio_severe_critical a ccm:CriticalThreshold ; ccm:tierOf ccm:t_session_used_ratio_severe ;
+    ccm:tierReference "threshold:session_used_ratio_severe#critical" ; ccm:thresholdValue "1"^^xsd:decimal .
+
+ccm:t_heap_used_ratio_light a ccm:Threshold ; ccm:thresholdName "heap_used_ratio_light" ;
+    ccm:thresholdMetric ccm:m_app_heap_used_ratio ;
+    ccm:warningTier ccm:t_heap_used_ratio_light_warning ; ccm:criticalTier ccm:t_heap_used_ratio_light_critical ;
+    ccm:rationale "待标定：JVM 常规经验值，需实测 GC 行为后定档"@zh .
+ccm:t_heap_used_ratio_light_warning a ccm:WarningThreshold ; ccm:tierOf ccm:t_heap_used_ratio_light ;
+    ccm:tierReference "threshold:heap_used_ratio_light#warning" ; ccm:thresholdValue "0.75"^^xsd:decimal .
+ccm:t_heap_used_ratio_light_critical a ccm:CriticalThreshold ; ccm:tierOf ccm:t_heap_used_ratio_light ;
+    ccm:tierReference "threshold:heap_used_ratio_light#critical" ; ccm:thresholdValue "0.90"^^xsd:decimal .
+
+ccm:t_gc_pause_ms_light a ccm:Threshold ; ccm:thresholdName "gc_pause_ms_light" ;
+    ccm:thresholdMetric ccm:m_app_gc_pause_ms ;
+    ccm:warningTier ccm:t_gc_pause_ms_light_warning ; ccm:criticalTier ccm:t_gc_pause_ms_light_critical ;
+    ccm:rationale "待标定"@zh .
+ccm:t_gc_pause_ms_light_warning a ccm:WarningThreshold ; ccm:tierOf ccm:t_gc_pause_ms_light ;
+    ccm:tierReference "threshold:gc_pause_ms_light#warning" ; ccm:thresholdValue "200"^^xsd:decimal .
+ccm:t_gc_pause_ms_light_critical a ccm:CriticalThreshold ; ccm:tierOf ccm:t_gc_pause_ms_light ;
+    ccm:tierReference "threshold:gc_pause_ms_light#critical" ; ccm:thresholdValue "1000"^^xsd:decimal .
+
+ccm:t_load1_per_core_light a ccm:Threshold ; ccm:thresholdName "load1_per_core_light" ;
+    ccm:thresholdMetric ccm:m_host_load1 ;
+    ccm:warningTier ccm:t_load1_per_core_light_warning ; ccm:criticalTier ccm:t_load1_per_core_light_critical ;
+    ccm:rationale "必须按 Host.cpuCores 归一化，不能硬编码；标定方式：load1 > cpuCores * k"@zh .
+ccm:t_load1_per_core_light_warning a ccm:WarningThreshold ; ccm:tierOf ccm:t_load1_per_core_light ;
+    ccm:tierReference "threshold:load1_per_core_light#warning" ; ccm:uncalibrated true .
+ccm:t_load1_per_core_light_critical a ccm:CriticalThreshold ; ccm:tierOf ccm:t_load1_per_core_light ;
+    ccm:tierReference "threshold:load1_per_core_light#critical" ; ccm:uncalibrated true .
+
+ccm:t_cpu_usage_ratio_severe a ccm:Threshold ; ccm:thresholdName "cpu_usage_ratio_severe" ;
+    ccm:thresholdMetric ccm:m_host_cpu_usage_ratio ;
+    ccm:warningTier ccm:t_cpu_usage_ratio_severe_warning ; ccm:criticalTier ccm:t_cpu_usage_ratio_severe_critical ;
+    ccm:rationale "★ 2026-10-13 按契约对齐（原 0.80/0.90 为陈旧值，量级差约 3.5×；旧值源自「旧项目写 node.cpu_usage > 90 而实测 [13.6, 21.01]%，几乎永不命中」）：warning=0.2284 / critical=0.6852，由健康期分布 P95×k 标定。出处 shared/model/fault-modes.yaml#thresholds[cpu_usage_ratio_severe]"@zh .
+ccm:t_cpu_usage_ratio_severe_warning a ccm:WarningThreshold ; ccm:tierOf ccm:t_cpu_usage_ratio_severe ;
+    ccm:tierReference "threshold:cpu_usage_ratio_severe#warning" ; ccm:thresholdValue "0.2284"^^xsd:decimal .
+ccm:t_cpu_usage_ratio_severe_critical a ccm:CriticalThreshold ; ccm:tierOf ccm:t_cpu_usage_ratio_severe ;
+    ccm:tierReference "threshold:cpu_usage_ratio_severe#critical" ; ccm:thresholdValue "0.6852"^^xsd:decimal .
+
+ccm:t_mem_available_ratio_severe a ccm:Threshold ; ccm:thresholdName "mem_available_ratio_severe" ;
+    ccm:thresholdMetric ccm:m_host_mem_available_ratio ;
+    ccm:warningTier ccm:t_mem_available_ratio_severe_warning ; ccm:criticalTier ccm:t_mem_available_ratio_severe_critical ;
+    ccm:rationale "待标定"@zh .
+ccm:t_mem_available_ratio_severe_warning a ccm:WarningThreshold ; ccm:tierOf ccm:t_mem_available_ratio_severe ;
+    ccm:tierReference "threshold:mem_available_ratio_severe#warning" ; ccm:thresholdValue "0.15"^^xsd:decimal .
+ccm:t_mem_available_ratio_severe_critical a ccm:CriticalThreshold ; ccm:tierOf ccm:t_mem_available_ratio_severe ;
+    ccm:tierReference "threshold:mem_available_ratio_severe#critical" ; ccm:thresholdValue "0.05"^^xsd:decimal .
+
+ccm:t_mean_exec_ms_light a ccm:Threshold ; ccm:thresholdName "mean_exec_ms_light" ;
+    ccm:thresholdMetric ccm:m_db_query_mean_exec_ms ;
+    ccm:warningTier ccm:t_mean_exec_ms_light_warning ; ccm:criticalTier ccm:t_mean_exec_ms_light_critical ;
+    ccm:rationale "待标定：既有项目档位 mean_exec_time_ms_light = (100, 1000)ms，但实测慢 SQL 平均 30.8s，档位需重设"@zh .
+ccm:t_mean_exec_ms_light_warning a ccm:WarningThreshold ; ccm:tierOf ccm:t_mean_exec_ms_light ;
+    ccm:tierReference "threshold:mean_exec_ms_light#warning" ; ccm:thresholdValue "1000"^^xsd:decimal .
+ccm:t_mean_exec_ms_light_critical a ccm:CriticalThreshold ; ccm:tierOf ccm:t_mean_exec_ms_light ;
+    ccm:tierReference "threshold:mean_exec_ms_light#critical" ; ccm:thresholdValue "10000"^^xsd:decimal .
+
+ccm:t_xact_age_s_light a ccm:Threshold ; ccm:thresholdName "xact_age_s_light" ;
+    ccm:thresholdMetric ccm:m_db_session_xact_age_s ;
+    ccm:warningTier ccm:t_xact_age_s_light_warning ; ccm:criticalTier ccm:t_xact_age_s_light_critical ;
+    ccm:rationale "待标定"@zh .
+ccm:t_xact_age_s_light_warning a ccm:WarningThreshold ; ccm:tierOf ccm:t_xact_age_s_light ;
+    ccm:tierReference "threshold:xact_age_s_light#warning" ; ccm:thresholdValue "300"^^xsd:decimal .
+ccm:t_xact_age_s_light_critical a ccm:CriticalThreshold ; ccm:tierOf ccm:t_xact_age_s_light ;
+    ccm:tierReference "threshold:xact_age_s_light#critical" ; ccm:thresholdValue "900"^^xsd:decimal .
+
+ccm:t_qps_high a ccm:Threshold ; ccm:thresholdName "qps_high" ;
+    ccm:thresholdMetric ccm:m_app_endpoint_qps ;
+    ccm:warningTier ccm:t_qps_high_warning ; ccm:criticalTier ccm:t_qps_high_critical ;
+    ccm:rationale "待标定：需应用侧真实 QPS 值域。用于 causal-edges.yaml 的 E6 条件边（高并发触发正反馈环）。★ 该条在 v1.0.0 时被 E6 引用但本表未定义——属悬空引用，由 contract_gates.py（G3）发现，v1.0.1 补齐"@zh .
+ccm:t_qps_high_warning a ccm:WarningThreshold ; ccm:tierOf ccm:t_qps_high ;
+    ccm:tierReference "threshold:qps_high#warning" ; ccm:uncalibrated true .
+ccm:t_qps_high_critical a ccm:CriticalThreshold ; ccm:tierOf ccm:t_qps_high ;
+    ccm:tierReference "threshold:qps_high#critical" ; ccm:uncalibrated true .
+
+# --- v1.0.2 新增（第 12 档）：docs/04:348 的 r02 示例引用 dead_tuple_ratio_light，
+#     但 v1.0.1 契约里没有该个体（悬空引用）⇒ 契约 v1.0.2 补齐。
+#     ★ 2026-10-13 更正：契约 v1.0.3 已给出该档标定（0.1/0.3）⇒ 原来登记的
+#     `ccm:uncalibrated true`（「待标定、当前不可机判」）**已过期**，会使 ONTO 侧
+#     把该判据恒判 UNK（而 KG 侧按契约值正常求值）⇒ 两侧 `determined` 不一致。
+#     现按契约写入数值。出处 shared/model/fault-modes.yaml#thresholds[dead_tuple_ratio_light]。
+ccm:t_dead_tuple_ratio_light a ccm:Threshold ; ccm:thresholdName "dead_tuple_ratio_light" ;
+    ccm:thresholdMetric ccm:m_db_table_dead_tuple_ratio ;
+    ccm:warningTier ccm:t_dead_tuple_ratio_light_warning ; ccm:criticalTier ccm:t_dead_tuple_ratio_light_critical ;
+    ccm:rationale "★ 2026-10-13 按契约对齐（原登记为待标定 uncalibrated）：warning=0.1 / critical=0.3。出处 shared/model/fault-modes.yaml#thresholds[dead_tuple_ratio_light]"@zh .
+ccm:t_dead_tuple_ratio_light_warning a ccm:WarningThreshold ; ccm:tierOf ccm:t_dead_tuple_ratio_light ;
+    ccm:tierReference "threshold:dead_tuple_ratio_light#warning" ; ccm:thresholdValue "0.1"^^xsd:decimal ;
+    rdfs:comment "按契约标定：0.1（warning 档）。"@zh .
+ccm:t_dead_tuple_ratio_light_critical a ccm:CriticalThreshold ; ccm:tierOf ccm:t_dead_tuple_ratio_light ;
+    ccm:tierReference "threshold:dead_tuple_ratio_light#critical" ; ccm:thresholdValue "0.3"^^xsd:decimal ;
+    rdfs:comment "按契约标定：0.3（critical 档）。"@zh .
+
+# ===========================================================================
+# 6b) 非零基线常量（predicate:non_zero 的零点来源）
+#   ★ 为什么需要：fault-modes.yaml#meta.predicate_enum 含 non_zero，而
+#     threshold_policy.hardcode_forbidden=true 禁止在规则里写数字字面量。
+#     零点本身不是「阈值」（没有档位语义），所以不为它伪造一档 threshold，
+#     而是单列 ccm:BaselineConstant 类 + ccm:baselineValue 属性；
+#     规则用 ccm:tierReference "baseline:counter_non_zero" 引用它。
+#   ★ 这是方案2 自定词汇（契约未定义 non_zero 的零点载体），进报告诚实清单。
+# ===========================================================================
+ccm:BaselineConstant a owl:Class ;
+    rdfs:subClassOf ccm:MetricRelatedArtifact ;
+    rdfs:label "基线常量"@zh ;
+    rdfs:comment "给 predicate:non_zero 提供零点的 TBox 常量（值住在本体里，规则内零数字字面量）。"@zh ;
+    cco:rigidity "+R" ; cco:identity "+I" ; cco:unity "+U" ; cco:dependence "+D" ;
+    cco:identityCriterion "基线常量名：ccm:tierReference（形如 baseline:counter_non_zero）" .
+ccm:baselineValue a owl:DatatypeProperty ; rdfs:domain ccm:BaselineConstant ; rdfs:range xsd:decimal ;
+    rdfs:label "基线值"@zh .
+ccm:b_counter_non_zero a ccm:BaselineConstant ;
+    ccm:tierReference "baseline:counter_non_zero" ;
+    ccm:baselineValue "0"^^xsd:decimal ;
+    ccm:rationale "单位「次」的窗口内累计计数：非零即表示窗口内发生了该事件；零点作为常量而非阈值。"@zh ;
+    rdfs:label "计数值非零基线"@zh .
+
+# ===========================================================================
+# 7) SOSA 挂接（3 条属性对齐子公理）—— U2 未结案的最小挂接
+#   ★ 对齐用 rdfs:subPropertyOf（OWL 原生），使本方案属性获得 SOSA 语义，
+#     同时**不**要求 ABox 额外制造观测个体（避免 U2 的「多一跳」）。
+# ===========================================================================
+ccm:observedMetric a owl:ObjectProperty ; rdfs:subPropertyOf sosa:observedProperty ;
+    rdfs:domain ccm:MetricObservation ; rdfs:range ccm:Metric ;
+    rdfs:label "观测的指标"@zh .
+ccm:observedEntity a owl:ObjectProperty ; rdfs:subPropertyOf sosa:hasFeatureOfInterest ;
+    rdfs:domain ccm:MetricObservation ; rdfs:range cco:Entity ;
+    rdfs:label "观测的对象"@zh .
+ccm:observedValue a owl:DatatypeProperty ; rdfs:subPropertyOf sosa:hasSimpleResult ;
+    rdfs:domain ccm:MetricObservation ; rdfs:range rdfs:Literal ;
+    rdfs:label "观测结果"@zh .
+
+# ===========================================================================
+# 8) 契约缺口与偏差（只报告，不就地改契约）
+# ===========================================================================
+# X-1  docs/04 §6 prologue 的 cct:/cco#obs 前缀不在映射表 ⇒ 阈值落 ccm:（见文件头）。
+# X-2  docs/04 §6 r02 示例把 db.table.dead_tuple_ratio 写进慢查询判据，且含 FILTER(>0)
+#      数字字面量 ⇒ 本实现严格按 fault-modes.yaml 的 detect，且规则内零数字字面量。
+# X-7  fault-modes.yaml 的 detect 用 predicate:increased/decreased，但 ccf.schema.json
+#      与观测对象里**没有** prev/delta/baseline 字段（单快照）⇒ 该谓词的物化方式
+#      契约未定义。本实现在 rules/ 内以「同实体同指标按 cc:capturedAt 时序比较」
+#      物化（见 r03/r04/r06/r07 与报告诚实清单）；单快照下必产 0 条，
+#      属数据/契约缺口，不是实现缺陷。
+
+# ===========================================================================
+# OWL 原生键公理（镜像 docs/03:68 的 Neo4j 唯一约束：
+#   CREATE CONSTRAINT cc_uq_metric_code IF NOT EXISTS FOR (n:CC_Metric) REQUIRE n.metricCode IS UNIQUE）
+# ===========================================================================
+ccm:Metric owl:hasKey ( ccm:metricCode ) .

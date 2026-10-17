@@ -1,0 +1,37 @@
+# 契约全投影合成 ABox 修复件（T5/T11 门禁用；由 tmp/_gen_proj_fix.py 生成）
+# 只补投影器漏掉的契约必填事实：D-1 Table.schemaName / D-3 Host.hostsContainer / D-4 ccm:status 大小写
+@prefix cc:  <https://credit-card-ops.ai/onto/topology#> .
+@prefix ccm: <https://credit-card-ops.ai/onto/metric#> .
+
+<https://credit-card-ops.ai/onto/inst/ctr/d81ed68a85c810e2f651a68d5d922582290a02d202450bdb4055848a20ee8cbc> <https://credit-card-ops.ai/onto/metric#status> "running" .
+<https://credit-card-ops.ai/onto/inst/host/node-01> <https://credit-card-ops.ai/onto/topology#hostsContainer> <https://credit-card-ops.ai/onto/inst/ctr/d81ed68a85c810e2f651a68d5d922582290a02d202450bdb4055848a20ee8cbc> .
+<https://credit-card-ops.ai/onto/inst/table/tbl-new_order> <https://credit-card-ops.ai/onto/topology#schemaName> "public" .
+<https://credit-card-ops.ai/onto/inst/table/tbl-snap_class_vital_info> <https://credit-card-ops.ai/onto/topology#schemaName> "public" .
+<https://credit-card-ops.ai/onto/inst/table/tbl-snap_global_config_settings> <https://credit-card-ops.ai/onto/topology#schemaName> "public" .
+<https://credit-card-ops.ai/onto/inst/table/tbl-snap_global_file_iostat> <https://credit-card-ops.ai/onto/topology#schemaName> "public" .
+<https://credit-card-ops.ai/onto/inst/table/tbl-snap_global_instance_time> <https://credit-card-ops.ai/onto/topology#schemaName> "public" .
+<https://credit-card-ops.ai/onto/inst/table/tbl-snap_global_memory_node_detail> <https://credit-card-ops.ai/onto/topology#schemaName> "public" .
+<https://credit-card-ops.ai/onto/inst/table/tbl-snap_global_os_runtime> <https://credit-card-ops.ai/onto/topology#schemaName> "public" .
+<https://credit-card-ops.ai/onto/inst/table/tbl-snap_global_os_threads> <https://credit-card-ops.ai/onto/topology#schemaName> "public" .
+<https://credit-card-ops.ai/onto/inst/table/tbl-snap_global_shared_memory_detail> <https://credit-card-ops.ai/onto/topology#schemaName> "public" .
+<https://credit-card-ops.ai/onto/inst/table/tbl-snap_global_stat_all_indexes> <https://credit-card-ops.ai/onto/topology#schemaName> "public" .
+<https://credit-card-ops.ai/onto/inst/table/tbl-snap_global_stat_all_tables> <https://credit-card-ops.ai/onto/topology#schemaName> "public" .
+<https://credit-card-ops.ai/onto/inst/table/tbl-snap_global_stat_database> <https://credit-card-ops.ai/onto/topology#schemaName> "public" .
+<https://credit-card-ops.ai/onto/inst/table/tbl-snap_global_stat_database_conflicts> <https://credit-card-ops.ai/onto/topology#schemaName> "public" .
+<https://credit-card-ops.ai/onto/inst/table/tbl-snap_global_statement_count> <https://credit-card-ops.ai/onto/topology#schemaName> "public" .
+<https://credit-card-ops.ai/onto/inst/table/tbl-snap_global_statio_all_indexes> <https://credit-card-ops.ai/onto/topology#schemaName> "public" .
+<https://credit-card-ops.ai/onto/inst/table/tbl-snap_global_statio_all_tables> <https://credit-card-ops.ai/onto/topology#schemaName> "public" .
+<https://credit-card-ops.ai/onto/inst/table/tbl-snap_global_transactions_running_xacts> <https://credit-card-ops.ai/onto/topology#schemaName> "public" .
+<https://credit-card-ops.ai/onto/inst/table/tbl-snap_global_wait_events> <https://credit-card-ops.ai/onto/topology#schemaName> "public" .
+<https://credit-card-ops.ai/onto/inst/table/tbl-snap_global_xlog_redo_stat> <https://credit-card-ops.ai/onto/topology#schemaName> "public" .
+<https://credit-card-ops.ai/onto/inst/table/tbl-snap_kernel_info> <https://credit-card-ops.ai/onto/topology#schemaName> "public" .
+<https://credit-card-ops.ai/onto/inst/table/tbl-snap_query> <https://credit-card-ops.ai/onto/topology#schemaName> "public" .
+<https://credit-card-ops.ai/onto/inst/table/tbl-snap_summary_file_iostat> <https://credit-card-ops.ai/onto/topology#schemaName> "public" .
+<https://credit-card-ops.ai/onto/inst/table/tbl-snap_summary_stat_all_indexes> <https://credit-card-ops.ai/onto/topology#schemaName> "public" .
+<https://credit-card-ops.ai/onto/inst/table/tbl-snap_summary_stat_all_tables> <https://credit-card-ops.ai/onto/topology#schemaName> "public" .
+<https://credit-card-ops.ai/onto/inst/table/tbl-snap_summary_stat_database_conflicts> <https://credit-card-ops.ai/onto/topology#schemaName> "public" .
+<https://credit-card-ops.ai/onto/inst/table/tbl-snap_summary_statement> <https://credit-card-ops.ai/onto/topology#schemaName> "public" .
+<https://credit-card-ops.ai/onto/inst/table/tbl-snap_summary_statement_count> <https://credit-card-ops.ai/onto/topology#schemaName> "public" .
+<https://credit-card-ops.ai/onto/inst/table/tbl-snap_summary_statio_all_indexes> <https://credit-card-ops.ai/onto/topology#schemaName> "public" .
+<https://credit-card-ops.ai/onto/inst/table/tbl-snap_summary_statio_all_tables> <https://credit-card-ops.ai/onto/topology#schemaName> "public" .
+<https://credit-card-ops.ai/onto/inst/table/tbl-tables_snap_timestamp> <https://credit-card-ops.ai/onto/topology#schemaName> "public" .

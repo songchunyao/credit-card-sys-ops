@@ -1,0 +1,1079 @@
+cases:
+- agree: true
+  auditor_A:
+    injection_ops:
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 1
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-APP-ENDPOINT-SLOW
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 1
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-APP-ENDPOINT-SLOW
+  case_id: A-01
+  disposition: accepted
+  source_injection_id: INJ-20261008-001
+  working_set_sha256: 7605da172debd379532140e02539d2a67432cb450d9c1c8eca2e39b70bdab556
+- agree: true
+  auditor_A:
+    injection_ops:
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 1
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-APP-ENDPOINT-SLOW
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 1
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-APP-ENDPOINT-SLOW
+  case_id: A-02
+  disposition: accepted
+  source_injection_id: INJ-20261008-002
+  working_set_sha256: cf1b129e1011fd77b1c418b2dea5a27b3ccab8d90b7662d1929cee5b55133968
+- agree: true
+  auditor_A:
+    injection_ops:
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 1
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-APP-ENDPOINT-SLOW
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 1
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-APP-ENDPOINT-SLOW
+  case_id: A-03
+  disposition: accepted
+  source_injection_id: INJ-20261008-003
+  working_set_sha256: cccd421d5be10f92f936b917239c0642485406f640e0a6ef0f127322c3a3192b
+- agree: true
+  auditor_A:
+    injection_ops:
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 1
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-APP-ENDPOINT-SLOW
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 1
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-APP-ENDPOINT-SLOW
+  case_id: A-04
+  disposition: accepted
+  source_injection_id: INJ-20261008-004
+  working_set_sha256: 7c1d8415b1a0eff103c630aec8881cbb9fda2c4760d7af32821e0636fe550c82
+- agree: true
+  auditor_A:
+    injection_ops:
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 1
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-APP-HEAP-PRESSURE
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 1
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-APP-HEAP-PRESSURE
+  case_id: A-05
+  disposition: accepted
+  source_injection_id: INJ-20261008-005
+  working_set_sha256: 15c164115a48fb527560803a04363b1cd2ed265495acb93c35257cac3bb9e23a
+- agree: true
+  auditor_A:
+    injection_ops:
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 1
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-APP-HEAP-PRESSURE
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 1
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-APP-HEAP-PRESSURE
+  case_id: A-06
+  disposition: accepted
+  source_injection_id: INJ-20261008-006
+  working_set_sha256: 182bdf0a004a24c2b4c165a098e8eeb907acb447c4bb9f6f68d194984195ed6e
+- agree: true
+  auditor_A:
+    injection_ops:
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 1
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-APP-HEAP-PRESSURE
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 1
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-APP-HEAP-PRESSURE
+  case_id: A-07
+  disposition: accepted
+  source_injection_id: INJ-20261008-007
+  working_set_sha256: ab442944d734823a5b534a6410447452f4f6d8aa4679c4bc9df0ab298a8db828
+- agree: true
+  auditor_A:
+    injection_ops:
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 1
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-HOST-MEM-PRESSURE
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 1
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-HOST-MEM-PRESSURE
+  case_id: A-08
+  disposition: accepted
+  source_injection_id: INJ-20261008-008
+  working_set_sha256: 9cac65649322d63c4c33c9c2d026897828a1c9a7f236fc311db337d1d52908e5
+- agree: true
+  auditor_A:
+    injection_ops:
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 1
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-HOST-MEM-PRESSURE
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 1
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-HOST-MEM-PRESSURE
+  case_id: A-09
+  disposition: accepted
+  source_injection_id: INJ-20261008-009
+  working_set_sha256: 731d8b055cee206d6288d53c3ad1fe3649c580edec255f9a613c8f195db64ad9
+- agree: true
+  auditor_A:
+    injection_ops:
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 1
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-HOST-MEM-PRESSURE
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 1
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-HOST-MEM-PRESSURE
+  case_id: A-10
+  disposition: accepted
+  source_injection_id: INJ-20261008-010
+  working_set_sha256: 10ab0a94a2a979dce182d1f3fef594592443af68e23c82ff3e96279dc6045548
+- agree: true
+  auditor_A:
+    injection_ops:
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 1
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-HOST-MEM-PRESSURE
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 1
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-HOST-MEM-PRESSURE
+  case_id: A-11
+  disposition: accepted
+  source_injection_id: INJ-20261008-011
+  working_set_sha256: 6f97f066a97450db43bb53f6560bb9396ea6043023005cee1eb59631bcaed75d
+- agree: true
+  auditor_A:
+    injection_ops:
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 1
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-DB-INSTANCE-DOWN
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 1
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-DB-INSTANCE-DOWN
+  case_id: A-12
+  disposition: accepted
+  source_injection_id: INJ-20261008-012
+  working_set_sha256: 389df014596df88ecd7fac9bb84cf1a1054e5c56e1f825c6ca8a0b4a2b7a5729
+- agree: true
+  auditor_A:
+    injection_ops:
+    - remove_relation
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 2
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-DB-INSTANCE-DOWN
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 1
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-DB-INSTANCE-DOWN
+  case_id: A-13
+  disposition: accepted
+  source_injection_id: INJ-20261008-013
+  working_set_sha256: 272900c287e1af7b1dd7b09c5af9f20351cf8ab92ed48674265f72ddcc57bac2
+- agree: true
+  auditor_A:
+    injection_ops:
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 3
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-DB-INSTANCE-DOWN
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 1
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-DB-INSTANCE-DOWN
+  case_id: A-14
+  disposition: accepted
+  source_injection_id: INJ-20261008-014
+  working_set_sha256: 01a988fdb4458012ae11b8eaf345df2bf10ba11b7cef59dd285271863869bffb
+- agree: true
+  auditor_A:
+    injection_ops:
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 2
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-APP-HEAP-PRESSURE
+    - FM-HOST-MEM-PRESSURE
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 2
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-APP-HEAP-PRESSURE
+    - FM-HOST-MEM-PRESSURE
+  case_id: B-01
+  disposition: accepted
+  source_injection_id: INJ-20261008-015
+  working_set_sha256: 9feb7312743d5dcc4de76f507c52be6770c35614ec8b1228d306e03178df31d5
+- agree: true
+  auditor_A:
+    injection_ops:
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 2
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-APP-HEAP-PRESSURE
+    - FM-HOST-MEM-PRESSURE
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 2
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-APP-HEAP-PRESSURE
+    - FM-HOST-MEM-PRESSURE
+  case_id: B-02
+  disposition: accepted
+  source_injection_id: INJ-20261008-016
+  working_set_sha256: a0fafe7474357173747b8118a8ffdb190aa56aa73f38a519c4616ce18accac08
+- agree: true
+  auditor_A:
+    injection_ops:
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 1
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-APP-ENDPOINT-SLOW
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 1
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-APP-ENDPOINT-SLOW
+  case_id: B-03
+  disposition: accepted
+  source_injection_id: INJ-20261008-017
+  working_set_sha256: 259642afad0449bfec0b98bee62cf5753e103cccc3ff3fdca43bdda5b8c8af26
+- agree: true
+  auditor_A:
+    injection_ops:
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 1
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-APP-ENDPOINT-SLOW
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 1
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-APP-ENDPOINT-SLOW
+  case_id: B-04
+  disposition: accepted
+  source_injection_id: INJ-20261008-018
+  working_set_sha256: ac0c67ed6b81379fd5b81290bf257523ce9425f0de7e1cdbb76d0708bb69f365
+- agree: true
+  auditor_A:
+    injection_ops:
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 1
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-APP-HEAP-PRESSURE
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 1
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-APP-HEAP-PRESSURE
+  case_id: B-05
+  disposition: accepted
+  source_injection_id: INJ-20261008-019
+  working_set_sha256: a02367c883d254980743d36b59f58eccf7fe1fedb7f0979721a9cb270cebbd7d
+- agree: true
+  auditor_A:
+    injection_ops:
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 1
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-HOST-MEM-PRESSURE
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 1
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-HOST-MEM-PRESSURE
+  case_id: B-06
+  disposition: accepted
+  source_injection_id: INJ-20261008-020
+  working_set_sha256: 4252904e1550ddfe9ea55c4e14e05edd2ae5257e7af2420883a9748cd2f47c0e
+- agree: true
+  auditor_A:
+    injection_ops:
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 1
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-DB-INSTANCE-DOWN
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 1
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-DB-INSTANCE-DOWN
+  case_id: B-07
+  disposition: accepted
+  source_injection_id: INJ-20261008-021
+  working_set_sha256: 389df014596df88ecd7fac9bb84cf1a1054e5c56e1f825c6ca8a0b4a2b7a5729
+- agree: true
+  auditor_A:
+    injection_ops:
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 3
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-DB-INSTANCE-DOWN
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 1
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-DB-INSTANCE-DOWN
+  case_id: B-08
+  disposition: accepted
+  source_injection_id: INJ-20261008-022
+  working_set_sha256: 223b57f5580beb1cab51a8c6eef9347d81a03e4c91766839263c50556a841395
+- agree: true
+  auditor_A:
+    injection_ops:
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 1
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-APP-ENDPOINT-SLOW
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 1
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-APP-ENDPOINT-SLOW
+  case_id: B-09
+  disposition: accepted
+  source_injection_id: INJ-20261008-023
+  working_set_sha256: d4df7ce1477a092f0af6ebfdd28c43749adf117149ae68d133c62051557c1277
+- agree: true
+  auditor_A:
+    injection_ops:
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 1
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-APP-HEAP-PRESSURE
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 1
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-APP-HEAP-PRESSURE
+  case_id: B-10
+  disposition: accepted
+  source_injection_id: INJ-20261008-024
+  working_set_sha256: b07655dfef25b7f2adf2edbe0e73d43603232619db7165fd55d955e37a97b0ca
+- agree: true
+  auditor_A:
+    injection_ops:
+    - remove_object
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 2
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-HOST-MEM-PRESSURE
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 1
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-HOST-MEM-PRESSURE
+  case_id: B-11
+  disposition: accepted
+  source_injection_id: INJ-20261008-025
+  working_set_sha256: 0bd0de8567970990fb586ddc4b0ff20a744543764967ce89bbb76ad1dad79c34
+- agree: true
+  auditor_A:
+    injection_ops:
+    - remove_relation
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 2
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-APP-ENDPOINT-SLOW
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 1
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-APP-ENDPOINT-SLOW
+  case_id: B-12
+  disposition: accepted
+  source_injection_id: INJ-20261008-026
+  working_set_sha256: 765048c475d0188bbf3c0d695a695cd3af363dc8c87edb8207df10a9f5f835f2
+- agree: true
+  auditor_A:
+    injection_ops:
+    - add_object
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 2
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-HOST-MEM-PRESSURE
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 1
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-HOST-MEM-PRESSURE
+  case_id: B-13
+  disposition: accepted
+  source_injection_id: INJ-20261008-027
+  working_set_sha256: f04fee9386d9ac1df30609fef09cf5e4dddb58128ce8088722a37030b764a8ea
+- agree: true
+  auditor_A:
+    injection_ops:
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 3
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-DB-INSTANCE-DOWN
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 1
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-DB-INSTANCE-DOWN
+  case_id: B-14
+  disposition: accepted
+  source_injection_id: INJ-20261008-028
+  working_set_sha256: 01a988fdb4458012ae11b8eaf345df2bf10ba11b7cef59dd285271863869bffb
+- agree: true
+  auditor_A:
+    injection_ops:
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 2
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-APP-ENDPOINT-SLOW
+    - FM-APP-HEAP-PRESSURE
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 2
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-APP-ENDPOINT-SLOW
+    - FM-APP-HEAP-PRESSURE
+  case_id: D-01
+  disposition: accepted
+  source_injection_id: INJ-20261008-029
+  working_set_sha256: 90e647ba9d602efe09a0f05c2af50a4f5a29844a8bbdb461c33ecb9d0fa6e935
+- agree: true
+  auditor_A:
+    injection_ops:
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 2
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-APP-ENDPOINT-SLOW
+    - FM-HOST-MEM-PRESSURE
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 2
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-APP-ENDPOINT-SLOW
+    - FM-HOST-MEM-PRESSURE
+  case_id: D-02
+  disposition: accepted
+  source_injection_id: INJ-20261008-030
+  working_set_sha256: aad584ff04f9dec192684df7340fdfa24250df36a6127972bca1f105c4623947
+- agree: true
+  auditor_A:
+    injection_ops:
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 2
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-APP-ENDPOINT-SLOW
+    - FM-HOST-MEM-PRESSURE
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 2
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-APP-ENDPOINT-SLOW
+    - FM-HOST-MEM-PRESSURE
+  case_id: D-03
+  disposition: accepted
+  source_injection_id: INJ-20261008-031
+  working_set_sha256: 775b6af25087c44af7ab067225645f612c229f83154cf00cd35ead83ee055bae
+- agree: true
+  auditor_A:
+    injection_ops:
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 2
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-APP-ENDPOINT-SLOW
+    - FM-DB-INSTANCE-DOWN
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 2
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-APP-ENDPOINT-SLOW
+    - FM-DB-INSTANCE-DOWN
+  case_id: D-04
+  disposition: accepted
+  source_injection_id: INJ-20261008-032
+  working_set_sha256: 023454e954f0917297207bceb1e212996cabc6c4a826b738ecd393c931fc83bd
+- agree: true
+  auditor_A:
+    injection_ops:
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 2
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-APP-ENDPOINT-SLOW
+    - FM-APP-HEAP-PRESSURE
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 2
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-APP-ENDPOINT-SLOW
+    - FM-APP-HEAP-PRESSURE
+  case_id: D-05
+  disposition: accepted
+  source_injection_id: INJ-20261008-033
+  working_set_sha256: 4abc1dd262d94b7ceaa4004c8374bced4dfd061686a2c78ec3443cc9f5f1f225
+- agree: true
+  auditor_A:
+    injection_ops:
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 2
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-APP-ENDPOINT-SLOW
+    - FM-DB-INSTANCE-DOWN
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 2
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-APP-ENDPOINT-SLOW
+    - FM-DB-INSTANCE-DOWN
+  case_id: D-06
+  disposition: accepted
+  source_injection_id: INJ-20261008-034
+  working_set_sha256: 128c3f0116ddeb0c4f5647d7b9ccf5cb38613910a09dae46d6125bfc77da1215
+- agree: true
+  auditor_A:
+    injection_ops:
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 1
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-APP-HEAP-PRESSURE
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 1
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-APP-HEAP-PRESSURE
+  case_id: N-01
+  disposition: accepted
+  source_injection_id: INJ-20261008-035
+  working_set_sha256: d0079e0995c179b9a6b15b5bd0cb89acef25b1d6abe8dd5638101705460a7c66
+- agree: true
+  auditor_A:
+    injection_ops:
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 1
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-APP-HEAP-PRESSURE
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 1
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-APP-HEAP-PRESSURE
+  case_id: N-02
+  disposition: accepted
+  source_injection_id: INJ-20261008-036
+  working_set_sha256: fa3ee13a64a354fa35ff8a8a31760bca7b9826afad10d4059c5d2a7d82b8d72b
+- agree: true
+  auditor_A:
+    injection_ops:
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 1
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-HOST-MEM-PRESSURE
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 1
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-HOST-MEM-PRESSURE
+  case_id: N-03
+  disposition: accepted
+  source_injection_id: INJ-20261008-037
+  working_set_sha256: 6e43c279f901bfb20d9658865028967915782aa78aea6bce80004d61f141be9d
+- agree: true
+  auditor_A:
+    injection_ops:
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 1
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-HOST-MEM-PRESSURE
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 1
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-HOST-MEM-PRESSURE
+  case_id: N-04
+  disposition: accepted
+  source_injection_id: INJ-20261008-038
+  working_set_sha256: 8182c9c24ffc404068d1b9b126c4fd92fcfffe14b881bf3ac0b5528a49a08238
+- agree: true
+  auditor_A:
+    injection_ops:
+    - remove_relation
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 4
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-DB-INSTANCE-DOWN
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 1
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-DB-INSTANCE-DOWN
+  case_id: N-05
+  disposition: accepted
+  source_injection_id: INJ-20261008-039
+  working_set_sha256: ef6a7e12bfe2481c671a4e50b2474d31df0d540ea7ab996b9fab598075764fd5
+- agree: true
+  auditor_A:
+    injection_ops:
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 1
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-APP-ENDPOINT-SLOW
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 1
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-APP-ENDPOINT-SLOW
+  case_id: N-06
+  disposition: accepted
+  source_injection_id: INJ-20261008-040
+  working_set_sha256: 7a47cbcd536b806f3af0048ee49ca090465a9adbdd799cfb9c7bd0ccc4451a18
+- agree: true
+  auditor_A:
+    injection_ops:
+    - noop
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 0
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict: []
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 0
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict: []
+  case_id: Z-01
+  disposition: accepted
+  source_injection_id: INJ-20261008-041
+  working_set_sha256: ae39ab5390b3b470acdf2983bbf81ee90064400787d098fefa6430e0dd42f11a
+- agree: true
+  auditor_A:
+    injection_ops:
+    - noop
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 0
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict: []
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 0
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict: []
+  case_id: Z-02
+  disposition: accepted
+  source_injection_id: INJ-20261008-042
+  working_set_sha256: ae39ab5390b3b470acdf2983bbf81ee90064400787d098fefa6430e0dd42f11a
+- agree: true
+  auditor_A:
+    injection_ops:
+    - noop
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 0
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict: []
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 0
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict: []
+  case_id: Z-03
+  disposition: accepted
+  source_injection_id: INJ-20261008-043
+  working_set_sha256: ae39ab5390b3b470acdf2983bbf81ee90064400787d098fefa6430e0dd42f11a
+- agree: true
+  auditor_A:
+    injection_ops:
+    - noop
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 0
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict: []
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 0
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict: []
+  case_id: Z-04
+  disposition: accepted
+  source_injection_id: INJ-20261008-044
+  working_set_sha256: ae39ab5390b3b470acdf2983bbf81ee90064400787d098fefa6430e0dd42f11a
+- agree: true
+  auditor_A:
+    injection_ops:
+    - noop
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 0
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict: []
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 0
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict: []
+  case_id: Z-05
+  disposition: accepted
+  source_injection_id: INJ-20261008-045
+  working_set_sha256: ae39ab5390b3b470acdf2983bbf81ee90064400787d098fefa6430e0dd42f11a
+- agree: true
+  auditor_A:
+    injection_ops:
+    - noop
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 0
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict: []
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 0
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict: []
+  case_id: Z-06
+  disposition: accepted
+  source_injection_id: INJ-20261008-046
+  working_set_sha256: ae39ab5390b3b470acdf2983bbf81ee90064400787d098fefa6430e0dd42f11a
+- agree: true
+  auditor_A:
+    injection_ops:
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 1
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-DB-INSTANCE-DOWN
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 1
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-DB-INSTANCE-DOWN
+  case_id: T-01
+  disposition: accepted
+  source_injection_id: INJ-20261008-047
+  working_set_sha256: 389df014596df88ecd7fac9bb84cf1a1054e5c56e1f825c6ca8a0b4a2b7a5729
+- agree: true
+  auditor_A:
+    injection_ops:
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 3
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-DB-INSTANCE-DOWN
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 1
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-DB-INSTANCE-DOWN
+  case_id: T-02
+  disposition: accepted
+  source_injection_id: INJ-20261008-048
+  working_set_sha256: 01a988fdb4458012ae11b8eaf345df2bf10ba11b7cef59dd285271863869bffb
+- agree: true
+  auditor_A:
+    injection_ops:
+    - remove_object
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 4
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-DB-INSTANCE-DOWN
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 1
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-DB-INSTANCE-DOWN
+  case_id: T-03
+  disposition: accepted
+  source_injection_id: INJ-20261008-049
+  working_set_sha256: d187ecd9fa9140be697336a0c65e2dfd45b92f99f9ef307806110feab7d84b60
+- agree: true
+  auditor_A:
+    injection_ops:
+    - add_object
+    - add_relation
+    - set_fact
+    method: 注入算子集合（canonical_injection 的 op/target）
+    n_injections: 4
+    role: injector（我方；D35 在冻结基底上构造注入差分）
+    sees: 注入清单（cases[].injections）
+    verdict:
+    - FM-DB-INSTANCE-DOWN
+  auditor_B:
+    method: confirmable()：对工作集逐条求值 fault-modes.yaml#fault_modes[].detect
+    n_confirmable: 1
+    role: machine（独立复算，不看注入算子）
+    sees: query + CCF（由基底 + 注入差分重建的工作集）
+    verdict:
+    - FM-DB-INSTANCE-DOWN
+  case_id: T-04
+  disposition: accepted
+  source_injection_id: INJ-20261008-050
+  working_set_sha256: dbb4867ea474c897cb3b564126e5fe27df3804c2e604ca607b3d6080718a2723
+meta:
+  builder: shared/collect/m5_inject_build.py
+  case_count: 50
+  human_review:
+    annotator_A: null
+    annotator_B: null
+    limitation: ★ 机器角色**不能替代人类**：B 的判据（fault-modes.detect）与 A 的派生同源，两个角色联合只能证明「注入产生了预期可观测、且两个独立实现得出同一结论」；**不能**证明「题目本身对模型可判」。任何对外结论都必须带上这条局限。
+    note: ★ 机器侧（auditor_B）**不能替代人工 B**：它的判据（fault-modes.detect）与 A 的派生同源，只能证明「注入产生了预期可观测」；人工
+      B 要证明的是「题目本身可判」。两个人工位必须是**不同**的自然人，并各自记录 reviewed_at 与结论。
+    status: waived
+    waived_by: 用户裁定（2026-10-09）：不需要双人复核，由两个机器角色完成
+  mechanical_only: true
+  role: gold_audit 台账：docs/06 §1.4 步骤 3「双人复核」的持久化。A 只拿注入清单写 expect_*；B 只拿 query +
+    CCF 独立给根因；不一致 ⇒ 该用例作废或修正。
+  spec: docs/06-评测设计（A-B对照）.md:112-115
+schema: m5-gold-audit/1

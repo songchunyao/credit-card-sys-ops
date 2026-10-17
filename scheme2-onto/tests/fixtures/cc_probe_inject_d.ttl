@@ -1,0 +1,34 @@
+# ============================================================================
+# tmp/cc_probe_inject_d.ttl —— 规则可触发性证明的「注入夹具 D」（非契约数据）
+# ----------------------------------------------------------------------------
+# 目的：r02（数据库慢查询 F2）在真机上产 0，因为真机 CCF 快照**没有采集**
+#   `db.query.mean_exec_ms`（只采了 db.query.max_exec_ms），而契约 FM-DB-SLOW-QUERY
+#   的 detect 正是 `db.query.mean_exec_ms > threshold:mean_exec_ms_light#warning`
+#   （该档位已标定：warning=1000 ⇒ 可以真实触发，不需要编造阈值）。
+# 本夹具按 ABox 投影器的既有形态，补一条**采集器本应产出**的观测：
+#   · Query(sql-1011272715).mean_exec_ms = 5000        （> 1000 ⇒ 判据成立）
+#   · Evidence(obs-900001) 带 8 个属性（ccfId/ccfType/ccfSnapshotId/capturedAt/
+#     metricCode/probe/rawUnit/rawValue/recordId/status，与投影器输出同形）
+# ★ 阈值仍是契约值 1000（TBox 引用），夹具不含任何阈值。
+# ★ 测试夹具，不进 TBox、不进交付本体。
+# ============================================================================
+@prefix cc:  <https://credit-card-ops.ai/onto/topology#> .
+@prefix ccm: <https://credit-card-ops.ai/onto/metric#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<https://credit-card-ops.ai/onto/inst/query/sql-1011272715>
+    ccm:meanExecMs  "5000"^^xsd:decimal ;
+    cc:hasEvidence  <https://credit-card-ops.ai/onto/inst/obs-900001> .
+
+<https://credit-card-ops.ai/onto/inst/obs-900001>
+    a cc:Evidence ;
+    cc:ccfId          "obs-900001" ;
+    cc:ccfType        "Evidence" ;
+    cc:ccfSnapshotId  "test-fixture-inject-d" ;
+    cc:capturedAt     "2026-09-28T21:47:15.124047"^^xsd:dateTime ;
+    cc:metricCode     "db.query.mean_exec_ms"^^xsd:string ;
+    cc:probe          "gaussdb.collect"^^xsd:string ;
+    cc:rawUnit        "ms"^^xsd:string ;
+    cc:rawValue       "5000"^^xsd:string ;
+    cc:recordId       "obs-900001"^^xsd:string ;
+    cc:status         "collected"^^xsd:string .

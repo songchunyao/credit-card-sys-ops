@@ -1,0 +1,123 @@
+# ═══════════════════════════════════════════════════════════════════════════
+#  Dockerfile.collect —— 采集层镜像（数据面 :8187）
+# ═══════════════════════════════════════════════════════════════════════════
+#  内容：本仓采集层（`dist/collect-layer/`）的四层探针（gaussdb / os / storage / tpops）
+#        源出同一作者的既有工作区 upstream-ops-agent（该树现已并入本仓）
+#        + container / app 两个本项目专用探针
+#        + storages/dorado_collector.py + data/（存储层规则与动作映射）
+#  不含：知识面（main.py / knowledge_api.py / app_knowledge.py / twin_view.py /
+#        smtp_mail.py / es_log_search.py）—— 见 shared/deploy/port/collect-layer.manifest.yaml
+#
+#  构建（构建上下文 = 仓库根）：
+#      docker build -f Dockerfile.collect -t cc-ops/collect:<tag> .
+#
+#  ★ 三个硬约束（都来自真实事故，不是风格偏好）：
+#    1. `service/` 与 `storages/` 必须**同级**，且 `data/` 与其同级 ——
+#       storage_probe.py 用「本文件上溯 3 级 + /storages」定位 dorado 采集器，
+#       目录层级是**运行期契约**，拍平会让存储层探针找不到模块。
+#    2. 镜像内**零密钥**：全部配置由运行时 env_file 注入（见 deploy/.env.template）。
+#    3. 依赖全部为纯 Python wheel（含 async_gaussdb）⇒ **不装** build-essential；
+#       实测装它要多拉 77.6 MB deb 且占 323 MB，是构建耗时的主要来源。
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ── 阶段 1：装依赖 ─────────────────────────────────────────────────────
+# 基底 Python 3.12：与采集层既有的 python:3.12-slim 及生产 venv（实测 3.12.3）一致
+FROM python:3.12-slim AS builder
+
+# pip 源：本环境在国内，默认 PyPI 极慢（实测 63 KB/s）
+ARG PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
+ARG PIP_TRUSTED_HOST=mirrors.aliyun.com
+ENV PIP_INDEX_URL=${PIP_INDEX_URL} \
+    PIP_TRUSTED_HOST=${PIP_TRUSTED_HOST} \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /build
+# 钉版依赖 19 条（`dist/collect-layer/requirements.txt` 逐字，与 collect-layer.manifest.yaml 登记一致）
+COPY dist/collect-layer/requirements.txt .
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+
+
+# ── 阶段 2：运行镜像 ───────────────────────────────────────────────────
+FROM python:3.12-slim
+
+# ★ ARG 不跨 build stage 生效，必须在**每个**用到它的阶段重新声明。
+ARG APT_MIRROR=mirrors.ustc.edu.cn
+
+LABEL org.opencontainers.image.title="CC-Ops Collect Layer" \
+      org.opencontainers.image.description="信用卡跨层运维 · 采集层（数据面 :8187）" \
+      org.opencontainers.image.source="https://github.com/songchunyao/credit-card-sys-ops"
+
+# ── OS 层采集依赖 ──
+#   sshpass   : OS 探针通过 SSH 到 GaussDB 各节点（口令模式必需）
+#   openssh   : ssh 客户端
+#   curl      : HEALTHCHECK 与探活
+#   tini      : PID 1 信号转发（让 uvicorn 收到 SIGTERM 优雅退出）
+#
+# 换源与安装合并为一个 RUN，并**断言换源真的生效**：
+#   若 ${APT_MIRROR} 未定义（ARG 不跨 stage！）sed 会把域名删成 "http:///debian"，
+#   apt 会**静默地什么都装不上**，报错只显示 "Unable to locate package"，极难定位。
+RUN sed -i "s|deb.debian.org|${APT_MIRROR}|g" /etc/apt/sources.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true \
+    && if grep -rqs "deb.debian.org" /etc/apt/sources.list /etc/apt/sources.list.d/ ; then \
+         echo "错误：apt 换源未生效（APT_MIRROR='${APT_MIRROR}'），拒绝继续构建"; exit 1; \
+       fi \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        sshpass openssh-client curl tini ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Python 依赖（从 builder 复制，不带编译工具链）──
+COPY --from=builder /install /usr/local
+
+# ── 应用代码（布局即契约，见文件头硬约束 1）──
+WORKDIR /app
+COPY dist/collect-layer/service/    /app/service/
+COPY dist/collect-layer/storages/   /app/storages/
+COPY dist/collect-layer/data/       /app/data/
+COPY dist/collect-layer/.env.example /app/.env.example
+
+# 去掉 __pycache__（构建机上可能带过来，与镜像内 Python 版本不匹配时会出错）
+RUN find /app -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+
+# ── 构建期闭包断言（★ 2026-10-12 因一次真实事故新增）────────────────────────
+# 事故：本镜像曾**缺 service/collect_sim.py** —— `collect-layer.manifest.yaml` 的 W1 条
+#   误判它是"软依赖"、打包器据此排除，而 `gaussdb_probe.py:630-636` 在**正常 live 路径**
+#   上就调用 `_sim.connect_async(...)`（collect_sim 是"经它直通真实实现"的 tap 层）。
+#   后果：**gaussdb 层全部探针段产出为 0**（实测 total_facts 8，应为 505），
+#   而 `/health` 的 `gaussdb.ok` **仍然是 true**（它走另一条查询路径）
+#   ⇒ "数据库连得上"与"采集面能用"被混为一谈，排查方向会完全跑偏。
+# ⇒ 把"必需文件在位"变成**构建期断言**：缺件即构建失败，而不是运行期静默采空。
+#   ★ 断言的是"文件在位 + 模块可解析"，不是"功能正常"；功能由
+#     deploy/verify_deploy.py 的运行期断言（采集面须产出业务段事实）兜住，两者互补。
+RUN set -e; \
+    for f in service/app_collect.py service/collect_api.py service/common.py \
+             service/collect_sim.py service/probes/__init__.py service/probes/gaussdb_probe.py \
+             storages/dorado_collector.py data/rules/default.yaml data/rules/advanced.yaml \
+             data/actions/action_map.yaml data/runbooks/templates.yaml ; do \
+      if [ ! -f "/app/$f" ]; then echo "错误：采集层闭包缺件 /app/$f"; exit 1; fi; \
+    done; \
+    PYTHONPATH=/app python -c "import importlib.util,sys; sys.exit(0 if importlib.util.find_spec('service.collect_sim') else 1)" \
+      || { echo "错误：service.collect_sim 不可解析（探针 live 路径依赖它：gaussdb_probe.py:635）"; exit 1; }; \
+    echo "采集层闭包齐备（11 件在位 + collect_sim 可解析）"
+
+# ── 运行用户（非 root）──
+# OS 探针要 SSH 出去，私钥挂载点需可读（见 deploy/compose.yml 的 GAUSSDB_SSH_KEY 说明）
+RUN groupadd -g 10001 cco && useradd -u 10001 -g cco -m -s /bin/bash cco \
+    && chown -R cco:cco /app
+USER cco
+
+# ── 端口与探针 ──
+# 8187：本项目契约端口（shared/deploy/targets.yaml#collection.local_url）
+ENV SVC_PORT=8187 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app
+
+EXPOSE 8187
+
+HEALTHCHECK --interval=30s --timeout=6s --start-period=25s --retries=3 \
+    CMD curl -fsS "http://127.0.0.1:${SVC_PORT}/health" >/dev/null || exit 1
+
+ENTRYPOINT ["/usr/bin/tini", "--"]
+# 用 shell 形式以展开 ${SVC_PORT}；exec 保证信号直达 uvicorn
+CMD ["sh", "-c", "exec python -m uvicorn service.app_collect:app --host 0.0.0.0 --port ${SVC_PORT} --workers 1"]

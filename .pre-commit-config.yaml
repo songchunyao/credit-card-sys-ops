@@ -1,0 +1,42 @@
+# Pre-commit hooks for this repository.
+#
+# Install once:      pip install pre-commit && pre-commit install
+# Run over the tree: pre-commit run --all-files
+#
+# The hooks below are deliberately small and offline-friendly: they fix
+# whitespace/line-ending noise (which several offline checks are sensitive to,
+# because evidence digests are content-addressed) and stop a credential from
+# ever being committed. Heavier linters are intentionally left out so that
+# `pre-commit run --all-files` stays fast enough to be used routinely.
+minimum_pre_commit_version: "3.5.0"
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=2048"]
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+        args: ["--markdown-linebreak-ext=md"]
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+      - id: check-yaml
+        args: ["--allow-multiple-documents"]
+      - id: check-json
+      # The TTL/Turtle fixtures and the JSONL result files are intentionally
+      # excluded from the two structured-data checks below.
+      exclude: |
+        (?x)^(
+            scheme2-onto/tests/fixtures/.*\.ttl|
+            .*\.jsonl|
+            .*\.difypkg
+        )$
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.4
+    hooks:
+      - id: gitleaks
+        args: ["--config=.gitleaks.toml"]

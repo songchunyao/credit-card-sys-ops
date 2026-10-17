@@ -1,0 +1,487 @@
+# =============================================================================
+# m5-cases.yaml — M5 判决集（50 条）前置契约
+#
+# 为什么要有这份契约
+#   docs/06 已裁定「50 条、族 14/14/6/6/4、分母固定 50、abstain 单列、只取第一个
+#   候选、分层分族分别报、只能对 >=20pp 下结论」，但 50 条用例本身的**结构**没有
+#   任何单一权威落点：W18 判据器与 W19 运行台各自实现了字段校验，却没有任何文件
+#   声明「用例文件必须长什么样」。没有契约层，录制方（**我方** · 注入差分构造 + 题面撰写）
+#   无处可依，门禁也无从判「缺什么」。
+#   本文件是那一层：用例文件的结构契约 + 判据口径 + 填表责任分工 + 逐条出处。
+#
+# 本文件不做什么
+#   - 不含任何一条真实用例、不含任何故障数据、不含任何指标数值。
+#   - 不重新定义任何已有字段名；18 个既有字段逐字沿用 docs/06 §1.2。
+#   - 不放宽 shared/verify/m5/*（W18）与 shared/deploy/smoke/m5_run.py（W19）的
+#     既有判据。本契约自带门禁 shared/verify/m5_cases_gate.py 只做**新增**检查。
+#   - 冲突时以 docs/06 原文为准；本文件的每处引用都在 source / open_questions 登记。
+#
+# ★ 本文档不列自身滚动 sha256：标记用、不得 pin。
+#   任何门禁或报告不得引用本文件的滚动 sha256 做断言（否则每次编辑都自指失效）。
+# =============================================================================
+
+schema: m5-cases-contract/1
+
+meta:
+  version: "1.0.0"
+  doc_id: m5-cases
+  title: "M5 判决集契约（50 条用例）"
+  role: "M5 判决集的前置契约层：用例文件结构契约 + 判据口径 + 填表责任分工 + 出处"
+  file: shared/model/m5-cases.yaml
+  gate: shared/verify/m5_cases_gate.py
+  workorder_format: tmp/_m5_workorder_draft.md
+  self_sha_policy: "本文档不列自身滚动 sha256：标记用、不得 pin。"
+  consumers:
+    - "**我方**（按本契约在冻结基底上构造注入差分并录制用例）★ 2026-10-08 D35 校正（原写「用户自研故障注入工具的操作者」）"
+    - "shared/verify/m5_cases_gate.py（照本契约判用例文件是否可用）"
+    - "shared/verify/m5_judge.py（W18 判据器，见 §B 的既有字段名）"
+    - "shared/deploy/smoke/m5_run.py（W19 运行台，见 §A 的既有字段名）"
+
+  real_data_only:
+    rule: "用例内容必须来自真实故障注入、不得编造"
+    restated: "50 条全部按真实环境设计、不构造模拟数据；真值由我方在冻结真实采集基底上构造的注入差分派生（D35），并经机器可观测事实 + 用户确认，不由人读日志猜测。"
+    ruling_ref: "m00736（用户裁定）；docs/06 §8 M9、§9 U1/U7；★ 已由 D35（用户裁定 m12529）覆盖，见 docs/06:124-135 与 docs/00-总体设计与裁决记录.md:502"
+    source: "docs/06:124-135"
+    verbatim_reason: "很多故障有爆炸范围和故障传导，很难模拟"
+    enforcement:
+      - "正式判决集不得出现 meta.synthetic: true；出现 ⇒ 门禁 FAIL。"
+      - "每条用例必须带 source_injection_id（本契约引入），指向 D36 固化事实 YAML（`m5-input-facts.yaml`，落点 `shared/model/`）中该用例的注入差分条目。"
+      - "缺溯源锚点的用例不得进入正式测量；门禁按 FAIL 处理，而不是 WARN。"
+    boundary: "本契约只能断言「有溯源锚点、且未声明合成」；它无法证明锚点背后的注入差分真的被构造过。该证明由 D36/D41 固化 YAML 的三哈希与用户确认承担（D35 下无回滚责任、无外部注入方）。"
+
+  layer_semantics:
+    layers: ["App", "Runtime", "Data"]
+    source: "shared/model/fault-modes.yaml（14 个故障模式的 layer 只取这三值）"
+    judge_lexicon: "shared/verify/m5/judge.py:51-55 LAYER_LEXICON（版本 L-LAYER v1，含中文别名）"
+    discipline: "用例文件的 expect_layer / scope 一律用这三值；中文别名只归判据器解析答案时使用。"
+
+# -----------------------------------------------------------------------------
+# 1. 判决集构成（逐字取自 docs/06，不自造任何比例）
+# -----------------------------------------------------------------------------
+suite:
+  total: 50
+  total_source: "docs/06:36"
+  fixed_denominator:
+    value: 50
+    statement: "同一份 50 条喂所有组（含 KG-T），分母固定 50"
+    source: "docs/06:38"
+    effect: "分母不随实际回答条数、也不随 abstain 数变化。"
+  single_snapshot_input:
+    rule: "各组唯一知识输入是同一批 CCF（同一 snapshotId）⇒ 整个用例集只能绑定 1 个 snapshot_id"
+    source: "docs/00-总体设计与裁决记录.md:131（C1 单一输入）"
+    exception: "KG-T-dyn 的动态补采属组侧行为，不进主判据（docs/06:281）；不构成第二张快照。"
+  families:
+    - {code: C1, prefix: A, count: 14, measures: "单层故障能否定位到层 + 对象", dimensions: ["D1 现象", "D2 根因"], source: "docs/06:30"}
+    - {code: C2, prefix: B, count: 14, measures: "7 条故障链 ×2，能否给出正确传播路径", dimensions: ["D2 根因", "路径 F1"], source: "docs/06:31"}
+    - {code: C3, prefix: D, count: 6, measures: "3 对 discriminator，能否给出区分依据", dimensions: ["D3 证据"], source: "docs/06:32"}
+    - {code: C4, prefix: N, count: 6, measures: "必须用某指标正常才能定罪（含 F5 排除法）", dimensions: ["D3 证据", "D5 风险"], source: "docs/06:33"}
+    - {code: C5, prefix: Z, count: 6, measures: "无故障时不得虚构", dimensions: ["false_claim"], source: "docs/06:34"}
+    - {code: C6, prefix: T, count: 4, measures: "F7 类，需时间窗共现", dimensions: ["D3 证据"], source: "docs/06:35"}
+  families_impl: "shared/verify/m5/contract.py:40-48 FAMILIES / FAMILY_COUNTS_EXPECTED（W18）——本契约与它必须逐字一致，不一致即 FAIL，杜绝双真相源。"
+  difficulty:
+    declared_counts: {easy: 16, medium: 20, hard: 14}
+    declared_source: "docs/06:85-87"
+    declared_total_check: "16 + 20 + 14 = 50，与 docs/06:36 的总数一致。"
+    tiers:
+      - code: easy
+        declared: 16
+        composition: "C1 全部 + C5 全部"
+        source: "docs/06:85"
+      - code: medium
+        declared: 20
+        composition: "C2 的 F1/F3/F4/F6 + C3 全部"
+        source: "docs/06:86"
+      - code: hard
+        declared: 14
+        composition: "C2 的 F2/F5/F7 + C4 全部 + C6 全部"
+        source: "docs/06:87"
+    recompute:
+      why: "docs/06 §1.3 的构成文字与它自己声明的 16/20/14 算不出来。这不是本契约的推定，是逐字算式复算的结果；W18 也独立复算到同一结论（m5_judge.py:1182-1183）。"
+      operands:
+        - {tier: easy, term: "C1 全部", family: C1, kind: family_all, value: 14, source: "docs/06:30"}
+        - {tier: easy, term: "C5 全部", family: C5, kind: family_all, value: 6, source: "docs/06:34"}
+        - {tier: medium, term: "C2 的 F1/F3/F4/F6", family: C2, kind: chain_subset, chains: [F1, F3, F4, F6], per_chain: 2, value: 8, source: "docs/06:31 + docs/06:86"}
+        - {tier: medium, term: "C3 全部", family: C3, kind: family_all, value: 6, source: "docs/06:32"}
+        - {tier: hard, term: "C2 的 F2/F5/F7", family: C2, kind: chain_subset, chains: [F2, F5, F7], per_chain: 2, value: 6, source: "docs/06:31 + docs/06:87"}
+        - {tier: hard, term: "C4 全部", family: C4, kind: family_all, value: 6, source: "docs/06:33"}
+        - {tier: hard, term: "C6 全部", family: C6, kind: family_all, value: 4, source: "docs/06:35"}
+      per_chain_note: "C2 = 7 条故障链 ×2 ⇒ 每条链 2 条的乘数逐字取自 docs/06:31，不由本契约发明。"
+      results:
+        - {tier: easy, computed: 20, declared: 16, delta: 4}
+        - {tier: medium, computed: 14, declared: 20, delta: -6}
+        - {tier: hard, computed: 16, declared: 14, delta: -2}
+      totals: "computed 合计 20 + 14 + 16 = 50；declared 合计 16 + 20 + 14 = 50。总和一致，只有分层归属不一致。"
+      gate_rule: "门禁执行本表算式并断言 computed 与 declared 不等；若将来 docs/06 或本契约改动使二者相等，门禁报 FAIL 提示 OQ-M5-01 已过期，不得静默通过。"
+  tiers_are_marginal_only:
+    rule: "用例集只能断言边际构成（族 14/14/6/6/4 与难度 16/20/14）；由于 §1.3 不自洽，任何「族 × 难度」联合构成都不可断言。"
+    source: "docs/06:85-87 与 shared/verify/m5_judge.py:1182-1183"
+  anti_cheat:
+    rationale:
+      - "没有 C5，一个什么都说的高 recall 模型能拿到高分。"
+      - "没有 C4，一个只看表层指标的模型能蒙对大部分单层用例，却无法处理排除法。"
+    source: "docs/06:38-40"
+    gate_rule: "用例文件必须同时存在 C4（N-*）与 C5（Z-*）用例；缺任一 ⇒ FAIL。"
+
+# -----------------------------------------------------------------------------
+# 2. 单条用例的字段表
+#    18 个既有字段逐字沿用 docs/06 §1.2 = shared/verify/m5/contract.py:58-62
+#    的 CASE_FIELDS；一处改名都算 FAIL。
+# -----------------------------------------------------------------------------
+case_schema:
+  source_of_truth: "shared/verify/m5/contract.py:58-82（W18，唯一装载/校验实现）；本契约不复制实现，只在门禁里 import 它。"
+  loader: "shared/verify/m5/contract.py:131-172 load_case_document() → (raw_cases, meta, errors)"
+  validator: "shared/verify/m5/contract.py:209-360 validate_cases(raw_cases, meta, expect_full_suite=..., strict=...)"
+  id_prefix_rule: "id 必须匹配 ^<族前缀>[-_]?\\d+$（族前缀见 §1 families.prefix），例：A01、B02、N-3。"
+  fields:
+    - {name: id, type: str, required: true, filled_by: case_author, introduced_by: "docs/06:46", semantics: "用例 id；全局唯一；前缀决定族", gate: "唯一 + 前缀与 cls 一致"}
+    - {name: cls, type: str, required: true, enum: [A, B, D, N, Z, T], filled_by: case_author, introduced_by: "docs/06:47", semantics: "用例族编码", gate: "越界 ⇒ FAIL"}
+    - {name: chain, type: str, required: true, filled_by: injector, introduced_by: "docs/06:48", semantics: "故障链 F1..F7", source: "docs/06:48", gate: "∈ fault-modes.yaml 出现的链集合"}
+    - {name: scope, type: "list[str]", required: true, filled_by: case_author, introduced_by: "docs/06:49", semantics: "涉及层（docs/06 原文注：用于分层统计）", gate: "每项 ∈ App/Runtime/Data"}
+    - {name: type, type: str, required: true, filled_by: case_author, introduced_by: "docs/06:50", semantics: "用例类型（如 跨层定界）"}
+    - {name: query, type: str, required: true, filled_by: case_author, introduced_by: "docs/06:51-53", semantics: "喂给被测组的提问，逐字进入 answers.jsonl 的 question"}
+    - {name: injected, type: "list[str]", required: true, filled_by: injector, introduced_by: "docs/06:54", semantics: "本次实际注入的全部故障模式（含次生）", source: "docs/06:106-110", gate: "每项 ∈ fault-modes.yaml 的 code 集合；族C5 允许显式空列表"}
+    - {name: expect_root_cause, type: str, required: true, filled_by: injector, introduced_by: "docs/06:55", semantics: "★ 唯一真根因（首发性，非次生）；族C5 用哨兵 NONE", source: "docs/06:104-110", gate: "非空；∈ fault-modes.yaml code ∪ {NONE}；NONE 只许族C5"}
+    - {name: expect_layer, type: str, required: true, explicit: true, filled_by: injector, introduced_by: "docs/06:56", semantics: "★ 显式期望层别（队长裁定：用例文件必须自带，不得由判据器猜）", source: "docs/06:56 与 docs/06:74", gate: "非空；∈ App/Runtime/Data ∪ {NONE}；NONE 只许族C5"}
+    - {name: expect_path, type: "list[str]", required: true, filled_by: injector, introduced_by: "docs/06:57", semantics: "期望传播链节点集合（故障模式 code 序列）", source: "docs/06:104-110", gate: "每项 ∈ fault-modes.yaml code 集合 ∪ {NONE}；族C5 允许空列表"}
+    - {name: expect_objects, type: "list[str]", required: true, filled_by: injector, introduced_by: "docs/06:58", semantics: "真机实例 id 列表（U6 默认方案：S5 开窗后一次只读采集导出，与用例集同一 snapshot）；只用表内 id", source: "docs/06:58 与 docs/06:110", gate: "每项必须是权威前缀表 shared/model/ccf.schema.json#x-id-prefix-by-type 的 12 类对象 id（W46 起硬判，不在表内 ⇒ E-CASES-OBJECT-UNKNOWN FAIL，见 shared/verify/m5_cases_gate.py:931-952）；证据事实 id 走 evidence_facts 栏"}
+    - {name: pos, type: "list[str]", required: true, filled_by: case_author, introduced_by: "docs/06:59", semantics: "命中即加分的关键词表", source: "docs/06:77", gate: "正则可编译（W18 已查，本门禁不重复实现）"}
+    - {name: neg, type: "list[str]", required: true, filled_by: case_author, introduced_by: "docs/06:60", semantics: "错误归因词表 ⇒ false_claim_rate", source: "docs/06:77", gate: "同上"}
+    - {name: nor, type: "list[str]", required: true, filled_by: case_author, introduced_by: "docs/06:61", semantics: "正常态词表（C4 排除法/C5 正常态用）", source: "docs/06:77", gate: "同上"}
+    - {name: evidence_facts, type: "list[str]", required: true, filled_by: injector, introduced_by: "docs/06:62", semantics: "期望被引用的 CCF 事实 id 集合 ⇒ D3 证据", source: "docs/06:78"}
+    - {name: detectors, type: "list[str]", required: true, filled_by: case_author, introduced_by: "docs/06:63", semantics: "辅助机判正则", source: "docs/06:79", gate: "非空 + 可编译"}
+    - {name: difficulty, type: str, required: true, enum: [easy, medium, hard], filled_by: case_author, introduced_by: "docs/06:64", semantics: "难度分层", source: "docs/06:83-87", gate: "越界 ⇒ FAIL；集内分布须符合 §1 difficulty.declared_counts"}
+    - {name: discriminator, type: str_or_null, required: true, nullable: true, filled_by: case_author, introduced_by: "docs/06:65", semantics: "族C3 的 3 对区分依据；其余族为 null", source: "docs/06:32 与 docs/06:65"}
+    - {name: synthetic, type: bool, required: false, nullable: true, filled_by: case_author, introduced_by: "★ 2026-10-09 补入 case_schema（原先只在 fill_plan 里要求显式赋值，case_schema.fields 未定义它 ⇒ 契约自相矛盾，已修）", semantics: "本用例是否夹具；正式判决集必须显式 false", gate: "普通模式 true ⇒ FAIL E-CASES-SYNTHETIC-CASE；夹具模式非 true ⇒ FAIL E-CASES-FIXTURE-FLAG"}
+  gold_audit_schema:
+    role: "docs/06 §1.4 步骤 3「双人复核」的**持久化台账**（文件级；路径见 case_level_meta_required.keys 的 gold_audit）"
+    spec: "docs/06-评测设计（A-B对照）.md:112-115"
+    note: "★ 逐用例字段 gold_audit 的定义**早于本节**（见 case_schema.contract_introduced_fields 的 gold_audit 条目）；本节只补充机检口径，不另立形状。"
+    required_case_keys: [annotator_a, annotator_b, root_cause_b, agreed, resolution, ts_utc]
+    machine_evidence_key: machine_check        # 机器证据（不是人工位）
+    required_auditor_keys: [role, sees, method, verdict]
+    independence_rule: "machine_check.a.sees 必须与 machine_check.b.sees **不同**（A 看注入清单；B 只看 query + CCF）⇒ 相同即伪独立复核"
+    agree_rule: "agreed 必须等于 (sorted(machine_check.a.verdict) == sorted(machine_check.b.verdict))；agreed=false 时 resolution 必须非空（写清作废/修正），且该用例不得进正式判决集"
+    human_slots_rule: "annotator_a / annotator_b 必须是**两个不同的自然人**（各记 id 与 reviewed_at）；机器侧 machine_check **不能替代人工**。人工位未填 ⇒ 判据为**已声明欠账**（WARN），不得静默通过"
+    gate: "shared/verify/m5_cases_gate.py（M5-GA-* 系列）"
+  contract_introduced_fields:
+    note: "★ 以下字段是本契约引入或从运行台既有实现升格为契约字段的；它们的名字不来自 docs/06 §1.2。此处逐条写明，避免后人以为它们是 docs/06 的字段。"
+    fields:
+      - name: snapshot_id
+        type: str
+        required: false
+        introduced_by: "shared/deploy/smoke/m5_run.py:1240,2801-2802（W19 运行台既有实现，非本契约发明；docs/06 §1.2 未列）"
+        semantics: "该用例绑定的 CCF 快照 id；运行期 CLI --snapshot-id 覆盖它"
+        pattern: "^ccf-[0-9]{8}T[0-9]{6}Z-[a-z0-9]{6}$"
+        pattern_source: "docs/02-统一事实层与采集层设计.md:833（§G5）；docs/03-方案1设计（知识图谱+LLM）.md:122"
+        fallback: "用例不写时由运行器 CLI 提供；两者都没有 ⇒ 运行期 snapshot_id 为 null 并登记，不补造。"
+      - name: source_injection_id
+        type: str
+        required: true
+        introduced_by: "新字段、由本契约引入"
+        semantics: "溯源锚点：指向 D36 固化事实 YAML 中该用例的注入差分条目（D35 由我方在冻结真实采集基底上构造）"
+        pattern: "^(FIXTURE-)?INJ-[0-9]{8}-[0-9]{3}$"
+        why: "没有锚点就无法区分「真实注入派生」与「编造」，也无法做 docs/06:112-115 的双人复核台账。"
+      - name: gold_audit
+        type: mapping_or_null
+        required: false
+        introduced_by: "docs/06:112-115（文档点名 gold_audit 台账；作为用例级字段的落点由本契约提出）"
+        semantics: "双人复核记录：A 只拿注入清单写 expect_*，B 只拿 query+CCF 独立给根因"
+        fields_suggested: [annotator_a, annotator_b, root_cause_b, agreed, resolution, ts_utc]
+        fallback: "不一致 ⇒ 该用例作废或修正，并在 resolution 写明；作废的用例不得进入正式判决集。"
+      - name: synthetic
+        type: bool
+        required: false
+        default: false
+        introduced_by: "shared/verify/m5/contract.py（W18 已接受该键，见 W-CASE-SYNTHETIC-FLAG-MISSING）"
+        semantics: "该条为合成夹具"
+        gate: "正式判决集中任何一条为 true ⇒ FAIL。W18 对 meta.synthetic 只给 WARN；本契约在用例文件层面收紧为 FAIL（新增门禁，不放宽既有判据）。"
+  case_level_meta_required:
+    note: "用例文件顶层（meta）必须提供；缺 ⇒ FAIL，因为门禁无法判定是否合规。"
+    keys:
+      - {name: schema, required: true, semantics: "取值 m5.cases/1（= shared/verify/m5/contract.py:36 SCHEMA_CASES）"}
+      - {name: synthetic, required: true, semantics: "正式判决集必须显式为 false"}
+      - {name: snapshot_binding, required: true, enum: [cli_only, case_field, mixed], semantics: "快照绑定方式；case_field/mixed 时每条必须带合法 snapshot_id"}
+      - {name: snapshot_ids, required: true, semantics: "集内出现的快照 id 去重列表；长度必须恰好为 1（C1 单一输入）"}
+      - {name: fault_injection_ledger, required: true, semantics: "注入差分台账文件路径（D35 由我方在冻结基底上构造并登记；缺 ⇒ 无法复核溯源）"}
+      - {name: gold_audit, required: true, semantics: "★ 双人复核台账文件路径（docs/06:112-115：A 只拿注入清单写 expect_*；B 只拿 query + CCF 独立给根因；不一致 ⇒ 该用例作废或修正，并记入本台账）。缺 ⇒ 无法复核「题目本身可判」"}
+  abstain_notation:
+    rule: "abstain 不是用例字段，不得写进用例文件。"
+    source: "docs/06:80（运行时产生）"
+    runtime_owner: "W18 判据器依 answer_text 判定，写入 verdicts.jsonl"
+    answer_side: "answers.jsonl 的可选键 abstain（shared/verify/m5/contract.py:71-77；W19 运行台有意不写该键，见 m5_run.py:14-16 与 run_manifest.json#honesty.fields_intentionally_absent）"
+    scoring_effect: "既不计对也不计错、单列；另给「把 abstain 计为错」的敏感性分析（§3）。"
+  negative_and_normal_markers:
+    c4_negative:
+      how: "cls=N；必须靠「某指标正常」才能定罪（排除法）；expect_root_cause 仍是真实根因；nor/neg 承载被排除项。"
+      source: "docs/06:33 与 docs/06:77"
+    c5_normal:
+      how: "cls=Z；expect_root_cause = NONE（哨兵，shared/verify/m5/contract.py:55），expect_layer = NONE；injected/expect_path 显式为 []；任何虚构归因落入 neg ⇒ false_claim_rate。"
+      source: "docs/06:34 与 docs/06:80"
+      sentinel_source: "shared/verify/m5/contract.py:55 NONE_SENTINEL；W18 对 NONE 越族给出 W-CASE-NONE-OUTSIDE-C5"
+
+# -----------------------------------------------------------------------------
+# 3. 判据口径（逐字取自 docs/06 §2.1 / §6；实现归 W18）
+# -----------------------------------------------------------------------------
+scoring:
+  implementation: "shared/verify/m5_judge.py + shared/verify/m5/{contract,judge,stats,reporting}.py（W18）；本契约只声明口径，不实现算法。"
+  primary_metric:
+    name: root_cause_accuracy
+    semantics: "expect_root_cause 被命中 / 可用用例数"
+    source: "docs/06:168 与 docs/06:177"
+  denominator:
+    policy: fixed
+    value: 50
+    statement: "分母固定为 50，不随实际回答条数变化。"
+    source: "docs/06:177"
+    impl_fields: "shared/verify/m5_judge.py:473-484 denominators.{cases_total,cases_by_difficulty,cases_by_family,records_total}（473 = `\"denominators\": {` 行，四个键在 474-478，484 = 该块收尾 `},`；★ W30 重写分母面后由旧锚点 419-427 校正 —— 旧锚点已落在空行上，G20 报 E-REF-BLANK-LINE）"
+  abstain:
+    main_axis:
+      treatment: "abstain 计未命中：既不计该用例为命中，也不把该记录移出分母（分母恒为用例数）。"
+      denominator: "固定分母（每条 repeat = 用例数；正式判决集 = 50）"
+      source: "队长裁定 2026-09-29（终局）：docs/06:177 的「分母固定 50」优先于 docs/06:178 的字面「不计对错」"
+      impl: "shared/verify/m5_judge.py ABSTAIN_DEF + _flag_cell（主口径 rate = 命中数 / 固定分母）"
+    diagnostic_columns:
+      label: "旧口径（诊断列，仅供参考，不得当作主口径）"
+      denominator: "可用记录数（用例数 − abstain 数）"
+      fields: [denominator_excluding_abstain, rate_excluding_abstain]
+      impl: "shared/verify/m5_judge.py _flag_cell / _path_cell / _evidence_cell"
+      discipline: "只作诊断与回归对照；报告与结论必须用主口径。"
+    sensitivity:
+      required: true
+      label: "把 abstain 计为错"
+      denominator: "记录总数"
+      fields: [denominator_abstain_as_error, rate_abstain_as_error]
+      source: "docs/06:178"
+      impl: "shared/verify/m5_judge.py _flag_cell（rate_abstain_as_error 与主口径 rate 同值）"
+      discipline: "敏感性值只作附列，永远不得替代主口径，也不得单独拿来下结论。"
+    conflict_note: "已裁决（队长，2026-09-29）：主口径 = 固定分母 50 + abstain 计未命中（abstain 既不进分子，也不缩小分母）；依据 = 端到端可用性 + 保守方向。旧「主口径分母 = 可用记录数」降为诊断列（denominator_excluding_abstain / rate_excluding_abstain），与 primary_metric 的字面张力已消解；见 open_questions OQ-M5-02（已关闭）。"
+  candidate_selection:
+    rule: "一题多答 / 多候选根因并排序时，只取第一个计入 root_cause_accuracy，其余候选计入 path_f1。"
+    source: "docs/06:179"
+  stratification:
+    required: true
+    tiers: [easy, medium, hard]
+    families: [C1, C2, C3, C4, C5, C6]
+    rule: "分层（easy/medium/hard）与分族（C1-C6）必须分别报告，不合并成单一数字。"
+    source: "docs/06:180 与 docs/06:89"
+  conclusion_discipline:
+    min_pp: 20
+    source: "docs/06:414-417"
+    only_ge_20pp: "只能对 >=20 个百分点的差异给出结论。"
+    under_20pp:
+      verdict: "10 个百分点级别的差异在本样本量下不可判定"
+      required_phrasing: "未检出显著差异"
+      forbidden_phrasing: "两者相当 / 基本一致 / 无显著差异但更优"
+    forbidden:
+      - "写「方案 A 更好」这类无条件结论"
+      - "把 <20pp 差异写成结论"
+    resolution_note: "10pp 分辨率需扩到 ~180 条（docs/06:417，列入 docs/07 可选扩展，本次不做）。"
+    source_template: "docs/06:452-511（§7 结论模板，含表 1-表 5）"
+  statistics:
+    pairing: "同一用例、同一 repeat ⇒ 配对样本"
+    pairing_source: "docs/06:399"
+    binary: {test: McNemar, effect_size: "Cohen's h", source: "docs/06:405"}
+    continuous: {test: "Wilcoxon 符号秩检验", effect_size: "Cliff's delta", source: "docs/06:406", variables: [elapsed_s, query_latency_p95, input_tokens]}
+    set_valued: {method: "配对 bootstrap 差值的 95% CI", source: "docs/06:407"}
+    bootstrap: {resamples: 10000, ci: 0.95, source: "docs/06:409"}
+    multiplicity: {method: Bonferroni, families: 6, alpha: "0.05/6 ≈ 0.0083", source: "docs/06:410"}
+    impl: "shared/verify/m5/stats.py（W18，固定随机种子 ⇒ 逐位可复现）"
+  secondary_metrics:
+    - {name: layer_accuracy, denominator: 50, source: "docs/06:169"}
+    - {name: path_f1, denominator: 50, source: "docs/06:170"}
+    - {name: object_accuracy, denominator: 50, source: "docs/06:171"}
+    - {name: false_claim_rate, denominator: 50, source: "docs/06:172"}
+    - {name: mixed_precision, formula: "pos_hit / (pos_hit + FC)", denominator: 50, source: "docs/06:173"}
+    - {name: abstain_rate, denominator: 50, note: "单列", source: "docs/06:174 与 docs/06:178"}
+  efficiency_and_cost:
+    note: "效率与成本口径（elapsed_s / ttft_s / tool_calls_n / query_latency_p50-p95 / payloadPolicy 四值逐字相同 / facts_consumed / 规则修改量）由 docs/06 §2.2-§2.3 规定，不在本契约的字段表内；本契约只登记它们不进 case_schema。"
+    source: "docs/06:182-249"
+  group_scope:
+    main_groups_source: "docs/06:273-283"
+    single_list_exclusion: "KG-T-dyn 单列、不进主判据"
+    single_list_source: "docs/06:281"
+    parity_gate: "G8 信息可及性对齐（shared/verify/g8_info_parity.py）不通过 ⇒ 不得进入正式测量"
+    parity_gate_source: "docs/06:393"
+
+# -----------------------------------------------------------------------------
+# 4. 填表责任分工（三权分立：谁填、谁不填）
+# -----------------------------------------------------------------------------
+  # ────────────────────────────────────────────────────────────────────────
+  # false_claim_rule · M-NORM-CONCL v1（2026-10-14）
+  #   为什么要有这一条：族C5（正常态）的「虚假归因」判据曾把「**枚举被检查的故障模式**」
+  #   与「**断言故障存在**」混为一谈 —— `neg` 词表含 6 个**裸故障码**，而否定邻窗仅 ±25
+  #   字符，在逐条列举「我核对了 X 的判据、X 未触发」这类清单里没有任何否定词 ⇒ 一律计误报。
+  #   ★ 这是一次**判据修正**，按仓纪律在此声明口径、依据与影响，不得只改实现。
+  # ────────────────────────────────────────────────────────────────────────
+  false_claim_rule:
+    version: "M-NORM-CONCL v1"
+    date: "2026-10-14"
+    implementation: "shared/verify/m5/judge.py::_split_mentions_vs_claims（常量 FALSE_CLAIM_RULE_VERSION）"
+    defect_fixed: >-
+      族C5（正常态，expect_root_cause=NONE）的虚假归因判据把「枚举被检查的故障模式」与
+      「断言故障存在」混为一谈：neg 词表含 6 个裸故障码，而否定邻窗仅 ±25 字符，
+      在逐条列举「我核对了 X 的判据、X 未触发」这类清单里没有任何否定词 ⇒ 一律计为虚假归因。
+    evidence: >-
+      实测用例 Z-01 / cc-kg-agent：答案结论明写「当前应用层不存在可确认的故障，无需执行
+      修复动作」，并逐条解释「虽然它未触发 FM-APP-HEAP-PRESSURE（heapUsedRatio 仅 4.13%）
+      …故当前不构成故障」，还指出「当前快照仅含单轮读数，所有依赖时间序列判据的故障模式
+      均无法判定」—— 却因枚举了故障码被判 6 条误报、C5 判错。
+    rationale: >-
+      族C5 题面要求判断「是否存在可据本项目判据确认的故障」⇒ 严谨回答必然要先枚举被检查的
+      故障模式及其判据、再给结论。按「是否出现故障码」判归因，等于要求「不许提到任何故障码」，
+      奖励含糊、惩罚逐条核对，与项目「可解释可审计」的目标相反。
+    rule: >-
+      仅当三重条件同时成立时，把裸故障码的 false_claims 条目重分类为 mentions_not_claims
+      （解释性枚举，单列留痕、不计虚假归因）：① expect_root_cause == NONE；
+      ② 答案命中 nor（结论已明确无可确认故障）；③ 判据面给出了断言式词条（neg 中含竖线者，
+      形如「确认为故障|存在故障|定位到根因」）且答案未命中其中任何一条。
+      ★ fail-closed：若判据面没有断言式词条（无判别量）⇒ 一律不重分类，保持原严格语义。
+    not_changed:
+      - "NEGATION_RE 与 FALSE_CLAIM_WINDOW 未动（坚持移植自外部参考项目的既有口径）"
+      - "非 C5（expect≠NONE）用例的 false_claim 语义未动"
+      - "nor 词表未扩充 —— 「各项指标正常」与「不可判定」是两个不同的断言，不得混为一谈"
+    impact_measured:
+      method: "同一份 200 条答案（4 组 × 50 条）离线重判；仅改判据，不改任何服务与载体"
+      global_root_cause_accuracy: "137/200 (68.5%) → 144/200 (72.0%)，净 +7 且无一条反向"
+      by_group:
+        cc-kg-agent: "33/50 → 34/50"
+        cc-onto-agent: "32/50 → 33/50"
+        cc-kg-r-agent: "36/50 → 40/50"
+        cc-onto-r-agent: "36/50 → 37/50"
+      flipped_cases:
+        - "Z-01 × 4 组（此前 4 组全判错）"
+        - "Z-02 / Z-05 / Z-06 × cc-kg-r-agent"
+      c5_family: "0/6 → 1/6（KG-Q、ONTO-Q、ONTO-R）与 4/6（KG-R）"
+      auditability: >-
+        判据版本号与被重分类条目逐条落进 false_claim.mentions_not_claims 与
+        false_claim.ruleVersion；另存原值 claims_raw / _false_claim_raw_any，可复算。
+      selftest: >-
+        新增负控 N21（6 条断言：枚举⇒重分类 / 断言⇒不重分类 / 无判别量⇒fail-closed /
+        非C5⇒不重分类 / 未命中 nor⇒不重分类 / 版本号已登记）；selftest PASS=24 FAIL=0。
+fill_plan:
+#   ★ 2026-10-08 D35/U7 校正（用户裁定 m12529）：**不再需要用户开发故障注入工具** —— 注入差分由**我方**在「全量真实采集的冻结基底」上构造（不动真机、无回滚责任）；真值 = 机器可观测事实派生 + 用户确认。下方 injector.who/inputs 已按此改写（旧文保留沿革）。
+  principle: "注入方、判据器、运行器三方各自只填自己的字段；任何一方不得代填他方字段。"
+  invariant: "判据器与运行器都不写用例文件；它们只在运行期产物（verdicts.jsonl / metrics.json / answers.jsonl）里补自己的键。"
+  roles:
+    injector:
+      who: "**我方**（注入差分构造）+ 标注员 A/B（docs/06 §1.4 步骤 3 双人复核）"
+      # ★ 2026-10-08 D35/U7 校正：原写「真实故障注入工具的操作者（用户侧）」—— 该工具**不再需要用户开发**；注入差分由**我方**在「全量真实采集的冻结基底」上构造（不动真机、无回滚责任）；真值 = 机器可观测事实派生 + 用户确认。
+      inputs: "注入清单（目标 / 顺序 / 注入差分）+ 前后快照 id（**由我方在冻结基底上产出**；★ D35 校正：原写「注入工具产出，本项目不实现」）"
+      fills:
+        - chain
+        - injected
+        - expect_root_cause
+        - expect_layer
+        - expect_path
+        - expect_objects
+        - evidence_facts
+        - snapshot_id
+        - source_injection_id
+        # ★ 2026-10-09 移出：gold_audit 是**文件级台账**（见 case_schema.case_level_meta_required.keys），
+        #   不是逐用例字段 —— 原列在此处造成契约自相矛盾（已修）。
+      does_not_fill: [id, cls, type, scope, query, pos, neg, nor, detectors, difficulty, discriminator]
+      why_not: "expect_* 必须由注入事实派生（docs/06:104-110）；query 属于出题设计，不能由注入顺序反推，否则题目泄露答案。"
+    case_author:
+      who: "出题人 / 契约方（把注入清单翻译成一条可运行的用例）"
+      fills: [id, cls, type, scope, query, pos, neg, nor, detectors, difficulty, discriminator, synthetic]
+      does_not_fill: [injected, expect_root_cause, expect_layer, expect_path, expect_objects, evidence_facts, source_injection_id, gold_audit]
+      why_not: "出题人不得自行决定真值，否则会出现「题目按答案写」的自证循环。synthetic 只是「本用例是否夹具」的声明位，出题人必须显式赋值，不得省略。"
+    judge:
+      who: "shared/verify/m5_judge.py（W18）"
+      fills_runtime: [abstain]
+      fills_where: "verdicts.jsonl（不回写用例文件）"
+      does_not_fill: ["用例文件任何字段", "answers.jsonl 任何字段"]
+      why_not: "判据器只读；若它回写用例文件就会产生第二个真值来源。"
+    runner:
+      who: "shared/deploy/smoke/m5_run.py（W19）"
+      fills_runtime: [case_id, group, repeat, question, answer_text, snapshot_id, captured_at_utc, source]
+      fills_where: "answers.jsonl"
+      does_not_fill: ["用例文件任何字段", "abstain"]
+      why_not: "运行台有意不写 abstain（m5_run.py:14-16），避免预判判据。"
+  per_field_owner:
+    injector: [chain, injected, expect_root_cause, expect_layer, expect_path, expect_objects, evidence_facts, snapshot_id, source_injection_id, gold_audit]
+    case_author: [id, cls, type, scope, query, pos, neg, nor, detectors, difficulty, discriminator, synthetic]
+    judge: [abstain]
+    runner: [captured_at_utc, source]
+  handoff_contract: "作业单 → 用例文件 的字段映射与命名规范见 tmp/_m5_workorder_draft.md；一条真实注入 ⇒ 至少一条用例，映射规则在该草案第 4 节。"
+
+# -----------------------------------------------------------------------------
+# 5. 用例文件落点与当前状态
+# -----------------------------------------------------------------------------
+case_file:
+  status: not_recorded
+  status_reason: "★ 2026-10-08 更新：用例文件**已录制**（shared/model/m5-cases.recorded.yaml，50 条，全部带 source_injection_id）。★ U-D 裁定 = 180：扩到 180 待构造 130 条，但**域容量核算**（docs/06 §6.4）显示独立上限 ≈81–104 ⇒ 容量口径待裁（见 docs/00 §9「U-D 容量核算」行）。（旧文「50 条正式用例必须等…录制、当前不存在」已过期，原样保留于 is_superseded 段）"
+  default_path: shared/model/m5-cases.recorded.yaml
+  default_path_status: "本契约的建议值，落点需用户/队长确认（见 OQ-M5-03）。门禁允许 --cases 覆盖。"
+  accepted_top_level: ["list", "{cases|testcases|items: [...]}"]
+  accepted_formats: [".yaml", ".yml", ".json"]
+  encoding: "utf-8（容忍 BOM）"
+  loader_truth: "shared/verify/m5/contract.py:131-172（W18）；本契约不另写装载器。"
+  when_missing: "门禁必须报 BLOCKED（exit 2），并打印「契约已就位、用例尚未录制，还缺哪些文件/字段」；不得报 PASS，也不得报 FAIL。"
+
+# -----------------------------------------------------------------------------
+# 6. 出处登记（本契约引用的每一处权威）
+# -----------------------------------------------------------------------------
+source:
+  - {claim: "族构成 14/14/6/6/4 = 50", ref: "docs/06-评测设计（A-B对照）.md:30-36"}
+  - {claim: "同一份 50 条喂所有组、分母固定 50", ref: "docs/06-评测设计（A-B对照）.md:38"}
+  - {claim: "C4/C5 是防作弊设计", ref: "docs/06-评测设计（A-B对照）.md:38-40"}
+  - {claim: "18 字段用例结构", ref: "docs/06-评测设计（A-B对照）.md:44-67"}
+  - {claim: "字段 → 判据维度对应表", ref: "docs/06-评测设计（A-B对照）.md:71-79"}
+  - {claim: "abstain 是运行时产生", ref: "docs/06-评测设计（A-B对照）.md:80"}
+  - {claim: "难度 16/20/14 及其构成", ref: "docs/06-评测设计（A-B对照）.md:83-87"}
+  - {claim: "结论必须分层报告", ref: "docs/06-评测设计（A-B对照）.md:89"}
+  - {claim: "oracle 由注入清单派生 + 双人复核 + G6 反例校验", ref: "docs/06-评测设计（A-B对照）.md:91-121"}
+  - {claim: "本项目不构造模拟数据、正式录制依赖我方在冻结真实采集基底上构造注入差分（D35）", ref: "docs/06-评测设计（A-B对照）.md:124-135"}
+  - {claim: "不复用原 oracle 内容/39 条规则/六维权重", ref: "docs/06-评测设计（A-B对照）.md:137-144"}
+  - {claim: "指标表与分母 50", ref: "docs/06-评测设计（A-B对照）.md:164-174"}
+  - {claim: "分母固定 50 / abstain 单列 + 敏感性 / 只取第一个候选 / 分层分族分别报", ref: "docs/06-评测设计（A-B对照）.md:177-180"}
+  - {claim: "统计方法：McNemar / Wilcoxon / bootstrap 10000 / Bonferroni 6 族", ref: "docs/06-评测设计（A-B对照）.md:399-410"}
+  - {claim: "只用 >=20pp 下结论、10pp 不可判定、180 条未做", ref: "docs/06-评测设计（A-B对照）.md:414-417"}
+  - {claim: "结论模板与禁止的无条件结论", ref: "docs/06-评测设计（A-B对照）.md:452-511"}
+  - {claim: "被测组与 KG-T-dyn 单列", ref: "docs/06-评测设计（A-B对照）.md:273-283"}
+  - {claim: "G8 信息可及性对齐门禁", ref: "docs/06-评测设计（A-B对照）.md:393"}
+  - {claim: "快照 id 正则 ^ccf-YYYYMMDDThhmmssZ-xxxxxx$", ref: "docs/02-统一事实层与采集层设计.md:833"}
+  - {claim: "C1 单一输入：各组同一批 CCF（同一 snapshotId）", ref: "docs/00-总体设计与裁决记录.md:131"}
+  - {claim: "用例字段唯一真相源（18 字段常量 + 构成常量 + NONE 哨兵）", ref: "shared/verify/m5/contract.py:36-82"}
+  - {claim: "运行台三态退出码与 answers.jsonl 键契约", ref: "shared/deploy/smoke/m5_run.py:106-112"}
+  - {claim: "用例内 snapshot_id 与 CLI 覆盖优先级", ref: "shared/deploy/smoke/m5_run.py:1240,2801-2802"}
+  - {claim: "故障模式词表（14 个 code / layer / chain）", ref: "shared/model/fault-modes.yaml:74-251"}
+  - {claim: "层别名词表 L-LAYER v1", ref: "shared/verify/m5/judge.py:50-58"}
+  - {claim: "W18 独立复算到 §1.3 不自洽", ref: "shared/verify/m5_judge.py:1182-1183"}
+  - {claim: "M5 前提与录制作业单待办", ref: "tmp/_m4_worklist.md:814-844"}
+
+# -----------------------------------------------------------------------------
+# 7. 开放问题（需要用户/队长裁决；缺口一律用本段显式登记，不得留空槽）
+# -----------------------------------------------------------------------------
+open_questions:
+  - id: OQ-M5-01
+    severity: high
+    question: "docs/06 §1.3 的族→难度构成（easy=C1+C5、medium=C2 的 F1/F3/F4/F6+C3、hard=C2 的 F2/F5/F7+C4+C6）算出来是 20/14/16，与它自己声明的 16/20/14 不自洽。应以哪个为准？"
+    impact: "录制方无法据此决定每条用例的 difficulty。当前处置：门禁只断言边际构成（族 14/14/6/6/4 与难度 16/20/14），不对族×难度联合构成做任何断言。"
+    not_our_call: "本契约不私自凑数，也不改 docs/06 原文。"
+  - id: OQ-M5-02
+    severity: medium
+    status: closed
+    closed_at: "2026-09-29"
+    closed_by: "队长裁定（终局）"
+    question: "docs/06:177 说主判据分母固定 50，与 abstain 不计对错（要扣除）字面冲突。主口径的分子分母到底怎么取？"
+    impact: "（原文保留，作历史留痕）W18 已实现为主口径分母 = 可用记录数 + 敏感性分母 = 记录总数；若裁决为「分母恒为 50 且 abstain 既不入分子也不入分母」，W18 需要改。"
+    resolution: "已裁决：主口径 = 固定分母 50、abstain 计未命中（取本问题所述第二种取法的变体：abstain 既不进分子，也不缩小分母）。依据 = 端到端可用性（银行运维按「这条回答到底能不能用」看读数）+ 保守方向（abstain 只会让读数不更好）。旧「可用记录数」口径降为诊断列 denominator_excluding_abstain / rate_excluding_abstain，只作诊断与回归对照。落地 = shared/verify/m5_judge.py 各单元主 denominator/rate 走固定分母，shared/verify/m5/stats.py compare_binary(abstain_as_error=True) 为主口径（另一路 False 作敏感性）。"
+    gate: "shared/verify/m5_judge.py check_denominator_policy：三处声明（suite.fixed_denominator / scoring.denominator / scoring.abstain.main_axis）任一仍把「可用记录数」写成主口径 ⇒ E-DENOM-POLICY（fail-closed）。"
+  - id: OQ-M5-03
+    severity: medium
+    question: "录制后的 50 条用例文件放在哪个路径？本契约的建议是 shared/model/m5-cases.recorded.yaml。"
+    impact: "门禁默认读该路径；落点未定则每次运行都要显式 --cases。"
+  - id: OQ-M5-04
+    severity: medium
+    question: "docs/06:49 的 scope 注释写「涉及层（用于分层统计）」，但 §2.1 说的「分层」是 easy/medium/hard。scope 到底喂哪一张表？"
+    impact: "本契约暂按「scope = 层，difficulty = 难度」处理；若 scope 参与难度统计则需要额外映射。"
+  - id: OQ-M5-05
+    severity: low   # 保留原字段供旧消费者读取；本条已决（见下 resolution）
+    question: "已决（原问题保留）：expect_objects 的实例 id 前缀集从哪里取？docs/06:58 的例子是 inst:db-cc-01，但 shared/model/topology.yaml 的 types 段没有声明 inst: 前缀，真机 CCF 用的是 dbpool:/session:/tbl-root./host: 这类前缀。"
+    resolution: "两层已决：① 权威前缀表 = shared/model/ccf.schema.json#x-id-prefix-by-type 的 12 类（app/appinst/endpoint/jdbsrc/ctr/host/dbcluster/dbinst/dbpool/session/query/table）；W46 起逐条硬判（不在表内 ⇒ E-CASES-OBJECT-UNKNOWN FAIL，旧 W-CASES-OBJECT-PREFIX 的 WARN 已删，见 shared/verify/m5_cases_gate.py:931-952）。② 实例 id 清单的来源按 U6 默认方案 = S5 开窗后一次只读采集导出真机实例 id 列表、与用例集同一 snapshot，只用表内 id。docs/06 旧样例的 inst: 前缀属文档缺陷（12 类无 inst:），判定器按 inst-alias 归一化别名处理并逐条披露 objects.matched_via。原 impact（门禁暂只校验「形如 <prefix>:<local>」并打印未登记前缀）已由 W46 收紧取代。"
+  - id: OQ-M5-06
+    severity: low
+    question: "gold_audit 双人复核记录是放在用例里（本契约提议的 case 级字段），还是独立台账文件？"
+    impact: "影响门禁是否要求该字段存在；当前为可选字段。"

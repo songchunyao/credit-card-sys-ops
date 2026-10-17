@@ -1,0 +1,145 @@
+# GaussDB 运维 Agent · 动作语义映射表
+# =============================================================================
+# 背景（2026-09-11 实测）：
+#   规则 YAML 的 `then.next_actions` 与 runbook 的 `recommended_actions[].action_id`
+#   共 **101 个动作引用全部悬空** —— 因为两套命名从未对齐：
+#     · 规则侧：snake_case 语义标签（check_roce_link / collect_plan / extend_lv）
+#     · 注册表：`a_*` 可执行动作（service/main.py::_ACTION_DEFS）
+#   后果：propose_actions 只能产出数据库域建议；存储类规则命中后无任何可执行动作，
+#        Agent 只能自由发挥 ⇒ L1/L2/L3 分级失真。
+#
+# 本表建立三方契约（rules.next_actions ↔ 本表 ↔ _ACTION_DEFS）：
+#   kind: action  —— 可执行动作，action_id 必须存在于 _ACTION_DEFS
+#   kind: collect —— **补充采集指令**（不是动作）：应转成 gather 调用，不产生变更
+#
+# 由 tests/test_contracts.py 的 C11 断言锁定：
+#   ① 所有 next_actions / runbook.action_id 都必须在本表登记
+#   ② 所有 kind=action 的 action_id 必须存在于 _ACTION_DEFS
+#   ③ 本表不得存在未被引用的僵尸条目（防止表本身腐烂）
+# =============================================================================
+
+# ── 补充采集类（转 gather，零变更；risk 恒 L1）──
+collects:
+  a_collect_detail: "补充采集明细（会话/锁/事务/计划等，走 gather）"
+
+# ── 动作映射：语义标签 → 可执行动作 id ──
+map:
+  # ── 数据库域 ──
+  collect_slow_sql_topn: a_query_slow_sql
+  collect_plan: a_query_slow_sql
+  collect_plan_detail: a_collect_detail
+  collect_plan_compare: a_collect_detail
+  collect_index_info: a_collect_detail
+  collect_table_scan: a_collect_detail
+  collect_disk_health: a_check_disk_io
+  collect_top_cpu_sql: a_collect_detail
+  collect_blocking_chain: a_collect_detail
+  collect_long_transaction: a_collect_detail
+  collect_transaction_detail: a_collect_detail
+  collect_session_distribution: a_collect_detail
+  collect_session_wait: a_collect_detail
+  collect_replication_detail: a_collect_detail
+  collect_change_detail: a_collect_detail
+  analyze_cache_hotness: a_collect_detail
+  analyze_distribution: a_collect_detail
+  analyze_dead_tup: a_analyze
+  run_vacuum: a_vacuum
+  kill_deadlock_sessions: a_kill_session
+  sql_rewrite: a_sql_rewrite
+  cast_fix: a_sql_rewrite
+  optimize_sort: a_sql_rewrite
+  rebuild_index: a_reindex
+  drop_unused_index: a_drop_index
+  rebalance_data: a_sql_rewrite
+  increase_work_mem: a_param_change
+  increase_shared_buffers: a_param_change
+  adjust_wlm_queue: a_param_change
+  throttle_low_priority: a_sql_throttle
+
+  # ── 多路径 / UltraPath ──
+  check_ultrapath_link: a_verify_ultrapath_path
+  collect_failed_link_detail: a_verify_ultrapath_path
+  rebalance_nvme_path: a_ultrapath_rescan
+  check_ultrapath_registration: a_check_kernel_module
+  rebuild_initramfs: a_rebuild_initramfs
+  upgrade_ultrapath: a_upgrade_driver
+  check_compat_matrix: a_check_compat_matrix
+
+  # ── NVMe / 内核模块 ──
+  collect_nvme_ctrl_detail: a_check_nvme_subsys
+  check_ctrl_conn: a_check_nvme_subsys
+  verify_nvme_namespace: a_check_nvme_subsys
+  load_kernel_module: a_reload_kernel_module
+  check_module_dependency: a_check_kernel_module
+  upgrade_kernel_module: a_upgrade_driver
+
+  # ── RoCE / 网络 ──
+  check_roce_link: a_check_roce_port
+  check_roce_network: a_check_roce_port
+  check_roce_connectivity: a_check_roce_port
+  check_roce_path: a_check_roce_port
+  check_nic_health: a_check_roce_port
+  check_roce_negotiation: a_check_roce_port
+  check_nof_network: a_check_roce_port
+  a_check_roce: a_check_roce_port
+  check_roce_cable: a_check_roce_cable
+  check_fiber_loopback: a_check_fiber
+  check_fiber_quality: a_check_optical
+  check_optical_module: a_check_optical
+  set_roce_mtu_jumbo: a_set_mtu
+  check_switch_config: a_check_switch
+
+  # ── 块设备 / 文件系统 ──
+  check_bad_sector: a_check_block_io
+  extend_lv: a_expand_lv
+  clean_old_data: a_clean_fs
+  emergency_cleanup: a_clean_fs
+  extend_fs: a_expand_lv
+  backup_system_data: a_backup_data
+  set_nvme_io_scheduler: a_set_io_scheduler
+  unify_io_scheduler: a_set_io_scheduler
+
+  # ── PCIe / 硬件 ──
+  check_pcie_ras: a_check_pcie
+  replace_nic_slot: a_replace_nic
+  replace_disk: a_replace_disk
+
+  # ── Dorado 设备 ──
+  check_dorado_status: a_check_dorado_ctrl
+  check_dorado_device: a_check_dorado_ctrl
+  check_dorado_ctrl_failover: a_check_dorado_ctrl
+  check_dorado_io_load: a_check_dorado_ctrl
+  check_dorado_ctrl_mem_usage: a_check_dorado_ctrl
+  check_dorado_cache_miss: a_check_dorado_ctrl
+  check_dorado_write_quota: a_check_dorado_ctrl
+  check_dorado_alarm: a_check_dorado_alarm
+  check_dorado_ctrl_log: a_check_dorado_alarm
+  check_dorado_ctrl_fault_led: a_check_dorado_hw
+  check_dorado_ctrl_power: a_check_dorado_hw
+  check_dorado_vol_mapping: a_check_lun_mapping
+  correlate_vol_to_ultrapath: a_check_lun_mapping
+  verify_xlog_mount: a_check_lun_mapping
+  check_xlog_write_latency: a_check_disk_io
+  extend_dorado_pool: a_dorado_pool_expand
+  clean_old_snapshot: a_clean_dorado_data
+
+  # ── Dorado 容灾 ──
+  check_dorado_remote_connectivity: a_check_dorado_replication
+  check_rep_link_status: a_check_dorado_replication
+  trigger_rep_resync: a_dorado_rep_resync
+
+  # ── 升级/变更（runbook 直引）──
+
+# ── 遗留 runbook 直接引用的 a_* 动作（保持原名，补进注册表）──
+runbook_action_aliases:
+  a_check_dorado_alive: a_check_dorado_ctrl
+  a_check_dorado_port: a_check_dorado_ctrl
+  a_check_roce_network: a_check_roce_port
+  a_requery_nvme_subsys: a_rescan_nvme
+  a_switch_path: a_ultrapath_rescan
+  a_toggle_roce_port: a_rescan_nvme
+  a_extend_lv: a_expand_lv
+  a_clean_data: a_clean_fs
+  a_modprobe: a_reload_kernel_module
+  a_replace_optical: a_replace_optical
+  a_escalate: a_escalate

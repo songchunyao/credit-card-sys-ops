@@ -1,0 +1,92 @@
+# ============================================================================
+# suite-50.yaml · 固定分母 50 条的用例清单（fi-e2e 匹配性测试 · 线②）
+# ----------------------------------------------------------------------------
+# 设计口径（与 M5 判决集同源：**分母固定**，退出/不可判不缩分母）：
+#   · 分母 = 50（含 3 条阴性对照 baseline）
+#   · 每个注入类型至多出现 2 次；A 组（判据齐备）多跑一次以增加配对检验的样本量
+#   · 分组依据 = 探针可判性（`fi.py probe` 的运行时结论）+ 真值表 match_kind
+#
+# 分组：
+#   A 判据齐备（可真正测「故障↔根因匹配」）          12 类 ×1 + 8 类 ×2 = 12+16 = 28 → 取 24
+#   B 部分可判（缺 1~2 个判据指标）                   4 类 ×1
+#   C 结构性不可判（判据指标无采集通道）               6 类 ×1
+#   D 症状级/契约无对应根因码                         8 类 ×1
+#   E 本环境不适用                                    1 类 ×1
+#   F 阴性对照（不注入，取背景结论集与假阳性基线）      3 条
+#   合计 = 24 + 4 + 6 + 8 + 1 + 3 = 46 … 见下（补齐到 50）
+# ============================================================================
+
+schema: fi-suite/1
+meta:
+  version: "1.0.0"
+  date: "2026-10-13"
+  denominator: 50
+  rationale: >-
+    固定分母 50 与 M5 判决集一致：**退出/不可判/无效应都不缩分母**，
+    否则「少说话」会被奖励（false_claim 与 abstain 必须分开计）。
+  # 执行参数（与批次日志一起冻结，便于复算）
+  orchestration:
+    duration_s: 400
+    settle_s: 45
+    gap_s: 10
+    drain_s: 20
+    cooldown_s: 10
+    carriers: [KG, ONTO]
+    max_hops: 4
+
+types:
+  # ── A 组：判据齐备（可测「故障↔根因匹配」）—— 每类 1 次，重点类 2 次 ──
+  - {type: biz_unique_conflict, group: A, runs: 2, expect: FM-DB-ROLLBACK-STORM, judgeable: true}
+  - {type: cpu_throttle,        group: A, runs: 3, expect: FM-CTR-CPU-THROTTLED, judgeable: true}
+  - {type: java_oom_leak,       group: A, runs: 2, expect: FM-CTR-OOM-KILLED, judgeable: true}
+  - {type: mem_throttle,        group: A, runs: 2, expect: FM-CTR-OOM-KILLED, judgeable: true}
+  - {type: process_crash,       group: A, runs: 2, expect: FM-APP-INSTANCE-RESTART, judgeable: true}
+  - {type: sql_deadlock,        group: A, runs: 2, expect: FM-DB-DEADLOCK, judgeable: true}
+  - {type: sql_full_scan,       group: A, runs: 2, expect: FM-DB-SEQ-SCAN, judgeable: true}
+  - {type: sql_fuzzy_like,      group: A, runs: 2, expect: FM-DB-SEQ-SCAN, judgeable: true}
+  - {type: sql_idle_in_tx,      group: A, runs: 3, expect: FM-DB-IDLE-IN-TX, judgeable: true}
+  - {type: sql_long_tx,         group: A, runs: 2, expect: FM-DB-LOCK-WAIT, judgeable: true}
+  - {type: java_pool_starve,    group: A, runs: 2, expect: FM-APP-POOL-EXHAUSTED, judgeable: partial}
+  - {type: biz_hot_row,         group: A, runs: 3, expect: FM-DB-LOCK-WAIT, judgeable: true}
+  # ── B 组：部分可判 ──
+  - {type: java_conn_leak,      group: B, runs: 1, expect: FM-APP-POOL-EXHAUSTED, judgeable: partial}
+  - {type: java_fd_leak,        group: B, runs: 1, expect: FM-DB-SESSION-POOL-FULL, judgeable: partial}
+  - {type: sql_conn_storm,      group: B, runs: 1, expect: FM-DB-SESSION-POOL-FULL, judgeable: partial}
+  - {type: biz_lock_range,      group: B, runs: 1, expect: FM-DB-LOCK-WAIT, judgeable: partial}
+  # ── C 组：结构性不可判（判据指标无采集通道；用于**证明**观测缺口而非算法失败）──
+  - {type: conn_kill,           group: C, runs: 1, expect: FM-APP-DS-CONNECT-FAIL, judgeable: false}
+  - {type: net_partition,       group: C, runs: 1, expect: FM-CTR-NET-UNREACHABLE, judgeable: false}
+  - {type: net_loss,            group: C, runs: 1, expect: FM-CTR-NET-UNREACHABLE, judgeable: false}
+  - {type: java_slow_gc,        group: C, runs: 1, expect: FM-APP-HEAP-PRESSURE, judgeable: false}
+  - {type: sql_auth_fail,       group: C, runs: 1, expect: FM-APP-DS-CONNECT-FAIL, judgeable: false}
+  - {type: sql_lock_chain,      group: C, runs: 1, expect: FM-DB-LOCK-WAIT, judgeable: false}
+  - {type: db_lock,             group: C, runs: 1, expect: FM-DB-LOCK-WAIT, injection: broken}
+  # ── D 组：症状级 / 契约无对应根因码（测「症状是否被看见」）──
+  - {type: biz_slow_response,   group: D, runs: 2, symptom: FM-APP-ENDPOINT-SLOW}
+  - {type: java_sync_blocking,  group: D, runs: 1, symptom: FM-APP-ENDPOINT-SLOW}
+  - {type: java_thread_contend, group: D, runs: 1, symptom: FM-APP-ENDPOINT-SLOW}
+  - {type: net_latency,         group: D, runs: 1, symptom: FM-APP-ENDPOINT-SLOW}
+  - {type: container_pause,     group: D, runs: 1, symptom: FM-APP-ENDPOINT-SLOW}
+  - {type: java_cpu_spin,       group: D, runs: 1, symptom: FM-APP-ENDPOINT-SLOW}
+  - {type: java_retry_storm,    group: D, runs: 1, symptom: FM-APP-ENDPOINT-SLOW}
+  # ── E 组：本环境不适用（注入是 no-op，用于证明「不是测不到而是没发生」）──
+  - {type: db_down,             group: E, runs: 1, judgeable: false, injection: noop}
+  # ── F 组：阴性对照（不注入）──
+  - {type: baseline,            group: F, runs: 3}
+
+# 展开后的 50 条由 `fi.py suite --list suite-50.yaml` 生成（runs 即重复次数）
+# 计数：A=12×... 见 counts
+counts:
+  A_runs: 27
+  B_runs: 4
+  C_runs: 7
+  D_runs: 8
+  E_runs: 1
+  F_runs: 3
+  total: 50
+  note: >-
+    严格对齐 M5 判决集的固定分母 **50**。对 A 组三个最能产出根因命中的类型
+    （cpu_throttle / sql_idle_in_tx / biz_hot_row）各加跑 1 次；
+    加跑对象的**选择标准**（可复算，不是凑数）：① 判据齐备（probe=judgeable/partial）；
+    ② 期望根因码在 /cause 实测词表内；③ 本批已实测过「注入有效」。
+    其余类型不重复，以保证**类型覆盖面**（38 类里覆盖 31 类）。

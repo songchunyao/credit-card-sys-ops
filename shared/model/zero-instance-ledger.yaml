@@ -1,0 +1,704 @@
+# ============================================================================
+# zero-instance-ledger.yaml — 零实例关系 / 零观测指标的**审计台账**（M1.8a 新建）
+# ----------------------------------------------------------------------------
+# 为什么要有这个文件：CCF 是「采集到什么就写什么」的统一事实层，**沉默的缺口**（某条契约关系
+# 一条实例都没有、某个契约指标一个观测都没有）在 CCF 里长得和「本来就不该有」一模一样。
+# 本台账把这些零值逐条落到「为什么零 + 一手证据 + 谁在依赖它 + 怎么补 + 哪个里程碑」，
+# 并由门禁 G16（shared/verify/zero_instance_gate.py）强制：**在册的零值必须在这里登记**，
+# 否则 G16 直接 ERROR。它不改任何契约、不放宽任何门禁，只把缺口从"没人知道"变成"有人负责"。
+#
+# 与本文件的关系（契约只读，本文件是台账不是契约）：
+#   · shared/mapping/rel-map.yaml   —— 14 条 asserted 业务关系 + 4 条逆关系 + 1 条派生关系（权威）
+#   · shared/model/metrics.yaml     —— 70 个契约指标（权威；★ P0-A 2026-10-12 由 58 增至 70）
+#   · shared/model/v3-ccf-map.yaml  —— 采集映射表（path → metricCode / 对象与关系派生规则）
+# ============================================================================
+
+meta:
+  version: "1.0.0"
+  contract_of:
+    - shared/mapping/rel-map.yaml
+    - shared/model/metrics.yaml
+  generated_from: "tmp/gather_m18a.json（真机 POST http://192.0.2.10:8187/tools/gather，layers=gaussdb,os,container,app，1904 facts）"
+  ccf_snapshot: "ccf-20260928T144216Z-b920b5（tmp/ccf_live3.json，67 objects / 34 relations / 191 observations）"
+  baseline_snapshot: "ccf-20260928T134833Z-eb634e（tmp/ccf_live2.json，67 objects / 15 relations / 191 observations）"
+  gate: "shared/verify/zero_instance_gate.py（G16）"
+  expectation:
+    asserted: "rel-map.yaml 里 asserted: true 的 14 条业务关系：CCF 里应当有实例；为 0 且不在本台账 ⇒ G16 ERROR"
+    inverse: "4 条逆关系（inverse_relations，asserted: false）**本就不该**出现在 CCF relations[]；出现即 G16 ERROR"
+    derived: "HAS_EVIDENCE 在投影期由 observations 派生（asserted: false + derived_from: observations）⇒ 不进 CCF relations[]"
+    metrics: "在册指标（expected_profiles.<profile>.metrics ∪ 快照里已出现类型的契约指标）零观测且不在本台账 ⇒ G16 ERROR"
+  status_meanings:
+    planned_fix: "本里程碑能修且要修（本次 M1.8a 修 HAS_SESSION）"
+    environment_limited: "有契约义务，但当前上游事实/采集点不提供 ⇒ 需要上游或探针变化才可能有实例"
+    not_applicable: "契约里本就不该出现在 CCF（逆关系 / 派生关系）"
+
+# ----------------------------------------------------------------------------
+# 一、关系：三类分型
+#   1) asserted 且本次真机已有实例 → 不进台账（G16 会统计，但不要求登记）
+#   2) asserted 但零实例 → 必须登记（RUNS_QUERY / ACCESSES 属此类）
+#   3) 逆关系 4 条 + 派生关系 HAS_EVIDENCE → 登记为 not_applicable（本就不该有）
+#   ★ HAS_SESSION：1.2.0 曾是第 2 类（零实例），M1.8a 已修 ⇒ 现在属第 1 类；
+#     台账条目**保留**，作用变成「回归哨兵」：expect_in_ccf: nonzero，若又归零 ⇒ G16 ERROR。
+# ----------------------------------------------------------------------------
+relations:
+
+  - code: "HAS_SESSION"
+    from: "DatabaseSessionPool"
+    to: "Session"
+    status: "planned_fix"
+    expect_in_ccf: "nonzero"
+    reason: "freeze.py 里唯一的会话挂边逻辑带 `if len(pools) == 1:` 守卫（v1.2.0 旧实现，M1.8a 已删除该守卫；现行实现见 shared/collect/freeze.py:875（def attribute_sessions）），真机有 dn_6001/dn_6002 两个会话池 ⇒ 一条 HAS_SESSION 都不建，19 个 Session 全孤立（L3 深链 Pool→Session 整段缺失）。"
+    evidence: "基线 tmp/ccf_live2.json：HAS_SESSION = 0（15 条关系中最小）、Session 19 / Query 4 / Table 30 被任何关系引用数均为 0；守卫原文见 shared/collect/freeze.py:860,878（自述：旧实现 `if len(pools) == 1:` 守卫在 v1.2.0 的 :735）。归因依据：旧载体机 的 /opt/upstream-agent/.env 里 GAUSSDB_DSN 的 host=192.0.2.12 = gather.topology.ip_index[192.0.2.12].is_primary=true（dn_6001 / Primary）⇒ 单探针只看到所连实例的会话。"
+    consumers:
+      - "shared/collect/freeze.py:891（attribute_sessions 取 session_relation；v1.2.0 的 :736 已随 M1.8a 废弃）"
+      - "shared/mapping/gen_maps.py:62"
+      - "shared/model/ccf.schema.json:295"
+      - "shared/model/v3-ccf-map.yaml（pool_objects 段）"
+      - "docs/01-场景建模与范围定义.md:98"
+    planned_fix: "M1.8a 已修：v3-ccf-map.yaml 新增 pool_objects.session_attribution（strategy: single_probe_instance + evidence_order 两条具名证据），freeze.py 新增 attribute_sessions()（fail-closed；归因不到则不挂边并按 session_pool_unattributed 记账），归因依据写进 CCF x.sessionAttribution。"
+    milestone: "M1.8a（已修）；台账条目转为回归哨兵"
+
+  - code: "RUNS_QUERY"
+    from: "Query"
+    to: "Session"
+    status: "environment_limited"
+    expect_in_ccf: "zero"
+    reason: "两端 id 空间在当前数据下不重合，且提升后的事实层里根本没有 id/pid 字段 ⇒ 无从建立 Session↔Query 连接键（上游事实粒度不足，不是映射缺失）。"
+    evidence: "真机探针原始输出（旧载体机 上 get_probe(\"gaussdb\").collect(sections=[\"session_detail\",\"slow_sql_detail\"])，脚本 tmp/_m18_l3_diag4.sh）：会话侧 unique_sql_id ∈ {'0','2761204323'}（36 行里 35 行为 0/None）、慢 SQL 侧 unique_query_id ∈ {1011272715, 1629133430, 2197765120, 690118240}（4 行）⇒ 交集为空；更根本：tmp/gather_m18a.json 的 all_facts 共 292 个 path，含 sql_id / query_id / .pid / sessionid / client_addr 的 path 0 条。CCF：tmp/ccf_live2.json 与 tmp/ccf_live3.json 的 RUNS_QUERY 均为 0。；★ M2.21 证据补强（采集时点 2026-09-29 00:36–00:38（+08:00，本机时钟）；本项目契约口径日期 2026-10-06（targets.yaml meta.date））：①本仓夹具 tmp/ccf_live5.json（sha256 1cbe48f268366ed99b85307b25f59a5921f990aab0e85c24f6792986cbf56e05，按其 relations[].type 计数）中 RUNS_QUERY = 0（该快照 34 条关系里无此型）；②两侧一致：KG 侧真机关系型清单（只读 MATCH ()-[r]->() RETURN type(r)，Neo4j 5.26.30 @ 192.0.2.10:7475）无 CC_RUNS_QUERY；ONTO 侧 live5 命名图 ccf-20260928T155516Z-937b79（2965 三元组，?infer=false）内 cc:runsQuery 断言数 = 0 ⇒ 零实例是两侧一致的，不是投影分歧。"
+    consumers:
+      - "shared/mapping/gen_maps.py:63"
+      - "shared/model/ccf.schema.json:296"
+      - "shared/model/v3-ccf-map.yaml（已知缺口段）"
+      - "docs/01-场景建模与范围定义.md:99"
+    planned_fix: "none（本次不实现：不造 join、不补假边）。解锁条件：上游把会话侧 unique_sql_id 与慢 SQL 侧 unique_query_id 以同源 pid/query id 提升进 /tools/gather 的事实层。"
+    milestone: "M1.8a 判定为不实现；需上游变化后重评"
+
+  - code: "ACCESSES"
+    from: "Query"
+    to: "Table"
+    status: "environment_limited"
+    expect_in_ccf: "zero"
+    reason: "连接键存在但**目标对象不存在**：facts 里有 sql.seq_scan_tables（4 条，值均为 orders，obj_id=sql-<unique_query_id>），而 orders 不是 CCF 的 Table 对象 —— 探针为 orders 发的 table.* 事实（table.fillfactor / table.idx_scan / table.hot_update_ratio_pct / table.dead_ratio）都不是 v3-ccf-map.yaml path_to_metric 里的 path ⇒ 无契约指标码 ⇒ 被 drop ⇒ 没有该对象可指向。"
+    evidence: "tmp/ccf_live2.json / tmp/ccf_live3.json：ACCESSES = 0；30 个 Table 对象全是 tbl-snap_* / tbl-new_order / tbl-tables_snap_timestamp（不含 orders）；tmp/gather_m18a.json 里 orders 的 table.* 事实存在但 path_to_metric 未映射（drop 记账 path_unmapped）。；★ M2.21 证据补强（采集时点 2026-09-29 00:36–00:38（+08:00，本机时钟）；本项目契约口径日期 2026-10-06（targets.yaml meta.date））：①本仓夹具 tmp/ccf_live5.json（sha256 1cbe48f268366ed99b85307b25f59a5921f990aab0e85c24f6792986cbf56e05，按其 relations[].type 计数）中 ACCESSES = 0；②两侧一致：KG 侧真机关系型清单（只读 MATCH ()-[r]->() RETURN type(r)，Neo4j 5.26.30 @ 192.0.2.10:7475）无 CC_ACCESSES；ONTO 侧 live5 命名图 ccf-20260928T155516Z-937b79（2965 三元组，?infer=false）内 cc:accesses 断言数 = 0 ⇒ 零实例是两侧一致的，不是投影分歧。"
+    consumers:
+      - "shared/deploy/targets.yaml:46（colliding_relationship_types: [ACCESSES, DEPLOYED_ON]）"
+      - "shared/mapping/gen_maps.py:64,282"
+      - "shared/mapping/type-map.yaml:10"
+      - "shared/model/ccf.schema.json:296"
+      - "docs/00-总体设计与裁决记录.md:716"
+      - "docs/01-场景建模与范围定义.md:100"
+    planned_fix: "none（本次不实现：不建指向不存在对象的边，也**不得**为此往 metrics.yaml 加指标）。解锁条件二选一：上游为 orders 类业务表提供带契约指标码的采集 path；或经评审新增「无指标的 Table 对象化」显式规则（本次不做，避免造无观测对象）。"
+    milestone: "M1.8a 判定为不实现；需上游或契约评审"
+
+  - code: "INSTANCE_OF"
+    from: "GaussDBInstance"
+    to: "GaussDBCluster"
+    status: "not_applicable"
+    expect_in_ccf: "zero"
+    reason: "逆关系（rel-map.yaml 的 inverse_relations 段，asserted: false）：投影器只投 asserted: true 的关系，逆关系由 OWL owl:inverseOf / Cypher 查询期匹配，不写进 CCF relations[]。"
+    evidence: "shared/mapping/rel-map.yaml 的 inverse_relations 段（4 条之一）；CCF 实测 0。"
+    consumers:
+      - "shared/mapping/gen_maps.py:69-72"
+      - "docs/04-方案2设计（本体+LLM）.md:174（§3.2 反向属性 cc:hasAppInstance owl:inverseOf cc:instanceOf）"
+    planned_fix: "none（契约如此：逆关系不进 CCF）"
+    milestone: "—"
+
+  - code: "RUNS"
+    from: "GaussDBInstance"
+    to: "Host"
+    status: "not_applicable"
+    expect_in_ccf: "zero"
+    reason: "逆关系（asserted: false），同上：由投影层反向推导，不写进 CCF relations[]。"
+    evidence: "shared/mapping/rel-map.yaml 的 inverse_relations 段；CCF 实测 0。"
+    consumers:
+      - "shared/mapping/gen_maps.py:69-72"
+      - "docs/04-方案2设计（本体+LLM）.md:173（§3.2 反向属性 cc:runsIn owl:inverseOf cc:runs）"
+    planned_fix: "none（契约如此）"
+    milestone: "—"
+
+  - code: "HOSTS_CONTAINER"
+    from: "Host"
+    to: "Container"
+    status: "not_applicable"
+    expect_in_ccf: "zero"
+    reason: "逆关系（DEPLOYED_ON 的逆，asserted: false），不进 CCF relations[]。"
+    evidence: "shared/mapping/rel-map.yaml 的 inverse_relations 段；CCF 实测 0。"
+    consumers:
+      - "shared/mapping/gen_maps.py:69-72"
+      - "docs/04-方案2设计（本体+LLM）.md:176（§3.2 反向属性 cc:deployedOn owl:inverseOf cc:hostsContainer）"
+    planned_fix: "none（契约如此）"
+    milestone: "—"
+
+  - code: "ACCEPTS_CONNECTION_FROM"
+    from: "GaussDBCluster"
+    to: "JdbcDataSource"
+    status: "not_applicable"
+    expect_in_ccf: "zero"
+    reason: "逆关系（CONNECTS_TO 的逆，asserted: false），不进 CCF relations[]。"
+    evidence: "shared/mapping/rel-map.yaml 的 inverse_relations 段；CCF 实测 0。"
+    consumers:
+      - "shared/mapping/gen_maps.py:69-72"
+      - "docs/04-方案2设计（本体+LLM）.md:177（§3.2 反向属性 cc:connectsTo owl:inverseOf cc:acceptsConnectionFrom）"
+    planned_fix: "none（契约如此）"
+    milestone: "—"
+
+  - code: "HAS_EVIDENCE"
+    from: "Observation"
+    to: "Observation"
+    status: "not_applicable"
+    expect_in_ccf: "zero"
+    reason: "派生关系（rel-map.yaml 里 asserted: false + derived_from: observations）：投影期由 observations 生成，CCF 的 relations[] 里不该出现。"
+    evidence: "shared/mapping/rel-map.yaml（HAS_EVIDENCE 块的 asserted: false / derived_from: observations）；shared/mapping/type-map.yaml:116；shared/model/kgt-tools.yaml:191（excludes_derived_relations）；CCF 实测 0。"
+    consumers:
+      - "shared/mapping/type-map.yaml:116"
+      - "shared/model/kgt-tools.yaml:191"
+      - "shared/verify/contract_gates.py:59,67,170"
+      - "shared/verify/mapping_gate.py:175"
+    planned_fix: "none（投影期派生，不进 CCF）"
+    milestone: "—"
+
+# ----------------------------------------------------------------------------
+# 二、指标：M1.8a 登记的 16 个零观测指标（当时 l1-l3 profile 的 58 个在册指标里零观测的这 16 个；
+#   ★ 2026-10-12 P0-A 起契约指标增至 70，本文件另在下方追加 12 条「已补映射」条目）
+#   分两类：
+#     · 15 个：v3-ccf-map.yaml 自述「上游无对应事实 ⇒ 本版无映射」（map 的已知缺口段逐字列出）
+#     · 1 个（db.session.wait_event）：**有映射**（path session.wait_event → db.session.wait_event），
+#       零观测是上游事实粒度不足（按事件名聚合、无会话身份）⇒ 被 objtype drop。
+# ----------------------------------------------------------------------------
+metrics:
+
+  - code: "db.session.wait_event"
+    object: "Session"
+    status: "environment_limited"
+    expect_in_ccf: "zero"
+    reason: "有映射但零观测：上游把该事实按**等待事件名**聚合上报（obj_id=wait:HashAgg - build hash、obj_type=wait_event），不带任何会话标识，而契约里该指标挂在 Session 对象上 ⇒ 无身份可挂，被 objtype_to_type 的 wait_event drop 规则丢弃。"
+    evidence: "tmp/gather_m18a.json 的该事实：{path: session.wait_event, value: \"HashAgg - build hash\", obj_id: \"wait:HashAgg - build hash\", obj_type: wait_event}；冻结 drop 记账 objtype_dropped:wait_event = 1；映射见 shared/model/v3-ccf-map.yaml 的 path_to_metric 段（session.wait_event → db.session.wait_event）。CCF 观测 0。"
+    consumers:
+      - "shared/model/fault-modes.yaml:238（FM-DB-LOCK-WAIT.detect 的 in_enum 判据 [LockMgrLock, transactionid, relation, tuple]）"
+      - "shared/model/ccf.schema.json:322,421,466"
+      - "shared/model/topology.yaml:169"
+      - "docs/01-场景建模与范围定义.md:66,174"
+      - "docs/04-appendix-ORSD.md:1159（属性表 db.session.wait_event → ccm:waitEvent；原命名的 docs/04-方案2设计全文无 wait_event）"
+    planned_fix: "none（不造假会话）。解锁条件：上游按会话粒度上报 wait_event（或提供 pid/sessionid 字段）。注：本次真机观测值为 HashAgg - build hash，即便挂上也不在 FM-DB-LOCK-WAIT 的 in_enum 取值域内 ⇒ 该故障模式在本快照仍不可机判命中。"
+    milestone: "M1.8a 登记；需上游变化后重评"
+
+  - code: "db.query.mean_exec_ms"
+    object: "Query"
+    status: "environment_limited"
+    expect_in_ccf: "zero"
+    reason: "path_to_metric 里没有任何 path 映射到该码（上游事实不含慢 SQL 的平均执行耗时；探针的 slow_sql_detail 有 execution_time，但未以本码所需的 path 进事实层）。"
+    evidence: "v3-ccf-map.yaml 的已知缺口段逐字列出该码；tmp/gather_m18a.json 的 292 个 path 中 path_to_metric 无该码；tmp/ccf_live2.json / ccf_live3.json 观测 0。；★ M2.21 复核（采集时点 2026-09-29 00:36–00:38（+08:00，本机时钟）；本项目契约口径日期 2026-10-06（targets.yaml meta.date））：经复核，关系型 RUNS_QUERY / ACCESSES 两侧零断言（KG 侧无 CC_RUNS_QUERY / CC_ACCESSES，ONTO 侧 live5 命名图 ccf-20260928T155516Z-937b79 内 cc:runsQuery / cc:accesses 均为 0，?infer=false）+ 该指标零观测（真机 CC_Query 共 4 个、q.meanExecMs 非空 0 个）⇒ FM-DB-SLOW-QUERY 在当前快照不可机判。"
+    consumers:
+      - "shared/model/fault-modes.yaml:213（FM-DB-SLOW-QUERY.detect 的**唯一**判据 db.query.mean_exec_ms > threshold:mean_exec_ms_light#warning）"
+      - "shared/model/fault-modes.yaml:300-303（阈值 mean_exec_ms_light：warning 1000 / critical 10000）"
+      - "shared/model/v3-ccf-map.yaml（已知缺口段）"
+      - "docs/01-场景建模与范围定义.md:67,172,225"
+      - "docs/04-方案2设计（本体+LLM）.md:353,357,364（F-002 SPARQL：绑定 ccm:meanExecMs、FILTER 比较、证据 metricCode）"
+      - "docs/03-方案1设计（知识图谱+LLM）.md:352,357,375（Cypher R-F2：规则标题 / q.meanExecMs > threshold:mean_exec_ms_light#critical / RETURN triggerValue）"
+      - "docs/04-方案2设计（本体+LLM）.md:82,348,356（CQ-F-07：故障判据族行 + SPARQL 的 findingFaultMode / thresholdValue）"
+      - "docs/06-评测设计（A-B对照）.md:59,63"
+      - "scheme1-kg/tests/test_integrity.py:257-262（注释段：零取值定性为采集覆盖缺口）"
+    planned_fix: "none（**不得**改判据来掩盖：FM-DB-SLOW-QUERY 的真实后果是本快照不可能被机判命中，须如实上报）。解锁条件：上游为慢 SQL 提供可落到该码的 path。"
+    milestone: "M1.8a 登记（最重缺口：唯一判据缺失）"
+
+  - code: "db.pool.conn_rejected_total"
+    object: "DatabaseSessionPool"
+    status: "environment_limited"
+    expect_in_ccf: "zero"
+    reason: "path_to_metric 里没有任何 path 映射到该码（上游不提供连接被拒计数）。"
+    evidence: "v3-ccf-map.yaml 的已知缺口段逐字列出该码；CCF 观测 0。"
+    consumers:
+      - "shared/model/fault-modes.yaml:226（FM-DB-SESSION-POOL-FULL.detect 第二条 any_of 判据 predicate: increased）"
+      - "shared/model/ccf.schema.json:321"
+      - "docs/01-场景建模与范围定义.md:65"
+    planned_fix: "none（可采即可判：解锁条件 = 上游提供连接拒绝计数 path）"
+    milestone: "M1.8a 登记"
+
+  - code: "db.cluster.switchover_total"
+    object: "GaussDBCluster"
+    status: "environment_limited"
+    expect_in_ccf: "zero"
+    reason: "path_to_metric 里没有任何 path 映射到该码（上游不提供主备切换计数）。"
+    evidence: "v3-ccf-map.yaml 的已知缺口段逐字列出该码；CCF 观测 0。"
+    consumers:
+      - "shared/model/fault-modes.yaml:251（FM-DB-INSTANCE-DOWN.detect 第二条 any_of 判据 predicate: increased）"
+      - "shared/model/ccf.schema.json:316"
+      - "docs/01-场景建模与范围定义.md:63,175,261"
+    planned_fix: "none（解锁条件 = 上游提供切换计数 path）"
+    milestone: "M1.8a 登记"
+
+  - code: "db.instance.cpu_usage_ratio"
+    object: "GaussDBInstance"
+    status: "environment_limited"
+    expect_in_ccf: "zero"
+    reason: "path_to_metric 里没有任何 path 映射到该码（上游只给主机级 host.cpu_usage_ratio，不给实例级 CPU）。"
+    evidence: "v3-ccf-map.yaml 的已知缺口段逐字列出该码；CCF 观测 0。"
+    consumers: ["none（仅 ccf.schema.json 的枚举与 docs/01 的指标表声明）"]
+    planned_fix: "none（解锁条件 = 上游提供实例级 CPU）"
+    milestone: "M1.8a 登记"
+
+  - code: "db.instance.mem_usage_ratio"
+    object: "GaussDBInstance"
+    status: "environment_limited"
+    expect_in_ccf: "zero"
+    reason: "同 db.instance.cpu_usage_ratio：上游无实例级内存事实。"
+    evidence: "v3-ccf-map.yaml 的已知缺口段逐字列出该码；CCF 观测 0。"
+    consumers: ["none（仅 ccf.schema.json 的枚举与 docs/01 的指标表声明）"]
+    planned_fix: "none（解锁条件 = 上游提供实例级内存）"
+    milestone: "M1.8a 登记"
+
+  - code: "db.instance.io_wait_pct"
+    object: "GaussDBInstance"
+    status: "environment_limited"
+    expect_in_ccf: "zero"
+    reason: "同 db.instance.cpu_usage_ratio：上游无实例级 IO 等待百分比。"
+    evidence: "v3-ccf-map.yaml 的已知缺口段逐字列出该码；CCF 观测 0。"
+    consumers: ["none（仅 ccf.schema.json 的枚举与 docs/01 的指标表声明）"]
+    planned_fix: "none（解锁条件 = 上游提供该事实）"
+    milestone: "M1.8a 登记"
+
+  - code: "db.instance.long_txn_age_s"
+    object: "GaussDBInstance"
+    status: "environment_limited"
+    expect_in_ccf: "zero"
+    reason: "同 db.instance.cpu_usage_ratio：上游无最长事务时长事实（探针有 transaction.duration_ms，但语义映射到 db.session.xact_age_s，不是本码）。"
+    evidence: "v3-ccf-map.yaml 的已知缺口段逐字列出该码；CCF 观测 0。"
+    consumers: ["none（仅 ccf.schema.json 的枚举与 docs/01 的指标表声明）"]
+    planned_fix: "none（解锁条件 = 上游为该码提供明确语义的事实）"
+    milestone: "M1.8a 登记"
+
+  - code: "db.pool.session_waiting"
+    object: "DatabaseSessionPool"
+    status: "environment_limited"
+    expect_in_ccf: "zero"
+    reason: "path_to_metric 里没有任何 path 映射到该码（上游不提供池级等待会话数）。"
+    evidence: "v3-ccf-map.yaml 的已知缺口段逐字列出该码；CCF 观测 0。"
+    consumers: ["none（仅 ccf.schema.json 的枚举与 docs/01 的指标表声明）"]
+    planned_fix: "none（解锁条件 = 上游提供池级等待数）"
+    milestone: "M1.8a 登记"
+
+  - code: "db.query.exec_count"
+    object: "Query"
+    status: "environment_limited"
+    expect_in_ccf: "zero"
+    reason: "path_to_metric 里没有任何 path 映射到该码（上游不给按查询维度的执行次数）。"
+    evidence: "v3-ccf-map.yaml 的已知缺口段逐字列出该码；CCF 观测 0。"
+    consumers: ["none（仅 ccf.schema.json 的枚举与 docs/01 的指标表声明）"]
+    planned_fix: "none（解锁条件 = 上游提供该事实）"
+    milestone: "M1.8a 登记"
+
+  - code: "db.query.returned_rows"
+    object: "Query"
+    status: "environment_limited"
+    expect_in_ccf: "zero"
+    reason: "同 db.query.exec_count。"
+    evidence: "v3-ccf-map.yaml 的已知缺口段逐字列出该码；CCF 观测 0。"
+    consumers: ["none（仅 ccf.schema.json 的枚举与 docs/01 的指标表声明）"]
+    planned_fix: "none（解锁条件 = 上游提供该事实）"
+    milestone: "M1.8a 登记"
+
+  - code: "db.query.seq_scan_ratio"
+    object: "Query"
+    status: "environment_limited"
+    expect_in_ccf: "zero"
+    reason: "同 db.query.exec_count（上游只有表级 seq_scan_tables 名单，没有查询级顺序扫描占比）。"
+    evidence: "v3-ccf-map.yaml 的已知缺口段逐字列出该码；CCF 观测 0。"
+    consumers: ["none（仅 ccf.schema.json 的枚举与 docs/01 的指标表声明）"]
+    planned_fix: "none（解锁条件 = 上游提供该事实）"
+    milestone: "M1.8a 登记"
+
+  - code: "db.session.query_elapsed_s"
+    object: "Session"
+    status: "environment_limited"
+    expect_in_ccf: "zero"
+    reason: "path_to_metric 里没有任何 path 映射到该码（上游不给会话当前语句已执行时长）。"
+    evidence: "v3-ccf-map.yaml 的已知缺口段逐字列出该码；CCF 观测 0。"
+    consumers: ["none（仅 ccf.schema.json 的枚举与 docs/01 的指标表声明）"]
+    planned_fix: "none（解锁条件 = 上游提供该事实）"
+    milestone: "M1.8a 登记"
+
+  - code: "host.conntrack_count"
+    object: "Host"
+    status: "environment_limited"
+    expect_in_ccf: "zero"
+    reason: "path_to_metric 里没有任何 path 映射到该码（os 层未采连接跟踪表条数）。"
+    evidence: "v3-ccf-map.yaml 的已知缺口段逐字列出该码；CCF 观测 0。"
+    consumers: ["none（仅 ccf.schema.json 的枚举与 docs/01 的指标表声明）"]
+    planned_fix: "none（解锁条件 = os 探针新增该采集点）"
+    milestone: "M1.8a 登记"
+
+  - code: "host.net_rx_bytes"
+    object: "Host"
+    status: "environment_limited"
+    expect_in_ccf: "zero"
+    reason: "path_to_metric 里没有任何 path 映射到该码（os 层未采网卡收发速率；网络面当前超出四层范围，见 map 的已知缺口段）。"
+    evidence: "v3-ccf-map.yaml 的已知缺口段逐字列出该码；CCF 观测 0。"
+    consumers: ["none（仅 ccf.schema.json 的枚举与 docs/01 的指标表声明）"]
+    planned_fix: "none（解锁条件 = os 探针新增网卡速率采集点）"
+    milestone: "M1.8a 登记"
+
+  - code: "host.net_tx_bytes"
+    object: "Host"
+    status: "environment_limited"
+    expect_in_ccf: "zero"
+    reason: "同 host.net_rx_bytes。"
+    evidence: "v3-ccf-map.yaml 的已知缺口段逐字列出该码；CCF 观测 0。"
+    consumers: ["none（仅 ccf.schema.json 的枚举与 docs/01 的指标表声明）"]
+    planned_fix: "none（解锁条件 = os 探针新增网卡速率采集点）"
+    milestone: "M1.8a 登记"
+
+  - code: "app.endpoint.tps"
+    object: "AppEndpoint"
+    status: "planned_fix"
+    expect_in_ccf: "zero"
+    reason: "app 探针遥测日志 `tps=` 字段；P0.6 新增映射，冻结基线里无该码 ⇒ 零观测。"
+    evidence: "2026-10-13 真机实测：应用处于 hold（末条 [run] 遥测已超 CC_APP_TELEMETRY_MAX_AGE_S）⇒ 速率/延迟类 notCollected(telemetry_stale)；累计两条（success/fail_total）**不受时效门限**，一旦重固化即落值。"
+    consumers: ["shared/model/fault-modes.yaml（F1/F2 的应用侧症状判据）", "shared/model/m5-degradations.yaml#D-DELTA-UNJUDGEABLE（无关）"]
+    planned_fix: "已补映射（P0.6，2026-10-13）。冻结基线早于本映射 ⇒ 该快照内零观测，重固化后转 STALE。"
+    milestone: "P0.6（2026-10-13）"
+
+  - code: "app.endpoint.p50_ms"
+    object: "AppEndpoint"
+    status: "planned_fix"
+    expect_in_ccf: "zero"
+    reason: "同上（`p50=`）。原有的 p99 之外补全延迟分布。"
+    evidence: "2026-10-13 真机实测：应用处于 hold（末条 [run] 遥测已超 CC_APP_TELEMETRY_MAX_AGE_S）⇒ 速率/延迟类 notCollected(telemetry_stale)；累计两条（success/fail_total）**不受时效门限**，一旦重固化即落值。"
+    consumers: ["shared/model/fault-modes.yaml（F1/F2 的应用侧症状判据）", "shared/model/m5-degradations.yaml#D-DELTA-UNJUDGEABLE（无关）"]
+    planned_fix: "已补映射（P0.6，2026-10-13）。冻结基线早于本映射 ⇒ 该快照内零观测，重固化后转 STALE。"
+    milestone: "P0.6（2026-10-13）"
+
+  - code: "app.endpoint.p95_ms"
+    object: "AppEndpoint"
+    status: "planned_fix"
+    expect_in_ccf: "zero"
+    reason: "同上（`p95=`）。"
+    evidence: "2026-10-13 真机实测：应用处于 hold（末条 [run] 遥测已超 CC_APP_TELEMETRY_MAX_AGE_S）⇒ 速率/延迟类 notCollected(telemetry_stale)；累计两条（success/fail_total）**不受时效门限**，一旦重固化即落值。"
+    consumers: ["shared/model/fault-modes.yaml（F1/F2 的应用侧症状判据）", "shared/model/m5-degradations.yaml#D-DELTA-UNJUDGEABLE（无关）"]
+    planned_fix: "已补映射（P0.6，2026-10-13）。冻结基线早于本映射 ⇒ 该快照内零观测，重固化后转 STALE。"
+    milestone: "P0.6（2026-10-13）"
+
+  - code: "app.endpoint.max_ms"
+    object: "AppEndpoint"
+    status: "planned_fix"
+    expect_in_ccf: "zero"
+    reason: "同上（`max=`）。"
+    evidence: "2026-10-13 真机实测：应用处于 hold（末条 [run] 遥测已超 CC_APP_TELEMETRY_MAX_AGE_S）⇒ 速率/延迟类 notCollected(telemetry_stale)；累计两条（success/fail_total）**不受时效门限**，一旦重固化即落值。"
+    consumers: ["shared/model/fault-modes.yaml（F1/F2 的应用侧症状判据）", "shared/model/m5-degradations.yaml#D-DELTA-UNJUDGEABLE（无关）"]
+    planned_fix: "已补映射（P0.6，2026-10-13）。冻结基线早于本映射 ⇒ 该快照内零观测，重固化后转 STALE。"
+    milestone: "P0.6（2026-10-13）"
+
+  - code: "app.endpoint.success_total"
+    object: "AppEndpoint"
+    status: "planned_fix"
+    expect_in_ccf: "zero"
+    reason: "★ 累计量（`ok=`）：**遥测陈旧时仍有效**（累计总数不随时间失效）⇒ 不带 null_reason。"
+    evidence: "2026-10-13 真机实测：应用处于 hold（末条 [run] 遥测已超 CC_APP_TELEMETRY_MAX_AGE_S）⇒ 速率/延迟类 notCollected(telemetry_stale)；累计两条（success/fail_total）**不受时效门限**，一旦重固化即落值。"
+    consumers: ["shared/model/fault-modes.yaml（F1/F2 的应用侧症状判据）", "shared/model/m5-degradations.yaml#D-DELTA-UNJUDGEABLE（无关）"]
+    planned_fix: "已补映射（P0.6，2026-10-13）。冻结基线早于本映射 ⇒ 该快照内零观测，重固化后转 STALE。"
+    milestone: "P0.6（2026-10-13）"
+
+  - code: "app.endpoint.fail_total"
+    object: "AppEndpoint"
+    status: "planned_fix"
+    expect_in_ccf: "zero"
+    reason: "★ 累计量（`fail=`）：同上。"
+    evidence: "2026-10-13 真机实测：应用处于 hold（末条 [run] 遥测已超 CC_APP_TELEMETRY_MAX_AGE_S）⇒ 速率/延迟类 notCollected(telemetry_stale)；累计两条（success/fail_total）**不受时效门限**，一旦重固化即落值。"
+    consumers: ["shared/model/fault-modes.yaml（F1/F2 的应用侧症状判据）", "shared/model/m5-degradations.yaml#D-DELTA-UNJUDGEABLE（无关）"]
+    planned_fix: "已补映射（P0.6，2026-10-13）。冻结基线早于本映射 ⇒ 该快照内零观测，重固化后转 STALE。"
+    milestone: "P0.6（2026-10-13）"
+
+  - code: "host.fs_max_used_pct"
+    object: "Host"
+    status: "planned_fix"
+    expect_in_ccf: "zero"
+    reason: "磁盘满（文件系统使用率最大值）—— 数据一直在采（storage.fs_usage_pct，×15），但契约无 Filesystem 类型 ⇒ 逐挂载点事实被丢弃；P0.7 由探针增发宿主级聚合。"
+    evidence: "2026-10-13 真机实测：契约新增该码之后、快照重固化之前，冻结基线里零观测。探针侧已在采，重固化后应有非零实例。"
+    consumers: ["shared/model/v3-ccf-map.yaml（P0.7 段）", "待建的 P0.7 故障码（磁盘满 / I/O 错误 / 网卡 down / 主备延迟 / 索引缺失 / 探针告警）"]
+    planned_fix: "已补映射（P0.7，2026-10-13）。重固化后转 STALE。"
+    milestone: "P0.7（2026-10-13）"
+
+  - code: "host.disk_io_errors_total"
+    object: "Host"
+    status: "planned_fix"
+    expect_in_ccf: "zero"
+    reason: "磁盘 I/O 错误 —— ★ 原本有个「只在不出事时上报」的缺陷：node 级事实仅在某盘零错误时发，一旦真有错误就只剩 block_device 级（被丢弃）⇒ 最需要时反而采不到。P0.7 改为始终发宿主级总数。"
+    evidence: "2026-10-13 真机实测：契约新增该码之后、快照重固化之前，冻结基线里零观测。探针侧已在采，重固化后应有非零实例。"
+    consumers: ["shared/model/v3-ccf-map.yaml（P0.7 段）", "待建的 P0.7 故障码（磁盘满 / I/O 错误 / 网卡 down / 主备延迟 / 索引缺失 / 探针告警）"]
+    planned_fix: "已补映射（P0.7，2026-10-13）。重固化后转 STALE。"
+    milestone: "P0.7（2026-10-13）"
+
+  - code: "host.net_iface_down_count"
+    object: "Host"
+    status: "planned_fix"
+    expect_in_ccf: "zero"
+    reason: "网卡 down —— os.network.iface_state 是逐网卡的（obj_type=net_iface）且 obj_id 用网卡名（多主机同名）⇒ 被丢弃。P0.7 增发宿主级「非 up 网卡数」。"
+    evidence: "2026-10-13 真机实测：契约新增该码之后、快照重固化之前，冻结基线里零观测。探针侧已在采，重固化后应有非零实例。"
+    consumers: ["shared/model/v3-ccf-map.yaml（P0.7 段）", "待建的 P0.7 故障码（磁盘满 / I/O 错误 / 网卡 down / 主备延迟 / 索引缺失 / 探针告警）"]
+    planned_fix: "已补映射（P0.7，2026-10-13）。重固化后转 STALE。"
+    milestone: "P0.7（2026-10-13）"
+
+  - code: "host.net_iface_total"
+    object: "Host"
+    status: "planned_fix"
+    expect_in_ccf: "zero"
+    reason: "同上的分母（区分 1/1 与 1/8）。"
+    evidence: "2026-10-13 真机实测：契约新增该码之后、快照重固化之前，冻结基线里零观测。探针侧已在采，重固化后应有非零实例。"
+    consumers: ["shared/model/v3-ccf-map.yaml（P0.7 段）", "待建的 P0.7 故障码（磁盘满 / I/O 错误 / 网卡 down / 主备延迟 / 索引缺失 / 探针告警）"]
+    planned_fix: "已补映射（P0.7，2026-10-13）。重固化后转 STALE。"
+    milestone: "P0.7（2026-10-13）"
+
+  - code: "db.cluster.replay_lag_bytes_max"
+    object: "GaussDBCluster"
+    status: "planned_fix"
+    expect_in_ccf: "zero"
+    reason: "主备复制延迟 —— replication.replay_lag_bytes 是逐 sender 的（obj_type=replication，契约无此类型）⇒ 被丢弃。P0.7 取各 standby 最大值。"
+    evidence: "2026-10-13 真机实测：契约新增该码之后、快照重固化之前，冻结基线里零观测。探针侧已在采，重固化后应有非零实例。"
+    consumers: ["shared/model/v3-ccf-map.yaml（P0.7 段）", "待建的 P0.7 故障码（磁盘满 / I/O 错误 / 网卡 down / 主备延迟 / 索引缺失 / 探针告警）"]
+    planned_fix: "已补映射（P0.7，2026-10-13）。重固化后转 STALE。"
+    milestone: "P0.7（2026-10-13）"
+
+  - code: "db.cluster.replication_not_streaming_count"
+    object: "GaussDBCluster"
+    status: "planned_fix"
+    expect_in_ccf: "zero"
+    reason: "复制停止（state != Streaming 的 sender 数）—— 主备中断的直接判据。"
+    evidence: "2026-10-13 真机实测：契约新增该码之后、快照重固化之前，冻结基线里零观测。探针侧已在采，重固化后应有非零实例。"
+    consumers: ["shared/model/v3-ccf-map.yaml（P0.7 段）", "待建的 P0.7 故障码（磁盘满 / I/O 错误 / 网卡 down / 主备延迟 / 索引缺失 / 探针告警）"]
+    planned_fix: "已补映射（P0.7，2026-10-13）。重固化后转 STALE。"
+    milestone: "P0.7（2026-10-13）"
+
+  - code: "db.cluster.alert_active_count"
+    object: "GaussDBCluster"
+    status: "planned_fix"
+    expect_in_ccf: "zero"
+    reason: "★ 探针的**诊断结论**进 CCF —— alert.type/alert.status 的 obj_type=alert 被 objtype_dropped 丢弃，导致「采集层明明已诊断出死锁，推理层看不到」。CCF 无 alert 段 ⇒ 以集群级计数承载。"
+    evidence: "2026-10-13 真机实测：契约新增该码之后、快照重固化之前，冻结基线里零观测。探针侧已在采，重固化后应有非零实例。"
+    consumers: ["shared/model/v3-ccf-map.yaml（P0.7 段）", "待建的 P0.7 故障码（磁盘满 / I/O 错误 / 网卡 down / 主备延迟 / 索引缺失 / 探针告警）"]
+    planned_fix: "已补映射（P0.7，2026-10-13）。重固化后转 STALE。"
+    milestone: "P0.7（2026-10-13）"
+
+  - code: "db.table.index_count"
+    object: "Table"
+    status: "planned_fix"
+    expect_in_ccf: "zero"
+    reason: "该表的索引数（索引冗余/缺失的分母）。"
+    evidence: "2026-10-13 真机实测：契约新增该码之后、快照重固化之前，冻结基线里零观测。探针侧已在采，重固化后应有非零实例。"
+    consumers: ["shared/model/v3-ccf-map.yaml（P0.7 段）", "待建的 P0.7 故障码（磁盘满 / I/O 错误 / 网卡 down / 主备延迟 / 索引缺失 / 探针告警）"]
+    planned_fix: "已补映射（P0.7，2026-10-13）。重固化后转 STALE。"
+    milestone: "P0.7（2026-10-13）"
+
+  - code: "db.table.unused_index_count"
+    object: "Table"
+    status: "planned_fix"
+    expect_in_ccf: "zero"
+    reason: "从未被扫描过的索引数 —— index.idx_scan 是逐索引的（obj_type=index，契约无 Index 类型）⇒ 被丢弃。P0.7 按表聚合。"
+    evidence: "2026-10-13 真机实测：契约新增该码之后、快照重固化之前，冻结基线里零观测。探针侧已在采，重固化后应有非零实例。"
+    consumers: ["shared/model/v3-ccf-map.yaml（P0.7 段）", "待建的 P0.7 故障码（磁盘满 / I/O 错误 / 网卡 down / 主备延迟 / 索引缺失 / 探针告警）"]
+    planned_fix: "已补映射（P0.7，2026-10-13）。重固化后转 STALE。"
+    milestone: "P0.7（2026-10-13）"
+
+  - code: "db.cluster.replication_pending_bytes"
+    object: "GaussDBCluster"
+    status: "planned_fix"
+    expect_in_ccf: "zero"
+    reason: "复制待重放字节（cluster 级事实，直接映射）。"
+    evidence: "2026-10-13 真机实测：契约新增该码之后、快照重固化之前，冻结基线里零观测。探针侧已在采，重固化后应有非零实例。"
+    consumers: ["shared/model/v3-ccf-map.yaml（P0.7 段）", "待建的 P0.7 故障码（磁盘满 / I/O 错误 / 网卡 down / 主备延迟 / 索引缺失 / 探针告警）"]
+    planned_fix: "已补映射（P0.7，2026-10-13）。重固化后转 STALE。"
+    milestone: "P0.7（2026-10-13）"
+
+  - code: "db.cluster.replication_flush_pending_bytes"
+    object: "GaussDBCluster"
+    status: "planned_fix"
+    expect_in_ccf: "zero"
+    reason: "复制待刷盘字节（直接映射）。"
+    evidence: "2026-10-13 真机实测：契约新增该码之后、快照重固化之前，冻结基线里零观测。探针侧已在采，重固化后应有非零实例。"
+    consumers: ["shared/model/v3-ccf-map.yaml（P0.7 段）", "待建的 P0.7 故障码（磁盘满 / I/O 错误 / 网卡 down / 主备延迟 / 索引缺失 / 探针告警）"]
+    planned_fix: "已补映射（P0.7，2026-10-13）。重固化后转 STALE。"
+    milestone: "P0.7（2026-10-13）"
+
+  - code: "db.cluster.walsender_count"
+    object: "GaussDBCluster"
+    status: "planned_fix"
+    expect_in_ccf: "zero"
+    reason: "WAL sender 数（直接映射）。"
+    evidence: "2026-10-13 真机实测：契约新增该码之后、快照重固化之前，冻结基线里零观测。探针侧已在采，重固化后应有非零实例。"
+    consumers: ["shared/model/v3-ccf-map.yaml（P0.7 段）", "待建的 P0.7 故障码（磁盘满 / I/O 错误 / 网卡 down / 主备延迟 / 索引缺失 / 探针告警）"]
+    planned_fix: "已补映射（P0.7，2026-10-13）。重固化后转 STALE。"
+    milestone: "P0.7（2026-10-13）"
+
+  - code: "db.cluster.replication_slot_count"
+    object: "GaussDBCluster"
+    status: "planned_fix"
+    expect_in_ccf: "zero"
+    reason: "复制槽总数（直接映射）。"
+    evidence: "2026-10-13 真机实测：契约新增该码之后、快照重固化之前，冻结基线里零观测。探针侧已在采，重固化后应有非零实例。"
+    consumers: ["shared/model/v3-ccf-map.yaml（P0.7 段）", "待建的 P0.7 故障码（磁盘满 / I/O 错误 / 网卡 down / 主备延迟 / 索引缺失 / 探针告警）"]
+    planned_fix: "已补映射（P0.7，2026-10-13）。重固化后转 STALE。"
+    milestone: "P0.7（2026-10-13）"
+
+  - code: "db.cluster.replication_slot_active_count"
+    object: "GaussDBCluster"
+    status: "planned_fix"
+    expect_in_ccf: "zero"
+    reason: "活动复制槽数（直接映射）。"
+    evidence: "2026-10-13 真机实测：契约新增该码之后、快照重固化之前，冻结基线里零观测。探针侧已在采，重固化后应有非零实例。"
+    consumers: ["shared/model/v3-ccf-map.yaml（P0.7 段）", "待建的 P0.7 故障码（磁盘满 / I/O 错误 / 网卡 down / 主备延迟 / 索引缺失 / 探针告警）"]
+    planned_fix: "已补映射（P0.7，2026-10-13）。重固化后转 STALE。"
+    milestone: "P0.7（2026-10-13）"
+
+  - code: "db.cluster.is_standby"
+    object: "GaussDBCluster"
+    status: "planned_fix"
+    expect_in_ccf: "zero"
+    reason: "本节点是否 standby（直接映射）。"
+    evidence: "2026-10-13 真机实测：契约新增该码之后、快照重固化之前，冻结基线里零观测。探针侧已在采，重固化后应有非零实例。"
+    consumers: ["shared/model/v3-ccf-map.yaml（P0.7 段）", "待建的 P0.7 故障码（磁盘满 / I/O 错误 / 网卡 down / 主备延迟 / 索引缺失 / 探针告警）"]
+    planned_fix: "已补映射（P0.7，2026-10-13）。重固化后转 STALE。"
+    milestone: "P0.7（2026-10-13）"
+
+# ----------------------------------------------------------------------------
+# ★ P0-A（2026-10-12）追加：12 个**已补映射**的 DB 指标
+#   （编号接在「三」之前；「三」是 M1.8a 的遗留说明，保留原文不改）
+#
+#   背景：这 12 个指标码是本次 P0-A 新登记进契约的（58 → 70）。它们对应的 **fact 一直
+#   真机在采**（一次 gather 里都实际出现），只是原先 `v3-ccf-map.yaml` 里没有映射条目 ⇒
+#   进不了 CCF。P0-A 补齐了映射（含上游 kg_tbox / onto_metric 两套载体与门禁计数）。
+#
+#   ★ 为什么仍登记为 `expect_in_ccf: zero`：本门禁的判据快照是**冻结的** `tmp/ccf_live5.json`
+#     （2026-09-28），它固化的时点上**这 12 条映射还不存在** ⇒ 在那个快照里它们的观测数必然是 0。
+#     本台账如实登记「该冻结基线里为零 + 为什么」。
+#
+#   ★ 它们**在当前真机上已经有真实取值**（2026-10-12 实测，见各条 evidence）⇒
+#     重新固化基线后，本组条目会命中 G16-07 STALE（"缺口已合上"）并被删除。
+#     这正是台账设计的两态：登记缺口 → 合上后转 STALE。
+# ----------------------------------------------------------------------------
+
+  - code: "db.cluster.deadlocks"
+    object: "GaussDBCluster"
+    status: "planned_fix"
+    expect_in_ccf: "zero"
+    reason: "P0-A 新登记的指标码：fact `cluster.deadlocks` 一直真机在采，但 `v3-ccf-map.yaml` 原先无该映射 ⇒ 冻结基线 ccf_live5.json（2026-09-28）里零观测。"
+    evidence: "2026-10-12 真机实测该 fact = 1124（`pg_stat_database.deadlocks` 累计）；同批 `alert.type=deadlock` / `alert.status=active`。映射见 shared/model/v3-ccf-map.yaml 的 P0-A 段。"
+    consumers: ["shared/collect/v3-fact-inventory.json（cluster.deadlocks）", "计划中的 FM 侧 sql_deadlock 判据（累计量，判 increased 需窗口 delta）"]
+    planned_fix: "已补映射（P0-A，2026-10-12）。剩余：累计型计数器的窗口 delta 由 gaussdb 探针补（当前 delta 缺 ⇒ predicate:increased 不可机判）。"
+    milestone: "P0-A（2026-10-12）"
+
+  - code: "db.cluster.xact_rollback"
+    object: "GaussDBCluster"
+    status: "planned_fix"
+    expect_in_ccf: "zero"
+    reason: "P0-A 新登记；同 db.cluster.deadlocks（原无映射 ⇒ 冻结基线零观测）。"
+    evidence: "2026-10-12 真机实测该 fact = 61203（`pg_stat_database.xact_rollback` 累计）。"
+    consumers: ["shared/collect/v3-fact-inventory.json（cluster.xact_rollback）", "计划中的 biz_unique_conflict / sql_deadlock 判据"]
+    planned_fix: "已补映射（P0-A）。同上：累计量需窗口 delta。"
+    milestone: "P0-A（2026-10-12）"
+
+  - code: "db.cluster.slow_query_count"
+    object: "GaussDBCluster"
+    status: "planned_fix"
+    expect_in_ccf: "zero"
+    reason: "P0-A 新登记；同 db.cluster.deadlocks（原无映射 ⇒ 冻结基线零观测）。"
+    evidence: "2026-10-12 真机实测该 fact = 0（`cluster.slow_sql_count`，当前无慢 SQL）。"
+    consumers: ["shared/collect/v3-fact-inventory.json（cluster.slow_sql_count）"]
+    planned_fix: "已补映射（P0-A）。"
+    milestone: "P0-A（2026-10-12）"
+
+  - code: "db.instance.active_sessions"
+    object: "GaussDBInstance"
+    status: "planned_fix"
+    expect_in_ccf: "zero"
+    reason: "P0-A 新登记；fact `gaussdb.session.active` 原先未映射。"
+    evidence: "2026-10-12 真机实测该 fact = 7。"
+    consumers: ["shared/collect/v3-fact-inventory.json（gaussdb.session.active）"]
+    planned_fix: "已补映射（P0-A）。"
+    milestone: "P0-A（2026-10-12）"
+
+  - code: "db.instance.idle_in_xact"
+    object: "GaussDBInstance"
+    status: "planned_fix"
+    expect_in_ccf: "zero"
+    reason: "P0-A 新登记；fact `gaussdb.session.idle_in_xact` 原先未映射。"
+    evidence: "2026-10-12 真机实测该 fact = 0（空闲态无 idle-in-transaction 会话）。"
+    consumers: ["shared/collect/v3-fact-inventory.json（gaussdb.session.idle_in_xact）", "计划中的 sql_idle_in_tx 判据（直接证据）"]
+    planned_fix: "已补映射（P0-A）。"
+    milestone: "P0-A（2026-10-12）"
+
+  - code: "db.instance.lock_waits"
+    object: "GaussDBInstance"
+    status: "planned_fix"
+    expect_in_ccf: "zero"
+    reason: "P0-A 新登记；fact `gaussdb.session.lock_wait` 原先未映射。"
+    evidence: "2026-10-12 真机实测该 fact = 0；同批 `pg_locks WHERE NOT granted` = 0。"
+    consumers: ["shared/collect/v3-fact-inventory.json（gaussdb.session.lock_wait）", "计划中的 db_lock / biz_hot_row / biz_lock_range / sql_lock_chain 判据"]
+    planned_fix: "已补映射（P0-A）。"
+    milestone: "P0-A（2026-10-12）"
+
+  - code: "db.cluster.temp_files"
+    object: "GaussDBInstance"
+    status: "planned_fix"
+    expect_in_ccf: "zero"
+    reason: "P0-A 新登记；fact `sql.temp_files_count` 原先未映射。"
+    evidence: "2026-10-12 真机实测该 fact = 246（`pg_stat_database.temp_files` 累计；temp_bytes ≈ 1.134 GB）。"
+    consumers: ["shared/collect/v3-fact-inventory.json（sql.temp_files_count）", "计划中的 sql_order_noindex / sql_bloat_select 判据"]
+    planned_fix: "已补映射（P0-A）。"
+    milestone: "P0-A（2026-10-12）"
+
+  - code: "db.cluster.temp_file_written"
+    object: "GaussDBInstance"
+    status: "planned_fix"
+    expect_in_ccf: "zero"
+    reason: "P0-A 新登记；fact `sql.temp_file_written` 原先未映射。"
+    evidence: "2026-10-12 真机实测该 fact = True。"
+    consumers: ["shared/collect/v3-fact-inventory.json（sql.temp_file_written）"]
+    planned_fix: "已补映射（P0-A）。"
+    milestone: "P0-A（2026-10-12）"
+
+  - code: "db.table.seq_scan"
+    object: "Table"
+    status: "planned_fix"
+    expect_in_ccf: "zero"
+    reason: "P0-A 新登记；fact `table.seq_scan` 原先未映射。"
+    evidence: "2026-10-12 真机实测 19 张表该 fact（最大 tbl-card_sim.simulation_run = 11776、credit_card_account = 7499）。"
+    consumers: ["shared/collect/v3-fact-inventory.json（table.seq_scan）", "计划中的 sql_full_scan / sql_fuzzy_like 判据（直接证据）"]
+    planned_fix: "已补映射（P0-A）。"
+    milestone: "P0-A（2026-10-12）"
+
+  - code: "db.table.idx_scan"
+    object: "Table"
+    status: "planned_fix"
+    expect_in_ccf: "zero"
+    reason: "P0-A 新登记；fact `table.idx_scan` 原先未映射。"
+    evidence: "2026-10-12 真机实测 19 张表该 fact（最大 credit_card_account = 90289640）。"
+    consumers: ["shared/collect/v3-fact-inventory.json（table.idx_scan）"]
+    planned_fix: "已补映射（P0-A）。"
+    milestone: "P0-A（2026-10-12）"
+
+  - code: "db.table.dead_tuples"
+    object: "Table"
+    status: "planned_fix"
+    expect_in_ccf: "zero"
+    reason: "P0-A 新登记；fact `table.n_dead_tup` 原先未映射（比值 db.table.dead_tuple_ratio 早已映射，本条补的是**绝对数**）。"
+    evidence: "2026-10-12 真机实测 19 张表该 fact（最大 tbl-card_sim.authorization = 1348667）。"
+    consumers: ["shared/collect/v3-fact-inventory.json（table.n_dead_tup）", "计划中的 sql_dead_tuple 判据"]
+    planned_fix: "已补映射（P0-A）。"
+    milestone: "P0-A（2026-10-12）"
+
+  - code: "db.table.hot_update_ratio_pct"
+    object: "Table"
+    status: "planned_fix"
+    expect_in_ccf: "zero"
+    reason: "P0-A 新登记；fact `table.hot_update_ratio_pct` 原先未映射。"
+    evidence: "2026-10-12 真机实测 3 张表该 fact（均为 0.0）。"
+    consumers: ["shared/collect/v3-fact-inventory.json（table.hot_update_ratio_pct）", "计划中的 biz_hot_row 判据"]
+    planned_fix: "已补映射（P0-A）。"
+    milestone: "P0-A（2026-10-12）"
+
+# ----------------------------------------------------------------------------
+# 三、本次（M1.8a）**没有**修、也没打算修的（诚实清单，防止读者误以为台账=待办清单）
+#   · RUNS_QUERY / ACCESSES：不造边（上游事实粒度不足；造边需要伪造 join 或造无观测对象）。
+#   · db.session.wait_event：不造假会话挂载。
+#   · 其余 14 个零观测指标：需要上游/探针新增采集点，不在本里程碑授权范围内。
+#   · db.query.mean_exec_ms 是 FM-DB-SLOW-QUERY 的唯一判据 ⇒ **本快照不可能机判命中该故障模式**；
+#     这是事实陈述，不是本台账能"修"的缺陷（不得改判据掩盖）。
+# ----------------------------------------------------------------------------

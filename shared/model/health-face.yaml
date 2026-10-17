@@ -1,0 +1,346 @@
+schema: dsh-health-face/1
+# =============================================================================
+# R-30 / M3.9 (a)：两侧 `/health` 的**运行时键面**声明
+#
+# 为什么单列一个运行时口径（实证理由）：
+#   R-27 取证时点两侧 `/openapi.json` **逐字节未变**（旧指纹 KG `f6e20fed…` / ONTO `92b64b04…`）；S3a-1 新增第 8 工具 `read_facts` 后 `/openapi.json` **按预期变化**（KG 7774→9225 B、ONTO 5909→7275 B），故下面 `openapiAtCollection` 记的是**新基线**（登记性快照，无 Python 门禁消费），
+#   而 `/health` 的实际键面已变（ONTO 新增 auditFile / auditChain / queryLatency）
+#   ⇒ OpenAPI 平面对 `/health` **不敏感**，键面分歧在既有门禁下不可见、无法强制登记。
+#
+# 核对方式（门禁）：`python shared/verify/toolface_diff.py --health`
+#   * 采集到的键**未登记** ⇒ ERROR（多键）
+#   * 声明里的键**缺失**   ⇒ ERROR（不是 WARN）
+#   * 全部相符 ⇒ `SAME` / exit 0
+#   * 只在单侧出现的键必须逐条登记进 `carrierSpecific`，否则 ERROR
+#   ★ 本声明只声明**键名**（键集合）；`observedAtCollection` 下的取值只是采集时点
+#     快照、**不参与**比较（取值级比对不在 R-30 口径内，见报告诚实边界）。
+#
+# 口径边界：`:8303` 是 KG-T 臂、**不在** Set B 对比内 ⇒ `inMainComparison: false`，
+#   只登记、不参与核对（R-30(a) 原文要求标注）。
+# =============================================================================
+collectedAt: "2026-09-30T01:38:51+08:00"
+collectedFrom: "GET http://192.0.2.10:<port>/health（原始响应逐字节存 tmp/m39_health_<port>.json）"
+checkedBy: "shared/verify/toolface_diff.py --health"
+evidence:
+  # 采集时点的部署机 PID（来源：部署机 `/proc/<pid>/cmdline` 与载体 pidfile；S3a-2a 由 tmp/_m5_s3a2_relaunch.py 忠实重启后写回）。
+  # ★ PID 随重启变化 ⇒ 这里只是**采集时点快照**，不是契约的一部分；
+  #   /health 载荷本身**不暴露** PID，故门禁的 PID 由 --pid-kg/--pid-onto 传入并在读数里保留。
+  pidsAtCollection:
+    kg8301: 1799292
+    onto8302: 1799339
+    kgt8303: 1799375
+  openapiAtCollection:
+    kg: {bytes: 9225, sha256: "7d0e3e18faad7d34823f6b55e34533e708820a12820659a0905dba3103067f73"}
+    onto: {bytes: 7275, sha256: "2a6c885296497e79aa856379bafca0ef08332c645c080a5ee676d916fb52d324"}
+  observedAtCollection:
+    status: "ok"
+    carrier: {kg: "kg", onto: "onto"}
+    arm: {kg: "KG-Q", onto: "ONTO-Q"}
+    snapshotId: "ccf-20260928T155516Z-937b79"
+    queryTimeoutS: 4.0
+    rowCap: 200
+    byteCap: 20000
+    maxCauseDepth: 4
+    toolsCount: 8
+    backend: {kg: "http://127.0.0.1:7475", onto: "http://127.0.0.1:7200"}
+    database: "neo4j（KG 侧）"
+    repository: "cc-ops（ONTO 侧 GraphDB 仓库）"
+    capability: "readonly（ONTO 侧）"
+    auditFile:
+      kg: "/opt/cc-tools-kg/cc_tools_audit.jsonl"
+      onto: "/opt/cc-tools-onto/cc_tools_onto_audit.jsonl"
+    auditChainFieldsCount: {kg: 14, onto: 22}
+
+sides:
+  - carrier: kg
+    arm: KG-Q
+    port: 8301
+    # ★ R-58：不硬编码部署主机（原值 192.0.2.10，R-56 事故根因）。
+    #   ★ 本键**是行为性的**：shared/verify/toolface_diff.py:945 的取值链是
+    #   --base-kg/--base-onto ＞ 本 baseUrl ＞ DEFAULT_BASE_*（127.0.0.1）
+    #   ⇒ 不改它，不带 CLI 跑 --health 仍会去连旧主机。故三处 baseUrl 一律落本机。
+    #   ⚠ 同文件的 collectedFrom（第 22 行）是**来源记录**（那次采样取自哪里），
+    #     按纪律**不改**。
+    baseUrl: "http://127.0.0.1:8301"
+    inMainComparison: true
+    keyCount: 14
+    keys:
+      - name: status
+        meaning: 服务健康态（ok / degraded）
+        equivalence: same
+        counterpart: status
+      - name: carrier
+        meaning: 载体标识（"kg"）
+        equivalence: same
+        counterpart: carrier
+      - name: arm
+        meaning: 实验组名（KG-Q）
+        equivalence: same
+        counterpart: arm
+      - name: snapshotId
+        meaning: 图快照标识
+        equivalence: same
+        counterpart: snapshotId
+      - name: backend
+        meaning: 图后端基址。★ 取值源两侧不同（KG = Neo4j HTTP 7475；ONTO = GraphDB 7200）
+        equivalence: partial
+        counterpart: backend
+      - name: database
+        meaning: 图数据库名（Neo4j 侧）。KG 独有键
+        equivalence: carrier-specific
+        counterpart: repository
+      - name: queryTimeoutS
+        meaning: 查询超时（秒）。★ GraphDB 侧 queryTimeout=0 ⇒ 4.0 只是**客户端**保证
+        equivalence: same
+        counterpart: queryTimeoutS
+      - name: rowCap
+        meaning: 行上限（200）
+        equivalence: same
+        counterpart: rowCap
+      - name: byteCap
+        meaning: 字节上限（20000）
+        equivalence: same
+        counterpart: byteCap
+      - name: maxCauseDepth
+        meaning: 根因最大追溯深度（4）
+        equivalence: same
+        counterpart: maxCauseDepth
+      - name: tools
+        meaning: 工具名清单（Set B 七工具；两侧取值逐字相同）
+        equivalence: same
+        counterpart: tools
+      - name: queryLatency
+        meaning: 载体侧纯查询延迟聚合快照（与 elapsedMs 分离）。★ 内层结构两侧不同，本口径只比对键名
+        equivalence: partial
+        counterpart: queryLatency
+      - name: auditChain
+        meaning: 进程内审计尾环快照（length/total/capacity/fields/tail）。★ fields 内层两侧不同（14 vs 22）
+        equivalence: partial
+        counterpart: auditChain
+      - name: auditFile
+        meaning: 审计 JSONL 落盘绝对路径（未设 CC_AUDIT_LOG 时为空串）
+        equivalence: same
+        counterpart: auditFile
+
+  - carrier: onto
+    arm: ONTO-Q
+    port: 8302
+    baseUrl: "http://127.0.0.1:8302"
+    inMainComparison: true
+    keyCount: 15
+    keys:
+      - name: status
+        meaning: 服务健康态（ok / degraded）
+        equivalence: same
+        counterpart: status
+      - name: carrier
+        meaning: 载体标识（"onto"）
+        equivalence: same
+        counterpart: carrier
+      - name: arm
+        meaning: 实验组名（ONTO-Q）
+        equivalence: same
+        counterpart: arm
+      - name: snapshotId
+        meaning: 图快照标识
+        equivalence: same
+        counterpart: snapshotId
+      - name: backend
+        meaning: 图后端基址（GraphDB 7200）。★ 取值源两侧不同
+        equivalence: partial
+        counterpart: backend
+      - name: capability
+        meaning: 只读能力声明（"readonly"）。ONTO 独有键
+        equivalence: carrier-specific
+        counterpart: database
+      - name: repository
+        meaning: GraphDB 仓库名（cc-ops）。ONTO 独有键
+        equivalence: carrier-specific
+        counterpart: database
+      - name: queryTimeoutS
+        meaning: 查询超时（秒）。★ 与 KG 同键名同值；GraphDB queryTimeout=0 ⇒ 客户端保证
+        equivalence: same
+        counterpart: queryTimeoutS
+      - name: rowCap
+        meaning: 行上限（200）
+        equivalence: same
+        counterpart: rowCap
+      - name: byteCap
+        meaning: 字节上限（20000）
+        equivalence: same
+        counterpart: byteCap
+      - name: maxCauseDepth
+        meaning: 根因最大追溯深度（4）
+        equivalence: same
+        counterpart: maxCauseDepth
+      - name: tools
+        meaning: 工具名清单（Set B 七工具；两侧取值逐字相同）
+        equivalence: same
+        counterpart: tools
+      - name: queryLatency
+        meaning: 载体侧纯查询延迟聚合快照（p50/p95 + 样例窗 + byTool/byStatus）。★ 内层结构两侧不同
+        equivalence: partial
+        counterpart: queryLatency
+      - name: auditChain
+        meaning: 进程内审计尾环快照（length/total/capacity/fields/tail）。★ fields 内层 22 项
+        equivalence: partial
+        counterpart: auditChain
+      - name: auditFile
+        meaning: 审计 JSONL 落盘绝对路径（R-27；未设 CC_AUDIT_LOG 时为空串）
+        equivalence: same
+        counterpart: auditFile
+
+  - carrier: kg
+    arm: KG-T
+    port: 8303
+    baseUrl: "http://127.0.0.1:8303"
+    inMainComparison: false
+    keyCount: 20
+    note: >-
+      KG-T 臂（工具面 paths=15 / body=4）：**不在** Set B 对比内，按 R-30(a) 只登记、
+      不参与 --health 主对比。与 KG-Q 的差异：无 queryTimeoutS / maxCauseDepth，
+      另有 forbiddenTools / inMainComparison / maxHopDepth / maxHopsFault / port /
+      rulesLoaded / supplementary / tokenBudget 八键。
+    keys:
+      - arm
+      - auditChain
+      - auditFile
+      - backend
+      - byteCap
+      - carrier
+      - database
+      - forbiddenTools
+      - inMainComparison
+      - maxHopDepth
+      - maxHopsFault
+      - port
+      - queryLatency
+      - rowCap
+      - rulesLoaded
+      - snapshotId
+      - status
+      - supplementary
+      - tokenBudget
+      - tools
+
+carrierSpecific:
+  - carrier: kg
+    key: database
+    meaning: 图数据库名（Neo4j 侧）
+    why: KG 载体直连 Neo4j（HTTP 7475），后端标识以「数据库名」表达
+    counterpart: [repository, capability]
+    equivalence: partial
+    ruling: "R-30(a)：属载体特有键，登记后通过；与 ONTO 的 repository 同类（存储目标标识）但**不同源**，不做同义断言"
+  - carrier: onto
+    key: capability
+    meaning: 只读能力声明（"readonly"）
+    why: ONTO 侧显式声明服务能力等级；KG 侧无同名键
+    counterpart: [database]
+    equivalence: partial
+    ruling: "R-30(a)：载体特有键，登记后通过；不把「ONTO 声明了 readonly」外推为「KG 不具备只读能力」"
+  - carrier: onto
+    key: repository
+    meaning: GraphDB 仓库名（cc-ops）
+    why: ONTO 载体接 GraphDB（7200），后端标识以「仓库名」表达
+    counterpart: [database]
+    equivalence: partial
+    ruling: "R-30(a)：载体特有键，登记后通过；与 KG 的 database 同类但不同源"
+
+audit:
+  # ---------------------------------------------------------------------------
+  # R-28 / R-30(c)：审计记录**最小公共字段核** + 载体特有字段逐条登记
+  #   核对方式：toolface_diff.py --health --audit-kg <path> --audit-onto <path>
+  #     * 采样文件**每一行**都必须含该侧绑定的最小公共核字段，否则 ERROR
+  #     * 出现过的字段（并集）必须已登记（核 + 载体特有），否则 ERROR
+  #   ★ 字段**改名统一**（camel vs snake）不在本任务范围（R-30(c) 明确排除），只登记。
+  # ---------------------------------------------------------------------------
+  minimalCommonCore:
+    - requestId
+    - tool
+    - paramsDigest
+    - startedAt
+    - elapsedMs
+    - "queryLatency*"
+    - rowCount
+    - resultBytes
+    - truncated
+    - status
+  coreBindings:
+    - canonical: requestId
+      kg: [requestId]
+      onto: [requestId]
+      equivalence: same-name-different-semantics
+      note: "★ 语义差见 requestIdSemantics：跨载体**只能按 startedAt 对齐**"
+    - canonical: tool
+      kg: [tool]
+      onto: [tool]
+      equivalence: same
+    - canonical: paramsDigest
+      kg: [paramsDigest]
+      onto: [paramsDigest]
+      equivalence: same
+    - canonical: startedAt
+      kg: [startedAt]
+      onto: [startedAt]
+      equivalence: same
+      note: "KG 为秒级 UTC ISO8601（如 2026-09-28T20:52:09Z）；ONTO 为毫秒级 UTC ISO8601（如 2026-09-28T20:40:40.310Z）⇒ 可按时间对齐，精度不同"
+    - canonical: elapsedMs
+      kg: [elapsedMs]
+      onto: [elapsedMs]
+      equivalence: same
+    - canonical: "queryLatency*"
+      kg: [queryLatencyMs]
+      onto:
+        - query_latency_p50_ms
+        - query_latency_p95_ms
+        - query_latency_p50_s
+        - query_latency_p95_s
+        - query_latency_sample_count
+      equivalence: partial
+      note: >-
+        ★ 名族相同、**语义不同**：KG queryLatencyMs = **本调用**载体侧查询延迟差分（与 elapsedMs 分列）；
+        ONTO query_latency_* = **调用时刻**的聚合分位快照 + 样本数（含 *_s 秒制同值列）。
+        本任务只登记不改名（R-30(c) 明确排除改名统一）。
+    - canonical: rowCount
+      kg: [rowCount]
+      onto: [rowCount]
+      equivalence: same
+    - canonical: resultBytes
+      kg: [resultBytes]
+      onto: [resultBytes]
+      equivalence: same
+      note: "★ 观测到 ONTO **改前**（一次调用两行缺陷期）记录中该键值为 null（键存在）；本口径只判键存在性，不判取值"
+    - canonical: truncated
+      kg: [truncated]
+      onto: [truncated]
+      equivalence: same
+    - canonical: status
+      kg: [status]
+      onto: [status]
+      equivalence: same
+  carrierSpecificFields:
+    - {carrier: kg, field: queryLatencyMs, meaning: "本调用载体侧纯查询延迟（ms）", equivalence: carrier-specific, alsoCore: true}
+    - {carrier: kg, field: backendCalls, meaning: "本次请求发出的图后端 statement 数", equivalence: carrier-specific}
+    - {carrier: kg, field: queryText, meaning: "实际发给图后端的语句（契约 R-AUDIT）", equivalence: carrier-specific}
+    - {carrier: kg, field: originalBytes, meaning: "出口复核前的原始载荷字节数（M3.5 统一记账口径）", equivalence: carrier-specific}
+    - {carrier: kg, field: droppedEntries, meaning: "因**字节上限**移除的条目数（与 droppedRows 分列）", equivalence: carrier-specific}
+    - {carrier: onto, field: paramsSummary, meaning: "入参可读摘要（≤400 字符；不落明文全文）", equivalence: carrier-specific}
+    - {carrier: onto, field: queryText, meaning: "实际发给图后端的语句（含 PREFIX 块）", equivalence: carrier-specific}
+    - {carrier: onto, field: elapsed_s, meaning: "与 elapsedMs 同值的秒制列（同一次调用的两种量纲）", equivalence: carrier-specific}
+    - {carrier: onto, field: droppedRows, meaning: "★ 只记**行上限 rowCap** 丢弃的行数（R-23 严格口径）", equivalence: carrier-specific}
+    - {carrier: onto, field: droppedBytes, meaning: "因字节上限丢弃的字节数", equivalence: carrier-specific}
+    - {carrier: onto, field: truncatedFields, meaning: "被截断字段名清单（如 [\"attributes\"]）", equivalence: carrier-specific}
+    - {carrier: onto, field: originalBytes, meaning: "出口复核前的原始载荷字节数", equivalence: carrier-specific}
+    - {carrier: onto, field: droppedEntries, meaning: "因字节上限移除的条目数", equivalence: carrier-specific}
+    - {carrier: onto, field: query_latency_p50_ms, meaning: "聚合 p50（ms）", equivalence: carrier-specific, alsoCore: true}
+    - {carrier: onto, field: query_latency_p95_ms, meaning: "聚合 p95（ms）", equivalence: carrier-specific, alsoCore: true}
+    - {carrier: onto, field: query_latency_p50_s, meaning: "聚合 p50（秒制同值列）", equivalence: carrier-specific, alsoCore: true}
+    - {carrier: onto, field: query_latency_p95_s, meaning: "聚合 p95（秒制同值列）", equivalence: carrier-specific, alsoCore: true}
+    - {carrier: onto, field: query_latency_sample_count, meaning: "该工具延迟样例数", equivalence: carrier-specific, alsoCore: true}
+  requestIdSemantics:
+    kg: "<UTC 时戳>-<序号>，如 20260928T205209Z-000001（可读出调用时点）"
+    onto: "16 位十六进制，如 0bdb39ba26102cca（**不含**时点）"
+    ruling: >-
+      R-30(d)：两侧 requestId **语义不同** ⇒ 跨载体审计**不可按 id 排序/对齐，只能按 startedAt**。
+      本任务**不改名统一**（改名会破坏既有审计记录与两侧实现）。
+    evidence: "tmp/m39_audit_kg_8301.jsonl（4 行）与 tmp/m39_audit_onto_8302.jsonl（14 行）实采记录"

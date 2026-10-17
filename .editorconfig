@@ -1,0 +1,60 @@
+# EditorConfig — https://editorconfig.org
+#
+# This file is the source of truth for whitespace and encoding across the tree.
+# It is configuration, not documentation, so it stays terse.
+#
+# Encoding note: every text file in this project is UTF-8, including the Chinese
+# comments, docstrings and documentation under docs/ and the *_kg/*_onto trees.
+# `charset = utf-8` (no BOM) keeps those files byte-compatible with the Python
+# source encoding declaration and with the JSON/YAML consumers in the tooling.
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+# Python: 4 spaces, PEP 8.
+[*.{py,pyi}]
+indent_size = 4
+
+# Machine-readable contracts and manifests: 2 spaces.
+[*.{yaml,yml,json,json5,jsonl}]
+indent_size = 2
+
+# Markdown: 2 spaces, and never strip trailing whitespace — two trailing spaces
+# are a hard line break in Markdown, and some of the Chinese docs rely on it.
+[*.{md,markdown}]
+indent_size = 2
+trim_trailing_whitespace = false
+
+# Turtle / RDF and SPARQL query files: 2 spaces.
+[*.{ttl,rdf,nt,sparql,rq}]
+indent_size = 2
+
+# Shell scripts and CI helpers: 2 spaces.
+[*.{sh,bash}]
+indent_size = 2
+
+# Container recipes.
+[Dockerfile*]
+indent_size = 4
+
+[*.{dockerfile,containerfile}]
+indent_size = 4
+
+# Makefiles require hard tabs; trailing whitespace is still not wanted but a tab
+# is meaningful, so only the indent style is overridden here.
+[Makefile]
+indent_style = tab
+
+# Generated or opaque artifacts: leave their bytes alone.
+[*.{png,jpg,jpeg,gif,ico,webp,pdf,difypkg,tar,gz,tgz,zip,whl,pyc,pyo,so,dll,exe}]
+charset = unset
+end_of_line = unset
+insert_final_newline = false
+trim_trailing_whitespace = false
