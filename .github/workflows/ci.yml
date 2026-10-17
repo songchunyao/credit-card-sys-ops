@@ -35,7 +35,7 @@
 #   evidence-files:
 #     runs-on: ubuntu-latest
 #     steps:
-#       - uses: actions/checkout@v4
+#       - uses: actions/checkout@v7
 #       - uses: actions/setup-python@v7
 #         with: { python-version: "3.12" }
 #       - run: python ci/check_evidence_files.py
@@ -83,7 +83,7 @@ jobs:
     #   真实的 PASS/FAIL/BLOCKED 分级逐次打印在日志里，并可按等级复查。
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Set up Python 3.12
         uses: actions/setup-python@v7
         with:
@@ -138,7 +138,7 @@ jobs:
           - shared/deploy/smoke/e2e_smoke.py
           - shared/deploy/check_fairness.py
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Set up Python 3.12
         uses: actions/setup-python@v7
         with:
@@ -197,7 +197,7 @@ jobs:
           - shared/collect/live_facts_service.py
           - shared/deploy/dify/register_tools.py
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Set up Python 3.12
         uses: actions/setup-python@v7
         with:
@@ -220,7 +220,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Set up Python 3.12
         uses: actions/setup-python@v7
         with:
@@ -258,7 +258,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Set up Python 3.12
         uses: actions/setup-python@v7
         with:
