@@ -36,7 +36,7 @@
 #     runs-on: ubuntu-latest
 #     steps:
 #       - uses: actions/checkout@v4
-#       - uses: actions/setup-python@v5
+#       - uses: actions/setup-python@v7
 #         with: { python-version: "3.12" }
 #       - run: python ci/check_evidence_files.py
 # -----------------------------------------------------------------------------
@@ -85,7 +85,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -140,7 +140,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -199,7 +199,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -222,7 +222,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -260,7 +260,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       # 零第三方依赖：脚本只 import argparse/ast/json/os/re/sys/pathlib（标准库）。
