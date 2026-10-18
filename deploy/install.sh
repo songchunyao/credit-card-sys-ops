@@ -7,20 +7,22 @@
 #
 # 用法
 # ----
-#   # ① 复用既有 Neo4j/GraphDB（**192.0.2.11 现网必须用这档**）
+#   # ① 复用既有 Neo4j/GraphDB（**192.0.2.10 现网必须用这档**）
 #   sudo bash deploy/install.sh --mode attached
 #
 #   # ② 自带 Neo4j + GraphDB（任意新 Linux 服务器）
 #   sudo bash deploy/install.sh --mode standalone
 #
-#   # ③ 从离线包安装（断网客户环境；推荐）
-#   sudo bash install.sh --bundle /home/gdo/ccops-release-<版本> --mode standalone
+#   # ③ 从**全量**离线包安装（断网客户环境；载体与 Dify 都随包）
+#   sudo bash install.sh --offline --bundle /opt/ccops/ccops-offline-<版本> --mode standalone
 #
 # 参数
 # ----
 #   --mode attached|standalone   拓扑档（默认读 .env 的 CC_DEPLOY_MODE，缺省 attached）
 #   --deps check|install         外部依赖策略（默认读 CC_DEPS_MODE，缺省 install）
 #   --bundle DIR                 离线包目录（含 images/*.tar.gz 与 VERSION）
+#   --offline                    断网模式：只 `docker load`、绝不 pull；Dify 用包内 vendor/dify
+#                                （配合 images/IMAGES.lock 逐条核 image Id）
 #   --skip-verify                跳过验收矩阵（**不推荐**；仅用于排障中途）
 #   --no-init                    跳过契约装载（TBox 已装过时用，需自行确认）
 #   -h|--help                    显示帮助
@@ -44,6 +46,8 @@ REPO_ROOT="$(cd "$HERE/.." && pwd)"
 . "$HERE/lib/preflight.sh"
 # shellcheck source=lib/deps.sh
 . "$HERE/lib/deps.sh"
+# shellcheck source=lib/offline.sh
+. "$HERE/lib/offline.sh"
 
 # ── 默认参数 ─────────────────────────────────────────────────────────────────
 MODE=""
@@ -51,8 +55,9 @@ DEPS_ACTION=""
 BUNDLE_DIR=""
 SKIP_VERIFY=0
 NO_INIT=0
+OFFLINE=0
 
-usage() { sed -n '2,40p' "${BASH_SOURCE[0]}" | sed -e 's/^# \{0,1\}//'; exit 0; }
+usage() { sed -n '2,37p' "${BASH_SOURCE[0]}" | sed -e 's/^# \{0,1\}//'; exit 0; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -64,20 +69,66 @@ while [ $# -gt 0 ]; do
     --bundle=*)  BUNDLE_DIR="${1#*=}"; shift ;;
     --skip-verify) SKIP_VERIFY=1; shift ;;
     --no-init)   NO_INIT=1; shift ;;
+    --offline)   OFFLINE=1; shift ;;
     -h|--help)   usage ;;
     *) die "未知参数：$1（用 --help 看用法）" ;;
   esac
 done
 
+# 兼容写法：CC_OFFLINE=1 等价于 --offline（install-offline.sh 会同时导出它）
+if [ "${CC_OFFLINE:-0}" = "1" ]; then
+  OFFLINE=1
+fi
+
 # ── .env 与档位决议 ──────────────────────────────────────────────────────────
 ENVF="$HERE/.env"
+# ★ 离线包**刻意不携带** deploy/.env（它含口令，且要让 MANIFEST 在安装后仍校验得通）。
+#   故离线模式先按模板生成一份**空的**，再由 offline_prepare_env 填入离线默认值。
+#   先前把"存在性检查"放在最前面 ⇒ 离线一键安装第一步就 blocked —— 这是必经路径，不能出错。
+if [ ! -f "$ENVF" ] && [ "$OFFLINE" = "1" ]; then
+  cp "$HERE/.env.example" "$ENVF" \
+    || blocked "无法从 $HERE/.env.example 生成 deploy/.env（目录只读？）"
+  chmod 600 "$ENVF" 2>/dev/null || true
+  ENVF_GENERATED=1
+  info "离线模式：已从 .env.example 生成 deploy/.env（随后会自动填充离线默认值）"
+fi
 if [ ! -f "$ENVF" ]; then
   blocked "找不到 $ENVF。请先执行：cp $HERE/.env.example $ENVF && vi $ENVF"
 fi
-[ -n "$MODE" ] || MODE="$(env_get "$ENVF" CC_DEPLOY_MODE attached)"
+if [ -n "$MODE" ]; then
+  :
+elif [ "$OFFLINE" = "1" ] && [ "${ENVF_GENERATED:-0}" = "1" ]; then
+  # 刚由模板生成 ⇒ 模板里的 CC_DEPLOY_MODE=attached 不是用户的意图；
+  # 离线包的目标机通常是全新服务器（无既有载体），缺省 standalone。
+  MODE="standalone"
+else
+  MODE="$(env_get "$ENVF" CC_DEPLOY_MODE attached)"
+fi
 [ -n "$DEPS_ACTION" ] || DEPS_ACTION="$(env_get "$ENVF" CC_DEPS_MODE install)"
 case "$MODE" in attached|standalone) ;; *) die "--mode 只能是 attached 或 standalone（收到 '$MODE'）" ;; esac
 case "$DEPS_ACTION" in check|install) ;; *) die "--deps 只能是 check 或 install（收到 '$DEPS_ACTION'）" ;; esac
+
+# ── 离线模式：**先**把 .env / Dify .env 准备成可起栈状态，再进预检 ───────────
+#   ★ 顺序不能反：预检会断言 standalone 档的 CC_NEO4J_PASSWORD 非空，而离线包的
+#     口令是"首次安装时生成"的；若先生成后预检，预检那一关永远过不了。
+#   ★ offline_prepare_env 只填空值，部署者已填的 GaussDB/SSH 等一律不动。
+if [ "$OFFLINE" = "1" ]; then
+  export CC_OFFLINE=1
+  [ -n "$BUNDLE_DIR" ] || BUNDLE_DIR="$REPO_ROOT"
+  # 离线根目录：`--bundle` 指到别处时以它为准（VERSION 在那里），否则就是本包根。
+  CC_OFFLINE_ROOT="$REPO_ROOT"
+  if [ -n "$BUNDLE_DIR" ] && [ -f "$BUNDLE_DIR/VERSION" ]; then
+    CC_OFFLINE_ROOT="$(cd "$BUNDLE_DIR" && pwd)"
+  fi
+  export CC_OFFLINE_ROOT
+  # ★ 显式传入的 CC_SKIP_DIFY=1（来自 install-offline.sh --no-dify）**必须**胜过
+  #   .env 里的值：刚生成的 .env 来自模板（CC_SKIP_DIFY=0），否则 --no-dify 会被静默吃掉。
+  if [ "${CC_SKIP_DIFY:-}" != "1" ]; then
+    CC_SKIP_DIFY="$(env_get "$ENVF" CC_SKIP_DIFY 0)"
+  fi
+  export CC_SKIP_DIFY
+  offline_prepare_env "$ENVF" "$MODE" "$CC_OFFLINE_ROOT"
+fi
 
 IMAGE_TAG="$(env_get "$ENVF" CC_IMAGE_TAG latest)"
 [ -n "$IMAGE_TAG" ] || IMAGE_TAG=latest
@@ -111,12 +162,18 @@ info "部署目录：$HERE"
 info "档位    ：$MODE（$([ "$MODE" = standalone ] && echo '自带 Neo4j+GraphDB' || echo '复用既有 Neo4j+GraphDB')）"
 info "依赖策略：$DEPS_ACTION"
 info "镜像标签：$IMAGE_TAG"
+if [ "$OFFLINE" = "1" ]; then
+  info "离线模式：开启（只 docker load，绝不 pull；Dify 用 $(env_get "$ENVF" CC_DIFY_DIR "$REPO_ROOT/vendor/dify")）"
+fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ② 载入应用镜像
 # ─────────────────────────────────────────────────────────────────────────────
 load_images() {
   hdr "② 载入应用镜像（5 个）"
+  if [ "$OFFLINE" = "1" ]; then
+    info "离线模式：本次会载入 images/ 下**全部** tar.gz（应用 + 载体 + Dify），且不会 pull"
+  fi
 
   # 自动识别"就地离线包"：release 包根 = 仓库相对布局 ⇒ images/ 与 deploy/ 同级。
   # 这样从包里执行 `bash deploy/install.sh` 时**不需要**再手写 --bundle。
@@ -143,6 +200,14 @@ load_images() {
     [ "${#tars[@]}" -gt 0 ] || die "离线包 images/ 下没有 *.tar.gz"
   fi
 
+  # ── 幂等重跑的优化：全部镜像已在本地且与锁一致 ⇒ 跳过 8 GB 的重载 ──────
+  #   ★ 判据是 image Id（内容摘要），不是 tag；不一致就照常重载（load 会覆盖）。
+  if [ "$OFFLINE" = "1" ] && [ -n "$BUNDLE_DIR" ] && [ "${#tars[@]}" -gt 0 ] \
+     && offline_images_match "$BUNDLE_DIR"; then
+    info "全部镜像已在本机且与 IMAGES.lock 一致 ⇒ 跳过 docker load（幂等重跑）"
+    tars=()
+  fi
+
   if [ "${#tars[@]}" -gt 0 ]; then
     # 先校验再载入（校验不过即停，不把半截镜像推进本地库）
     if [ -f "$BUNDLE_DIR/MANIFEST.sha256" ]; then
@@ -166,7 +231,9 @@ load_images() {
     done
     ok "镜像载入完成（${#tars[@]} 个 tar.gz）"
   else
-    info "未指定 --bundle ⇒ 假定镜像已在本地（由 CI 构建或先前已 load）"
+    if [ "$OFFLINE" != "1" ]; then
+      info "未指定 --bundle ⇒ 假定镜像已在本地（由 CI 构建或先前已 load）"
+    fi
   fi
 
   # ── 断言 5 个镜像都在，且标签与预期一致（按 CC_IMAGES：kgt-dyn 无独立镜像）──
@@ -186,6 +253,13 @@ load_images() {
     err "  → 正确做法：在 CI/ARM 机构建后用 deploy/make_bundle.sh 打离线包，"
     err "    再在本机用 install.sh --bundle <离线包> 安装。"
     die "缺少必需镜像，拒绝继续（绝不用旧镜像冒充）。"
+  fi
+
+  # ── 离线：按 IMAGES.lock 逐条核 image Id / 架构 ──────────────────────────
+  # ★ 这一步覆盖**载体与 Dify**：只核 5 个应用镜像是不够的 —— 断网时 Neo4j/GraphDB/Dify
+  #   一旦缺一个，失败会延迟到 ③.5 或 ⑧，而那时的报错指向"载体起不来"。
+  if [ "$OFFLINE" = "1" ]; then
+    offline_assert_images "$BUNDLE_DIR"
   fi
 
   # ── 把权威标签落回 .env，并 export 给本次 compose ───────────────────────
@@ -230,8 +304,8 @@ gen_targets_overlay() {
   info "  neo4j.http_uri   : $n_http"
   info "  neo4j.bolt_uri   : $n_bolt"
 
-  # ★ R-58：不硬编码部署主机（原值为 192.0.2.11，R-56 事故根因）；用 env/CLI 覆盖，未设则落本机。
-  #   契约(shared/deploy/targets.yaml)里的载体地址默认值已由 192.0.2.11 改为 127.0.0.1
+  # ★ R-58：不硬编码部署主机（原值为 192.0.2.10，R-56 事故根因）；用 env/CLI 覆盖，未设则落本机。
+  #   契约(shared/deploy/targets.yaml)里的载体地址默认值已由 192.0.2.10 改为 127.0.0.1
   #   ⇒ 这里的 sed 必须匹配「任意主机 + 契约端口」两种写法（新默认 127.0.0.1 与历史写法），
   #     否则叠加契约会静默留着本机地址，容器里去连自己。
   sed -e "s#http://[^\"/]*:7200#${g_url}#g" \
@@ -239,7 +313,7 @@ gen_targets_overlay() {
       -e "s#bolt://[^\"/]*:7688#${n_bolt}#g" \
       "$src" > "$out"
 
-  # 断言：两处默认来源（新默认 127.0.0.1 / 历史 192.0.2.11）都已不残留在契约端口上
+  # 断言：两处默认来源（新默认 127.0.0.1 / 历史 192.0.2.10）都已不残留在契约端口上
   local left
   left="$(grep -cE '10\.226\.81\.84:(7200|7475|7688)|127\.0\.0\.1:(7200|7475|7688)' "$out" || true)"
   if [ "${left:-0}" -gt 0 ]; then
@@ -280,18 +354,29 @@ bring_up_carriers() {
   #   实测踩过：一开始这里也写 `--pull never`，于是在没预拉镜像的机器上
   #     `Error response from daemon: No such image: ontotext/graphdb:10.8.0`
   #     —— 把"该拉没拉"报成了"载体起不来"。
-  if ! compose up -d --pull missing neo4j graphdb; then
+  #   ★ 离线模式（--offline）：载体镜像已在 ② 从离线包载入并由 IMAGES.lock 核过身份，
+  #     此时**必须**改回 `--pull never` —— 目标机断网，pull 只会卡在超时上。
+  local pullflag="--pull missing"
+  if [ "$OFFLINE" = "1" ]; then
+    pullflag="--pull never"
+  fi
+  if ! compose up -d $pullflag neo4j graphdb; then
     err "载体启动失败。诊断：docker compose ${COMPOSE_ARGS[*]} logs --tail=60 neo4j graphdb"
-    err "  → 若报 No such image，说明官方镜像拉取失败（网络/registry 不可达）。"
-    err "    可先单独验证：docker pull ${CC_NEO4J_IMAGE_DEFAULT} && docker pull ${CC_GRAPHDB_IMAGE_DEFAULT}"
+    if [ "$OFFLINE" = "1" ]; then
+      err "  → 离线模式下缺失镜像意味着包不完整；**不要**在目标机 docker pull。"
+      err "    回构建机用 deploy/offline/make_offline_bundle.sh 重新出包。"
+    else
+      err "  → 若报 No such image，说明官方镜像拉取失败（网络/registry 不可达）。"
+      err "    可先单独验证：docker pull ${CC_NEO4J_IMAGE_DEFAULT} && docker pull ${CC_GRAPHDB_IMAGE_DEFAULT}"
+    fi
     blocked "载体起不来 ⇒ 契约装载与两个方案都无法进行。"
   fi
   ok "载体容器已启动"
 
   # 宿主侧探活用发布到宿主的契约端口。
   # ★★ standalone 档**必须看本机**（127.0.0.1），不能沿用 .env 里的载体地址 ★★
-  #   实测踩过：.env 里写的是另一台机器的 `http://192.0.2.11:7475`（attached 档遗留），
-  #   而 standalone 档的载体其实在**本机**。旧实现在这里探到了 旧载体机，
+  #   实测踩过：.env 里写的是另一台机器的 `http://192.0.2.10:7475`（attached 档遗留），
+  #   而 standalone 档的载体其实在**本机**。旧实现在这里探到了 192.0.2.10，
   #   于是打印「Neo4j 已就绪（0s）」——**本机那个其实正在 crash-loop**。
   #   后果是契约装载（④）紧接着去连本机容器，得到 Connection refused，
   #   把「载体没起来」误报成「装载器有毛病」。
@@ -341,7 +426,7 @@ init_contracts() {
   #   `scheme2-onto/tools/load_tbox.py::persist` **假定目标仓库已存在**
   #   （load_tbox.py:371-372），而它的 `repo_list()`（:267-280）在仓库列表为空时
   #   直接 `raise Fail("仓库列表为空（应含 coexisting_repositories）")`。
-  #   那些断言是给**共享载体**（旧载体机 上已有 gdo*/starwars）写的；
+  #   那些断言是给**共享载体**（192.0.2.10 上已有 gdo*/starwars）写的；
   #   在"自己用官方镜像起的全新 GraphDB"上，空列表是**正常状态**，不是故障。
   #   ⇒ 装载前先建仓。这本来就是"完成配置"的必要一步。
   if [ "$MODE" = "standalone" ]; then
@@ -406,8 +491,8 @@ init_contracts() {
 
   # ── ④.1 GraphDB：建仓（若不存在）+ 装 TBox ──
   # ★ 必须把叠加契约**挂进容器**并显式 --targets 指向它。
-  #   先前版本只生成却仍传 /app/shared/deploy/targets.yaml（原契约，写着 192.0.2.11）
-  #   ⇒ standalone 档会在容器里去连一台不存在的 旧载体机，失败原因还指向"装载器有毛病"。
+  #   先前版本只生成却仍传 /app/shared/deploy/targets.yaml（原契约，写着 192.0.2.10）
+  #   ⇒ standalone 档会在容器里去连一台不存在的 192.0.2.10，失败原因还指向"装载器有毛病"。
   local overlay="$HERE/.work/targets.deploy.yaml"
   info "④.1 GraphDB 建仓与 TBox 装载（scheme2-onto/tools/load_tbox.py persist）"
   info "     契约：容器内 /app/shared/deploy/targets.deploy.yaml（由 $overlay 挂入）"
@@ -445,9 +530,10 @@ init_contracts() {
 # ⑤ 起栈 + 等健康
 # ─────────────────────────────────────────────────────────────────────────────
 compose_up() {
-  hdr "⑤ 起栈（docker compose up -d）"
+  hdr "⑤ 起栈（docker compose up -d --pull never）"
   # --pull never：本项目的交付路径是"离线镜像 + load"，**不允许**在起栈时悄悄拉新镜像
-  #   （否则"验证过的镜像"与"实际跑的镜像"可能不是同一物）
+  #   （否则"验证过的镜像"与"实际跑的镜像"可能不是同一物）。
+  #   离线模式下这条更是硬要求：目标机断网，pull 会卡到超时。
   if compose up -d --pull never; then
     ok "compose up 完成"
   else
@@ -537,7 +623,7 @@ if deps_carrier_missing; then
   err "知识载体（Neo4j/GraphDB）不可用 ⇒ 两个方案都跑不起来。"
   err "  出路：① 用 --mode standalone 让本脚本自带载体；"
   err "        ② 修正 .env 里的载体地址指向真实存在的实例；"
-  err "        ③ 加 --deps install 让本脚本用官方镜像补装。"
+  err "        ③ 加 --deps install 让本脚本用官方镜像补装（断网环境改用 --offline，载体镜像随包载入）。"
   blocked "缺知识载体，拒绝继续（起栈也无法诊断）。"
 fi
 
@@ -572,6 +658,19 @@ cat <<EOF
     docker compose $(printf '%s ' "${COMPOSE_ARGS[@]}")down -v       # 连卷一起删（载体数据也会没）
 
 EOF
+
+# 编排层（Dify）：**不阻塞**应用层交付，但也不能静默不提
+if [ "${CC_SKIP_DIFY:-0}" = "1" ]; then
+  printf '  编排层 Dify          按 --no-dify 跳过（复用既有实例）\n'
+else
+  DIFY_URL="$(env_get "$ENVF" DIFY_BASE_URL '')"
+  if [ -n "$DIFY_URL" ]; then
+    printf '  编排层 Dify          %s（控制台；管理员见 deploy/.env）\n' "$DIFY_URL"
+  else
+    printf '  编排层 Dify          未启用或未就绪（BLOCKED；不影响应用层）\n'
+  fi
+fi
+printf '\n'
 
 if [ "$CC_STEP_FAIL" -gt 0 ]; then
   err "部署未完全通过（$CC_STEP_FAIL 项失败）。**不得**据此次结果宣称部署成功。"

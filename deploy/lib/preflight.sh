@@ -54,6 +54,19 @@ preflight_run() {
 
   hdr "① 环境预检（只读）"
 
+  # ── 0. 离线包自检：**必须排在任何联网/拉取动作之前** ──────────────────────
+  #   · 缺件、架构不符 ⇒ BLOCKED（包与目标机不匹配，不是代码缺陷）
+  #   · 行尾 CRLF / 包自相矛盾 ⇒ FAIL（这类问题装到一半才炸，且报错形态会误导）
+  #   install.sh 会把 deploy/lib/offline.sh source 进来；直接调用本文件时该函数不存在，
+  #   故用 command -v 兜底（避免"source 顺序变了就 command not found"）。
+  if [ "${CC_OFFLINE:-0}" = "1" ]; then
+    if command -v offline_preflight >/dev/null 2>&1; then
+      offline_preflight "${CC_OFFLINE_ROOT:-$(cd "$ddir/.." && pwd)}"
+    else
+      die "CC_OFFLINE=1 但 deploy/lib/offline.sh 未加载 —— 安装脚本不完整，拒绝继续。"
+    fi
+  fi
+
   # ── 1. 操作系统 ──────────────────────────────────────────────────────────
   case "$(uname -s)" in
     Linux) ok "操作系统：$(uname -s) $(uname -r)" ;;

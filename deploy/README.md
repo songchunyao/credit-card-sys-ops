@@ -17,6 +17,9 @@ vi deploy/.env                      # 至少填：载体地址、口令、GaussD
 sudo bash deploy/install.sh --mode standalone    # 新服务器，自带 Neo4j+GraphDB
 ```
 
+> **完全断网（拿不到 neo4j/graphdb/dify 官方镜像）**：用全量离线包，一条命令装完 ——
+> 见 **[deploy/offline/README.md](offline/README.md)**。本文其余章节按"目标机可联网"写。
+
 `install.sh` 会自动走完 7 步并最后打印总账与验收结果。
 
 ### 凭据只填一份：`deploy/credentials`
@@ -87,7 +90,7 @@ python3 deploy/credentials_check.py --sheet deploy/credentials \
 | Docker Compose | **v2 插件**（`docker compose` 子命令） | 编排用了 `name:` 与 `depends_on.condition`，v1 不支持 |
 | 磁盘 | ≥ 20 GB（`CC_MIN_DISK_GB`） | 镜像与数据卷 |
 | 内存 | ≥ 7 GB（`CC_MIN_MEM_MB`）；standalone 档另需 ~6 GB | 5 应用 ≈ 0.6 GB；Neo4j+GraphDB ≈ 6 GB |
-| 网络 | 首次部署需能拉官方镜像（neo4j/graphdb/dify）；GaussDB/被观测对象可达 | 离网环境请先在目标机装好这三者 |
+| 网络 | 首次部署需能拉官方镜像（neo4j/graphdb/dify）；GaussDB/被观测对象可达 | 完全断网请改用**全量离线包**（[deploy/offline/README.md](offline/README.md)）：载体与 Dify 的镜像随包携带，安装期只 `docker load` |
 
 `install.sh` 的预检会逐项核对，**不达标即拒绝继续**（不会"装到一半才发现磁盘不够"）。
 
@@ -204,6 +207,36 @@ sudo bash deploy/install.sh --mode standalone
 
 ## 6. 从离线包安装（断网客户环境）
 
+本项目有**两种**离线包，先选对：
+
+| | **全量离线包**（断网首选） | 应用层离线包 |
+|---|---|---|
+| 含什么 | 应用层 5 镜像 + **Neo4j + GraphDB + Dify** 全部镜像与源码树 | 只有自建 5 个镜像 |
+| 目标机首次安装要外网？ | **不要**（全程只 `docker load`） | **要**（拉 neo4j/graphdb/dify） |
+| 出包命令 | `sh deploy/offline/make_offline_bundle.sh --tag <tag> --archive` | `sh deploy/make_bundle.sh --tag <tag>` |
+| 手册 | **[deploy/offline/README.md](offline/README.md)** | 本节 §6.2 |
+
+### 6.1 全量离线包（目标机完全断网）
+
+```bash
+# 构建机（有 Docker + 与目标同架构；能访问镜像源）
+sh deploy/build_images.sh --tag <tag>
+sh deploy/offline/make_offline_bundle.sh --tag <tag> --archive
+
+# 目标机（断网 Linux）
+tar xzf ccops-offline-<tag>.tar.gz && cd ccops-offline-<tag>
+sha256sum -c MANIFEST.sha256
+sudo bash install-offline.sh
+```
+
+`install-offline.sh` 只是入口，真正的编排仍在 `deploy/install.sh --offline`。
+离线模式下：载体与 Dify 起栈一律 `--pull never`；`docker load` 之后按
+`images/IMAGES.lock` 逐条核对 image Id（**tag 可 retag，Id 不能**）；Dify 用包内
+`vendor/dify/docker` 启动、不 clone 不联网；口令在目标机首次安装时随机生成（不打印）。
+详见 [deploy/offline/README.md](offline/README.md)。
+
+### 6.2 应用层离线包（目标机首次可联网）
+
 ```bash
 # 1. 传输并解包
 tar xzf ccops-release-<tag>.tar.gz && cd ccops-release-<tag>
@@ -221,8 +254,8 @@ sudo bash deploy/install.sh --mode standalone
 python3 deploy/verify_deploy.py --deploy-dir deploy --mode standalone
 ```
 
-离线包里**不含** neo4j / graphdb / dify（它们是「安装环境依赖」）。若目标机完全断网，
-请预先在目标机装好这三者，再用 `--deps check` 部署。
+这个包里**不含** neo4j / graphdb / dify（它们是「安装环境依赖」）。若目标机完全断网，
+请改用 §6.1 的全量离线包；或预先在目标机装好这三者，再用 `--deps check` 部署。
 
 ### 发布者：怎么产出离线包
 

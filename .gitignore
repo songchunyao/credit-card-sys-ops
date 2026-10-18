@@ -48,10 +48,12 @@ deploy/credentials
 #   .deps/   ：自动安装的外部依赖源码树（如克隆下来的 Dify）
 #   secrets/ ：可选挂载的 SSH 私钥目录（对应 CC_SSH_DIR）
 #   dist/release/：deploy/make_bundle.sh 的默认输出目录
+#   dist/offline/：deploy/offline/make_offline_bundle.sh 的全量离线包输出（GB 级）
 deploy/.work/
 deploy/.deps/
 deploy/secrets/
 dist/release/
+dist/offline/
 
 # ── 本地工作区、自检与门禁的临时产物 ─────────────────────────────
 #   注意：`tempfile.mkdtemp()` 在系统临时目录不可写时会退化为**在当前目录**建目录

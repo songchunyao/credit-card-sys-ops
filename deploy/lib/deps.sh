@@ -23,7 +23,7 @@
 #     所以这里**不可能**覆盖既有载体（targets.yaml#must_not 的硬约束因此成立）。
 #
 #   · Dify 在**两档下都是外部依赖**：它体量大（4–6 GB 内存、15 容器），
-#     且 192.0.2.11 现网已装（内存仅余 ~5 GB，不得新增常驻容器）⇒
+#     且 192.0.2.10 现网已装（内存仅余 ~5 GB，不得新增常驻容器）⇒
 #     本脚本带**内存硬闸**：余量不足时拒绝自动安装并判受阻，绝不硬闯。
 # =============================================================================
 
@@ -52,8 +52,8 @@ dep_neo4j_check() {
   local ddir="$1" mode="${2:-attached}" url
   # ★ standalone 档：载体由 compose 在本机拉起 ⇒ 必须看**本机契约端口**，
   #   而不是 .env 里指向别处的 CC_NEO4J_HTTP_URL。
-  #   （实测踩过：standalone 档下探到的是 旧载体机 的远程 Neo4j，于是报
-  #     "① Neo4j 已存在且可达：http://192.0.2.11:7475" —— 既误导，
+  #   （实测踩过：standalone 档下探到的是 192.0.2.10 的远程 Neo4j，于是报
+  #     "① Neo4j 已存在且可达：http://192.0.2.10:7475" —— 既误导，
   #     又让 install.sh 的"载体缺失"闸门被绕过。）
   if [ "$mode" = "standalone" ]; then
     url="http://127.0.0.1:7475"
@@ -175,7 +175,7 @@ dep_dify_check() {
 
 # ── Dify 对外端口：默认 80/443，被占用则必须让路 ─────────────────────────────
 # ★ 这是真实环境的常态：目标机上 :80 往往已经被别的东西占了
-#   （本项目的联调机 192.0.2.10 上就是 GitLab 的 nginx 占着 :80）。
+#   （本项目的联调机 192.0.2.11 上就是 GitLab 的 nginx 占着 :80）。
 #   Dify 官方编排把 nginx 发布在 EXPOSE_NGINX_PORT（默认 80）
 #   ⇒ 不让路的话 `docker compose up` 会直接端口冲突失败。
 _dep_dify_pick_ports() {
@@ -264,7 +264,7 @@ dep_dify_init_admin() {
 
 # ── Dify 对外端口：默认 80/443，被占用则必须让路 ─────────────────────────────
 # ★ 这是真实环境的常态：目标机上 :80 往往已经被别的东西占了
-#   （本项目的联调机 192.0.2.10 上就是 GitLab 的 nginx 占着 :80）。
+#   （本项目的联调机 192.0.2.11 上就是 GitLab 的 nginx 占着 :80）。
 #   Dify 官方编排把 nginx 发布在 EXPOSE_NGINX_PORT（默认 80）
 #   ⇒ 不让路的话 `docker compose up` 会直接端口冲突失败。
 _dep_dify_pick_ports() {
@@ -361,7 +361,7 @@ dep_dify_install() {
   if [ "$avail" -gt 0 ] && [ "$avail" -lt "$(env_get "$envf" CC_DIFY_MIN_MEM_MB '6000')" ]; then
     err "  拒绝自动安装 Dify：宿主可用内存仅 ${avail} MB，低于阈值 $(env_get "$envf" CC_DIFY_MIN_MEM_MB '6000') MB。"
     warn "    Dify 1.17.0 是 15 个容器、约需 4–6 GB —— 内存不足时装上去会连带把既有服务拖垮。"
-    warn "    192.0.2.11 现网即属此类（内存仅余 ~5 GB，裁决 13 明令不得新增常驻容器）⇒ 应复用既有 Dify。"
+    warn "    192.0.2.10 现网即属此类（内存仅余 ~5 GB，裁决 13 明令不得新增常驻容器）⇒ 应复用既有 Dify。"
     _dep_record_missing dify
     return 1
   fi
@@ -372,21 +372,35 @@ dep_dify_install() {
     _dep_record_missing dify
     return 1
   fi
-  if ! command -v git >/dev/null 2>&1; then
-    err "  宿主上没有 git ⇒ 无法自动拉取 Dify 官方编排"
-    warn "  两条出路：① 装 git；② 手工部署 Dify 后在 .env 里填 DIFY_BASE_URL（推荐内网镜像源）"
-    _dep_record_missing dify
-    return 1
-  fi
-
-  info "  补装 Dify $ver：git clone 官方仓库 → 配置端口 → docker compose up -d"
-  if [ ! -d "$dir/.git" ]; then
-    mkdir -p "$(dirname "$dir")"
-    git clone --depth 1 --branch "$ver" \
-      "$(env_get "$envf" CC_DIFY_GIT_URL 'https://github.com/langgenius/dify.git')" \
-      "$dir" || { err "  git clone 失败（网络/镜像源不可达）"; _dep_record_missing dify; return 1; }
+  if [ "${CC_OFFLINE:-0}" = "1" ]; then
+    # ── 离线：Dify 的源码树必须**随包携带**（目标机断网，git clone 必然失败）──
+    if [ ! -d "$dir/docker" ]; then
+      err "  离线模式要求 Dify 源码树随包携带，但 $dir/docker 不存在。"
+      warn "    ⇒ 本包应由 deploy/offline/make_offline_bundle.sh 生成；"
+      warn "      若只想交付应用层，请用 install-offline.sh --no-dify（CC_SKIP_DIFY=1）。"
+      _dep_record_missing dify
+      return 1
+    fi
+    info "  使用离线包内置 Dify 源码树：$dir（不 clone、不联网）"
   else
-    info "  已存在 Dify 源码树：$dir（跳过 clone）"
+    if ! command -v git >/dev/null 2>&1; then
+      err "  宿主上没有 git ⇒ 无法自动拉取 Dify 官方编排"
+      warn "  两条出路：① 装 git；② 手工部署 Dify 后在 .env 里填 DIFY_BASE_URL（推荐内网镜像源）"
+      _dep_record_missing dify
+      return 1
+    fi
+
+    info "  补装 Dify $ver：git clone 官方仓库 → 配置端口 → docker compose up -d"
+    # ★ 判据从 `.git` 改成 `docker/`：用 tarball 解压出来的源码树**没有 .git**，
+    #   旧实现会往这个非空目录里再 clone 一次（报"目录非空"，看不出是判断错了）。
+    if [ ! -d "$dir/docker" ]; then
+      mkdir -p "$(dirname "$dir")"
+      git clone --depth 1 --branch "$ver" \
+        "$(env_get "$envf" CC_DIFY_GIT_URL 'https://github.com/langgenius/dify.git')" \
+        "$dir" || { err "  git clone 失败（网络/镜像源不可达）"; _dep_record_missing dify; return 1; }
+    else
+      info "  已存在 Dify 源码树：$dir（跳过 clone）"
+    fi
   fi
 
   if [ ! -d "$dir/docker" ]; then
@@ -402,7 +416,33 @@ dep_dify_install() {
   info "  Dify 对外端口：HTTP=$http  HTTPS=$https"
 
   ( cd "$dir/docker" || exit 1
-    [ -f .env ] || cp .env.example .env
+    # ★ 离线包只带 .env.offline-template（含 __CC_GENERATE__ 占位符），安装时生成 .env。
+    #   这里的兜底顺序：已有 .env → 模板 → 上游 .env.example（最后这条只是为了"能起来"，
+    #   占位符未替换时会显式告警，不静默）。
+    if [ ! -f .env ]; then
+      if [ -f .env.offline-template ]; then
+        cp .env.offline-template .env || exit 1
+        chmod 600 .env 2>/dev/null || true
+      else
+        cp .env.example .env
+        warn "  缺 .env.offline-template ⇒ 用上游 .env.example 兜底（口令/密钥为上游默认值，不安全）"
+      fi
+    fi
+    if grep -q '__CC_GENERATE__' .env 2>/dev/null; then
+      if command -v _offline_generate_placeholders >/dev/null 2>&1; then
+        _offline_generate_placeholders .env || warn "  占位符替换失败（随机源不可用）"
+      else
+        warn "  .env 里仍有 __CC_GENERATE__ 占位符，且 offline.sh 未加载 ⇒ 口令未生成"
+      fi
+    fi
+    # 断网环境必须**强制**关掉插件市场（append-only 不够：模板可能写着 true）
+    if [ "${CC_OFFLINE:-0}" = "1" ]; then
+      if grep -qE '^[[:space:]]*MARKETPLACE_ENABLED[[:space:]]*=' .env; then
+        sed -i -E 's|^[[:space:]]*MARKETPLACE_ENABLED[[:space:]]*=.*|MARKETPLACE_ENABLED=false|' .env
+      else
+        printf 'MARKETPLACE_ENABLED=false\n' >> .env
+      fi
+    fi
     # sed 原地改；键不存在则追加（不同版本键名/有无不同）
     _set() {
       if grep -qE "^[#[:space:]]*$1=" .env; then
@@ -426,12 +466,18 @@ dep_dify_install() {
   ) || { err "  写 Dify docker/.env 失败"; _dep_record_missing dify; return 1; }
 
   # ── 起 Dify ──
-  ( cd "$dir/docker" && docker compose up -d ) \
+  # ★ 离线模式一律 --pull never：镜像已在 ② 从包里载入，目标机断网时 pull 只会卡超时。
+  local up_pull=""
+  if [ "${CC_OFFLINE:-0}" = "1" ]; then
+    up_pull="--pull never"
+  fi
+  ( cd "$dir/docker" && docker compose up -d $up_pull ) \
     || { err "  Dify compose 启动失败。诊断：cd $dir/docker && docker compose logs --tail=60";
          _dep_record_missing dify; return 1; }
 
   local base="http://127.0.0.1:${http}"
-  wait_http "$base/console/api/setup" 600 "Dify（:$http）" \
+  # 首次启动要跑数据库迁移，冷盘上 600 s 不够（离线包场景常见）；可用 CC_DIFY_WAIT_S 调。
+  wait_http "$base/console/api/setup" "$(env_get "$envf" CC_DIFY_WAIT_S '900')" "Dify（:$http）" \
     || { _dep_record_missing dify; return 1; }
 
   # ── 初始化管理员（"完成配置"的实质）──
@@ -459,6 +505,10 @@ deps_run() {
 
   if [ "$phase" = "post" ]; then
     # ── 后置阶段：只补装 Dify（可选、重量级）─────────────────────────────
+    if [ "${CC_SKIP_DIFY:-0}" = "1" ]; then
+      skip "按 CC_SKIP_DIFY=1 跳过编排层（Dify 由部署方复用既有实例）"
+      return 0
+    fi
     # ★ 为什么要分两阶段：Dify 1.17.0 是 15 个镜像、通常 2–6 GB。
     #   早先把它的安装放在**应用层起栈之前**，结果是
     #   **一个"不阻塞起栈"的依赖把整个栈卡住了**（实测：Dify 镜像下载慢，
@@ -468,7 +518,11 @@ deps_run() {
     if dep_dify_check "$ddir"; then
       return 0
     fi
-    hdr "⑧ 补装编排层（Dify）—— 可选、重量级，**前面已经交付的部分不受影响**"
+    if [ "${CC_OFFLINE:-0}" = "1" ]; then
+      hdr "⑧ 启动离线包内置的编排层（Dify）—— 可选、重量级，**前面已经交付的部分不受影响**"
+    else
+      hdr "⑧ 补装编排层（Dify）—— 可选、重量级，**前面已经交付的部分不受影响**"
+    fi
     if [ "$action" != "install" ]; then
       warn "  CC_DEPS_MODE=$action ⇒ 只体检不安装。Dify 不可用，仅影响编排层。"
       _dep_record_missing dify
