@@ -483,7 +483,11 @@ python3 deploy/verify_deploy.py --deploy-dir deploy --mode standalone --with-gat
 ## 10. 安全与合规
 
 - **包内零凭据**：`deploy/.env`、`deploy/credentials`、Dify 的 `docker/.env` 都不入包；
-  自检 S1 会扫 `*.pem` / `*.key` / `credentials*` / `id_rsa*`。
+  自检 S1 会扫 `*.pem` / `*.key` / `credentials*` / `id_rsa*`，以及**任何** `.env*`
+  （只放行 `.env.example` 与 `.env.offline-template`）。
+- **`.env` 备份是真实事故点**：`--dify-src` 指向的源码树里可能残留 `docker/.env.bak_*`，
+  其中是 DB / Redis / plugin 的真实口令。出包器会**删除它们并在仍有残留时拒绝出包**；
+  S1 也会把 `.env.bak_*` / `.env.local` 判为泄漏（2026-10-18 第一版包曾因此中招，已修复）。
 - **口令不打印**：安装只打印"已生成"，值只落 `deploy/.env`（0600）。
 - **镜像按 Id 锁定**：`IMAGES.lock` + `MANIFEST.sha256` 双层校验，防"同名不同物"。
 - **最小注入**：compose 刻意不用 `env_file:`，各服务只拿到自己声明的键。
