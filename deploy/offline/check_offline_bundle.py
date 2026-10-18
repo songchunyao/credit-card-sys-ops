@@ -264,6 +264,15 @@ def check_no_secrets(root: Path, r: Report) -> None:
         for p in root.rglob(pattern):
             if p.is_file():
                 hits.append(str(p.relative_to(root)))
+    # ★★ 2026-10-18 真实事故：第一版包里有 `vendor/dify/docker/.env.bak_r59_...`，
+    #   212 个非空键（DB/Redis/plugin 真实口令）。旧检查只认**精确**的 `.env`，
+    #   于是 S1 报"零命中"，包被判定 PASS。⇒ 除两个允许的模板外，任何 `.env*` 都算泄漏。
+    for p in root.rglob(".env*"):
+        if not p.is_file():
+            continue
+        if p.name in (".env.example", ".env.offline-template"):
+            continue
+        hits.append(str(p.relative_to(root)))
     for d in ("deploy/.work", "deploy/.deps", "deploy/secrets"):
         if (root / d).exists():
             hits.append(d + "/（运行期目录不应入包）")

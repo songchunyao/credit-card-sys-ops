@@ -328,6 +328,17 @@ else
   [ -f "$DOCKER_DIR/docker-compose.yaml" ] \
     || die "Dify 的 docker/ 里没有 docker-compose.yaml。"
 
+  # ★★ 真实事故（2026-10-18，第一版包）：--dify-src 指向的 docker/ 里有
+  #   `.env.bak_r59_...`（212 个非空键，含 DB/Redis/plugin 真实口令），被 cp -a
+  #   原样打进包，而当时的自检只认 `.env` 这个名字，**没拦住**。
+  #   ⇒ 这里一律剔除 `.env*` 备份/填单，只保留上游的 `.env.example`。
+  ENV_BAKS="$(find "$DOCKER_DIR" -type f -name '.env*' ! -name '.env.example' -print 2>/dev/null || true)"
+  if [ -n "$ENV_BAKS" ]; then
+    warn "Dify docker/ 里有 .env 备份/填单，已剔除（可能含真实口令）："
+    printf '%s\n' "$ENV_BAKS" | sed 's/^/        /'
+    printf '%s\n' "$ENV_BAKS" | while IFS= read -r _eb; do rm -f "$_eb"; done
+  fi
+
   # 防事故：--dify-src 指向一套**正在运行**的 Dify 时，volumes/ 里是整个库和文件
   #   ⇒ 清空数据、只留空目录骨架（数据绝不能进发布物，且会把包撑到几十 GB）。
   if [ -d "$DOCKER_DIR/volumes" ]; then
@@ -507,6 +518,15 @@ if [ -f "$STAGE/deploy/.env" ]; then
 fi
 if [ -f "$STAGE/vendor/dify/docker/.env" ]; then
   die "包里出现 vendor/dify/docker/.env（已生成口令）—— 拒绝出包；只应带 .env.offline-template。"
+fi
+
+# 全局兜底：除模板外，任何 .env*（含 .env.bak_* / .env.local / .env.save）都不许进包。
+# ★ 第一版包正是漏在 `.env.bak_r59_...` 上：名字不是 `.env`，旧检查放行，212 个非空键入包。
+ENV_LEAK="$(find "$STAGE" -type f -name '.env*' ! -name '.env.example' ! -name '.env.offline-template' -print 2>/dev/null || true)"
+if [ -n "$ENV_LEAK" ]; then
+  err "包内出现 .env 备份/填单（可能含真实口令），拒绝出包："
+  printf '%s\n' "$ENV_LEAK" | sed 's/^/        /'
+  die "请从源码树剔除这些文件（或确认它们只是模板并改名）后重跑。"
 fi
 
 # ── ⑦ MANIFEST.sha256（只记相对路径）──────────────────────────────────────
